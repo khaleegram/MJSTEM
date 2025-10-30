@@ -1,4 +1,3 @@
-
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,8 +29,8 @@ export default async function HomePage() {
 
       <main className="flex-1">
         <section className="relative flex items-center justify-center text-center text-foreground py-24 md:py-32">
-          <div className="absolute inset-0 -z-10 h-full w-full bg-background bg-[linear-gradient(to_right,#f0f0f0_1px,transparent_1px),linear-gradient(to_bottom,#f0f0f0_1px,transparent_1px)] bg-[size:6rem_4rem] dark:bg-[linear-gradient(to_right,#1e1e1e_1px,transparent_1px),linear-gradient(to_bottom,#1e1e1e_1px,transparent_1px)]">
-             <div className="absolute bottom-0 left-0 right-0 top-0 bg-[radial-gradient(circle_500px_at_50%_200px,hsl(var(--background)),transparent)] dark:bg-[radial-gradient(circle_500px_at_50%_200px,hsl(var(--accent)),transparent)]"></div>
+          <div className="absolute inset-0 -z-10 h-full w-full bg-background bg-[linear-gradient(to_right,hsl(var(--primary)/0.05)_1px,transparent_1px),linear-gradient(to_bottom,hsl(var(--primary)/0.05)_1px,transparent_1px)] bg-[size:6rem_4rem] dark:bg-[linear-gradient(to_right,hsl(var(--primary)/0.1)_1px,transparent_1px),linear-gradient(to_bottom,hsl(var(--primary)/0.1)_1px,transparent_1px)]">
+             <div className="absolute bottom-0 left-0 right-0 top-0 bg-[radial-gradient(circle_500px_at_50%_200px,hsl(var(--background)),transparent)] dark:bg-[radial-gradient(circle_500px_at_50%_200px,hsl(var(--accent)/0.1),transparent)]"></div>
           </div>
           <div className="relative z-10 px-4">
              <h1 className="text-4xl md:text-6xl font-extrabold font-headline tracking-tight drop-shadow-md">
@@ -85,7 +84,7 @@ export default async function HomePage() {
         </section>
 
         {latestIssue ? (
-          <section className="py-16 sm:py-24 bg-accent/50">
+          <section className="py-16 sm:py-24 bg-primary/10">
             <div className="container mx-auto px-4 sm:px-6 lg:px-8">
               <div className="text-center mb-12">
                 <h2 className="text-3xl md:text-4xl font-bold font-headline text-foreground">
@@ -122,7 +121,7 @@ export default async function HomePage() {
             </div>
           </section>
         ) : (
-             <section className="py-16 sm:py-24 bg-accent/50">
+             <section className="py-16 sm:py-24 bg-primary/10">
                 <div className="container mx-auto px-4 sm:px-6 lg:px-8 text-center">
                      <h2 className="text-3xl md:text-4xl font-bold font-headline text-foreground">
                         Coming Soon
