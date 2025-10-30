@@ -1,3 +1,4 @@
+
 rules_version = '2';
 
 service cloud.firestore {
@@ -36,21 +37,25 @@ service cloud.firestore {
     }
 
     // SUBMISSIONS
-    // 1. Read: Author, assigned reviewer, or editor/admin
-    // 2. Create: Any authenticated user
-    // 3. Update: Editor/admin can update. Reviewer can only update their own status.
+    // 1. Get: Author, assigned reviewer, or editor/admin
+    // 2. List: Author can query their own, Editors can query all
+    // 3. Create: Any authenticated user
+    // 4. Update: Editor/admin can update. Reviewer can only update their own status.
+    // 5. Delete: Only editors/admins can delete
     match /submissions/{submissionId} {
-      allow read: if isSignedIn() && (
+      allow get: if isSignedIn() && (
                       resource.data.author.id == request.auth.uid ||
                       request.auth.uid in resource.data.reviewerIds ||
                       isEditor()
                     );
+      allow list: if isEditor() || (isSignedIn() && request.query.where.author.id == request.auth.uid);
       allow create: if isSignedIn();
       allow update: if isEditor() || (
                       // Allow a reviewer to update the 'reviewers' array if they are only changing their own status
                       request.auth.uid in resource.data.reviewerIds &&
                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reviewers'])
                     );
+      allow delete: if isEditor();
 
       // SUBCOLLECTIONS
       // Reviews:
@@ -63,14 +68,14 @@ service cloud.firestore {
       
       // History:
       // 1. Read: Same as parent submission
-      // 2. Write: Locked down. Only backend (server-side flows) can write.
+      // 2. Write: Locked down. 
       match /history/{historyId} {
         allow read: if isSignedIn() && (
                       get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid ||
                       request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds ||
                       isEditor()
                     );
-        allow write: if false;
+        allow write: if isEditor();
       }
     }
     
