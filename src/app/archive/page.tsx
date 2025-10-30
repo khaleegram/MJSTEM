@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import { collection, query, getDocs, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Volume } from '@/types';
+import { Volume, Article } from '@/types';
 import { PublicHeader } from '@/components/public-header';
 import {
   Accordion,
@@ -13,7 +13,9 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Book, BookCopy, FileText } from 'lucide-react';
+import { Book, BookCopy, FileText, ArrowRight } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
 
 export default function ArchivePage() {
   const [volumes, setVolumes] = useState<Volume[]>([]);
@@ -28,6 +30,16 @@ export default function ArchivePage() {
         const vols: Volume[] = volsSnapshot.docs.map((doc) => ({
           id: doc.id,
           ...(doc.data() as Omit<Volume, 'id'>),
+          // Ensure nested articles have all fields
+          issues: doc.data().issues?.map((issue: any) => ({
+            ...issue,
+            articles: issue.articles?.map((article: any) => ({
+              id: article.id,
+              title: article.title,
+              authorName: article.authorName,
+              manuscriptUrl: article.manuscriptUrl || '',
+            } as Article)) || [],
+          })) || [],
         }));
         setVolumes(vols);
       } catch (error) {
@@ -75,12 +87,20 @@ export default function ArchivePage() {
                                         <ul className="space-y-4">
                                             {issue.articles && issue.articles.length > 0 ? (
                                                 issue.articles.map(article => (
-                                                    <li key={article.id} className="flex items-start gap-3">
-                                                        <FileText className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
-                                                        <div>
-                                                            <h4 className="font-semibold text-foreground">{article.title}</h4>
-                                                            <p className="text-sm text-muted-foreground">By {article.authorName}</p>
+                                                    <li key={article.id} className="flex items-start justify-between gap-3 p-4 border rounded-lg">
+                                                        <div className="flex items-start gap-3">
+                                                            <FileText className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
+                                                            <div>
+                                                                <h4 className="font-semibold text-foreground">{article.title}</h4>
+                                                                <p className="text-sm text-muted-foreground">By {article.authorName}</p>
+                                                            </div>
                                                         </div>
+                                                        <Button asChild variant="outline" size="sm" disabled={!article.manuscriptUrl}>
+                                                            <Link href={article.manuscriptUrl || '#'} target='_blank' rel='noopener noreferrer'>
+                                                                Read Article
+                                                                <ArrowRight className="w-4 h-4 ml-2" />
+                                                            </Link>
+                                                        </Button>
                                                     </li>
                                                 ))
                                             ) : (

@@ -52,6 +52,7 @@ export const ArticleSchema = z.object({
   id: z.string(),
   title: z.string(),
   authorName: z.string(),
+  manuscriptUrl: z.string().url(),
 });
 
 export const IssueSchema = z.object({

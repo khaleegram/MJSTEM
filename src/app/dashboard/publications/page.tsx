@@ -253,7 +253,12 @@ export default function PublicationsPage() {
                 const volumeDoc = await transaction.get(volumeRef);
                 if (!volumeDoc.exists()) throw "Volume not found!";
 
-                const newArticle: Article = { id: article.id, title: article.title, authorName: article.author.name };
+                const newArticle: Article = { 
+                  id: article.id, 
+                  title: article.title, 
+                  authorName: article.author.name,
+                  manuscriptUrl: article.manuscriptUrl, // This was the missing field
+                };
                 
                 const currentData = volumeDoc.data() as Volume;
                 const updatedIssues = currentData.issues?.map(issue => {

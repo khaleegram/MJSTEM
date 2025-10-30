@@ -1,7 +1,6 @@
 
 import { z } from 'zod';
 import { UserProfileSchema, AssignedReviewerSchema, SubmissionSchema, VolumeSchema, IssueSchema, ArticleSchema, EditorialBoardMemberSchema, ContributorSchema } from '@/lib/data-schemas';
-import type { ScreenManuscriptInput, ScreenManuscriptOutput } from '@/ai/flows/screen-manuscript';
 
 
 export type SubmissionStatus = z.infer<typeof SubmissionSchema.shape.status>;
@@ -27,6 +26,4 @@ export type Volume = z.infer<typeof VolumeSchema>;
 export type Issue = z.infer<typeof IssueSchema>;
 export type Article = z.infer<typeof ArticleSchema>;
 export type EditorialBoardMember = z.infer<typeof EditorialBoardMemberSchema>;
-
-export type { ScreenManuscriptInput, ScreenManuscriptOutput };
     

@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowRight, Feather, Microscope, BookOpen } from 'lucide-react';
+import { ArrowRight, Feather, Microscope, BookOpen, BookText } from 'lucide-react';
 import { PublicHeader } from '@/components/public-header';
 import { getLatestIssue } from '@/services/publication-service';
 import { Icons } from '@/components/icons';
@@ -75,7 +75,7 @@ export default async function HomePage() {
                     Our clear guidelines and intuitive submission portal make sharing your manuscript straightforward. Focus on your research, not the paperwork.
                 </HowItWorksCard>
                  <HowItWorksCard icon={<Microscope className="w-6 h-6"/>} title="2. Rigorous Peer Review">
-                    Benefit from constructive, double-blind peer review by experts, enhanced with AI-driven reviewer suggestions for the perfect match.
+                    Benefit from constructive, double-blind peer review by experts in your field to ensure the quality and validity of your work.
                 </HowItWorksCard>
                  <HowItWorksCard icon={<BookOpen className="w-6 h-6"/>} title="3. Timely Publication">
                     Accepted articles are formatted, assigned a DOI, and published online swiftly, ensuring your research reaches the global community without delay.
@@ -84,7 +84,7 @@ export default async function HomePage() {
           </div>
         </section>
 
-        {latestIssue && (
+        {latestIssue ? (
           <section className="py-16 sm:py-24 bg-accent/50">
             <div className="container mx-auto px-4 sm:px-6 lg:px-8">
               <div className="text-center mb-12">
@@ -96,11 +96,18 @@ export default async function HomePage() {
                 </p>
               </div>
               <div className="max-w-4xl mx-auto">
-                <ul className="space-y-6">
+                <ul className="space-y-4">
                   {latestIssue.articles?.map((article) => (
-                    <li key={article.id} className="p-6 rounded-lg border bg-card hover:border-primary/50 hover:shadow-lg transition-all">
-                      <h3 className="font-headline font-semibold text-lg text-foreground">{article.title}</h3>
-                      <p className="text-sm text-muted-foreground mt-1">By {article.authorName}</p>
+                     <li key={article.id} className="p-4 rounded-lg border bg-card hover:border-primary/50 hover:shadow-lg transition-all flex items-center justify-between gap-4">
+                        <div>
+                            <h3 className="font-headline font-semibold text-lg text-foreground">{article.title}</h3>
+                            <p className="text-sm text-muted-foreground mt-1">By {article.authorName}</p>
+                        </div>
+                        <Button asChild variant="outline" size="sm" className="shrink-0">
+                            <Link href={article.manuscriptUrl || '#'} target="_blank" rel="noopener noreferrer">
+                                <BookText className="w-4 h-4 mr-2" /> Read
+                            </Link>
+                        </Button>
                     </li>
                   ))}
                 </ul>
@@ -114,6 +121,17 @@ export default async function HomePage() {
               </div>
             </div>
           </section>
+        ) : (
+             <section className="py-16 sm:py-24 bg-accent/50">
+                <div className="container mx-auto px-4 sm:px-6 lg:px-8 text-center">
+                     <h2 className="text-3xl md:text-4xl font-bold font-headline text-foreground">
+                        Coming Soon
+                    </h2>
+                     <p className="text-muted-foreground mt-2 max-w-2xl mx-auto">
+                        Our first issue is currently being prepared for publication. Check back soon to read the latest research.
+                    </p>
+                </div>
+            </section>
         )}
 
       </main>
