@@ -40,6 +40,7 @@ import { SubmittedReviews } from '@/components/submitted-reviews';
 import { SubmissionHistory } from '@/components/submission-history';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
+import { logSubmissionEvent } from '@/ai/flows/log-submission-event';
 
 
 const getStatusVariant = (status: SubmissionStatus) => {
@@ -99,6 +100,13 @@ const ReviewSubmissionForm = ({ submission, onReviewSubmit }: { submission: Subm
                 r.id === user?.uid ? { ...r, status: 'Review Submitted' } : r
             );
             await updateDoc(submissionRef, { reviewers: updatedReviewers });
+
+            // 3. Log the review event
+            await logSubmissionEvent({
+                submissionId: submission.id,
+                eventType: 'REVIEW_SUBMITTED',
+                context: { reviewerName: user?.displayName || 'A reviewer' }
+            });
             
             toast({ title: "Review Submitted", description: "Thank you for your contribution." });
             onReviewSubmit(); // Trigger a refetch on the parent page
@@ -282,7 +290,7 @@ export default function SubmissionDetailPage() {
 
 
   const handleDecision = (status: SubmissionStatus) => {
-    if(!submission) return;
+    if(!submission || !userProfile) return;
     setIsUpdating(true);
 
     const submissionRef = doc(db, 'submissions', submission.id);
@@ -290,6 +298,11 @@ export default function SubmissionDetailPage() {
 
     updateDoc(submissionRef, updateData)
       .then(async () => {
+        await logSubmissionEvent({
+            submissionId: submission.id,
+            eventType: 'STATUS_CHANGED',
+            context: { actorName: userProfile.displayName, status }
+        });
         setRefetchTrigger(prev => prev + 1); // Trigger refetch
         toast({
             title: "Status Updated",
@@ -332,11 +345,24 @@ export default function SubmissionDetailPage() {
             status: 'Pending',
           }),
           reviewerIds: arrayUnion(reviewer.uid),
-          status: 'Under Review'
+          status: 'Under Review' as const
       };
 
       updateDoc(submissionRef, updateData)
         .then(async () => {
+            await logSubmissionEvent({
+                submissionId: submission.id,
+                eventType: 'REVIEWER_ASSIGNED',
+                context: { reviewerName: reviewer.displayName }
+            });
+            // If status was 'Submitted', log a status change too
+            if (submission.status === 'Submitted' && userProfile) {
+                 await logSubmissionEvent({
+                    submissionId: submission.id,
+                    eventType: 'STATUS_CHANGED',
+                    context: { actorName: userProfile.displayName, status: 'Under Review' }
+                });
+            }
             setRefetchTrigger(prev => prev + 1);
             toast({
                 title: "Reviewer Assigned",

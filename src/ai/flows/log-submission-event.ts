@@ -1,19 +1,17 @@
 
 'use server';
 /**
- * @fileOverview An AI flow for generating human-readable log messages for submission events.
+ * @fileOverview A flow for logging submission events to Firestore.
  *
- * - logSubmissionEvent - A function that creates a descriptive log message for an event.
+ * - logSubmissionEvent - A function that creates a human-readable log entry for an event.
  * - LogEventInput - The input type for the logSubmissionEvent function.
- * - LogEventOutput - The return type for the logSubmissionEvent function.
  */
 
-import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
+import { z } from 'zod';
 
 const LogEventInputSchema = z.object({
   submissionId: z.string(),
@@ -22,18 +20,48 @@ const LogEventInputSchema = z.object({
 });
 export type LogEventInput = z.infer<typeof LogEventInputSchema>;
 
-const LogEventOutputSchema = z.object({
-  logMessage: z.string().describe("A concise, human-readable log message describing the event."),
-  icon: z.enum(['BookCopy', 'Edit', 'UserCheck', 'MessageSquare', 'FileEdit']).describe("An appropriate icon name from lucide-react for the event type."),
-});
-export type LogEventOutput = z.infer<typeof LogEventOutputSchema>;
+
+function generateLogDetails(input: LogEventInput): { message: string, icon: string } {
+    const { eventType, context = {} } = input;
+    const { actorName, status, reviewerName, authorName } = context;
+
+    switch (eventType) {
+        case 'SUBMISSION_CREATED':
+            return {
+                message: `Initial submission received from ${authorName || 'the author'}.`,
+                icon: 'BookCopy',
+            };
+        case 'STATUS_CHANGED':
+             return {
+                message: `Status updated to '${status}'${actorName ? ` by ${actorName}` : ''}.`,
+                icon: 'Edit',
+            };
+        case 'REVIEWER_ASSIGNED':
+            return {
+                message: `Reviewer assigned: ${reviewerName || 'N/A'}.`,
+                icon: 'UserCheck',
+            };
+        case 'REVIEW_SUBMITTED':
+             return {
+                message: `Review submitted by ${reviewerName || 'a reviewer'}.`,
+                icon: 'MessageSquare',
+            };
+        default:
+            return {
+                message: 'An unknown event occurred.',
+                icon: 'FileEdit',
+            };
+    }
+}
+
 
 export async function logSubmissionEvent(input: LogEventInput): Promise<void> {
-  const { logMessage, icon } = await generateLogMessageFlow(input);
+  const { message, icon } = generateLogDetails(input);
   
   const historyCollectionRef = collection(db, 'submissions', input.submissionId, 'history');
+  
   const historyData = {
-      message: logMessage,
+      message: message,
       icon: icon,
       timestamp: serverTimestamp(),
   };
@@ -48,50 +76,3 @@ export async function logSubmissionEvent(input: LogEventInput): Promise<void> {
         errorEmitter.emit('permission-error', permissionError);
     });
 }
-
-const prompt = ai.definePrompt({
-  name: 'generateLogMessagePrompt',
-  input: { schema: LogEventInputSchema },
-  output: { schema: LogEventOutputSchema },
-  prompt: `You are an assistant for an academic journal management system. Your task is to generate a concise, human-readable log message and suggest an icon for a submission event.
-
-Event Type: {{{eventType}}}
-Context:
-{{#if context.actorName}}
-- Actor: {{{context.actorName}}}
-{{/if}}
-{{#if context.status}}
-- New Status: {{{context.status}}}
-{{/if}}
-{{#if context.reviewerName}}
-- Reviewer: {{{context.reviewerName}}}
-{{/if}}
-{{#if context.authorName}}
-- Author: {{{context.authorName}}}
-{{/if}}
-
-Based on the event type and context, generate a log message.
-- For SUBMISSION_CREATED, the message should be like "Initial submission received from [Author Name]."
-- For STATUS_CHANGED, the message should be like "Status updated to '[New Status]' by [Actor Name]." If no actor, just say "Status updated to '[New Status]'."
-- For REVIEWER_ASSIGNED, the message should be "Reviewer assigned: [Reviewer Name]."
-- For REVIEW_SUBMITTED, the message should be "Review submitted by [Reviewer Name]."
-
-Choose an appropriate icon from the following list: 'BookCopy', 'Edit', 'UserCheck', 'MessageSquare', 'FileEdit'.
-- SUBMISSION_CREATED: BookCopy
-- STATUS_CHANGED: Edit
-- REVIEWER_ASSIGNED: UserCheck
-- REVIEW_SUBMITTED: MessageSquare
-`,
-});
-
-const generateLogMessageFlow = ai.defineFlow(
-  {
-    name: 'generateLogMessageFlow',
-    inputSchema: LogEventInputSchema,
-    outputSchema: LogEventOutputSchema,
-  },
-  async (input) => {
-    const { output } = await prompt(input);
-    return output!;
-  }
-);

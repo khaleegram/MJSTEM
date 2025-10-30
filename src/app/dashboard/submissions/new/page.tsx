@@ -30,6 +30,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { FileUploader } from '@/components/file-uploader';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
+import { logSubmissionEvent } from '@/ai/flows/log-submission-event';
 
 
 const formSchema = z.object({
@@ -121,12 +122,12 @@ export default function NewSubmissionPage() {
 
     addDoc(submissionsCollectionRef, submissionData)
     .then(async (docRef) => {
-        // // Log the creation event
-        // await logSubmissionEvent({
-        //     submissionId: docRef.id,
-        //     eventType: 'SUBMISSION_CREATED',
-        //     context: { authorName: primaryContact.name },
-        // });
+        // Log the creation event
+        await logSubmissionEvent({
+            submissionId: docRef.id,
+            eventType: 'SUBMISSION_CREATED',
+            context: { authorName: primaryContact.name },
+        });
 
         toast({
             title: 'Submission Successful!',
@@ -346,5 +347,3 @@ export default function NewSubmissionPage() {
     </div>
   );
 }
-
-    
