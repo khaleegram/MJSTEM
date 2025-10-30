@@ -2,7 +2,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowUpRight, PlusCircle, Search } from 'lucide-react';
+import { ArrowUpRight, PlusCircle, Search, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -24,10 +24,24 @@ import { format } from 'date-fns';
 import { SubmissionStatus, Submission } from '@/types';
 import { cn } from '@/lib/utils';
 import { useEffect, useState, useMemo } from 'react';
-import { collection, getDocs, orderBy, query } from 'firebase/firestore';
+import { collection, getDocs, orderBy, query, writeBatch, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import { useToast } from '@/hooks/use-toast';
+
 
 const getStatusVariant = (status: SubmissionStatus) => {
   switch (status) {
@@ -48,35 +62,38 @@ export default function AllSubmissionsPage() {
     const [submissions, setSubmissions] = useState<Submission[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+    const { toast } = useToast();
+
+    const fetchSubmissions = async () => {
+        setLoading(true);
+        try {
+            const q = query(collection(db, 'submissions'), orderBy('submittedAt', 'desc'));
+            const querySnapshot = await getDocs(q);
+            const subs: Submission[] = querySnapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    title: data.title || 'Untitled',
+                    author: data.author || { name: 'Unknown Author' },
+                    status: data.status || 'Submitted',
+                    submittedAt: data.submittedAt ? data.submittedAt.toDate() : new Date(),
+                    abstract: data.abstract || '',
+                    keywords: data.keywords || '',
+                    manuscriptUrl: data.manuscriptUrl || '',
+                    coverLetterUrl: data.coverLetterUrl || '',
+                } as Submission;
+            });
+            setSubmissions(subs);
+        } catch (error) {
+            console.error("Error fetching submissions: ", error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
 
     useEffect(() => {
-        const fetchSubmissions = async () => {
-            setLoading(true);
-            try {
-                const q = query(collection(db, 'submissions'), orderBy('submittedAt', 'desc'));
-                const querySnapshot = await getDocs(q);
-                const subs: Submission[] = querySnapshot.docs.map(doc => {
-                    const data = doc.data();
-                    return {
-                        id: doc.id,
-                        title: data.title || 'Untitled',
-                        author: data.author || { name: 'Unknown Author' },
-                        status: data.status || 'Submitted',
-                        submittedAt: data.submittedAt ? data.submittedAt.toDate() : new Date(),
-                        abstract: data.abstract || '',
-                        keywords: data.keywords || '',
-                        manuscriptUrl: data.manuscriptUrl || '',
-                        coverLetterUrl: data.coverLetterUrl || '',
-                    } as Submission;
-                });
-                setSubmissions(subs);
-            } catch (error) {
-                console.error("Error fetching submissions: ", error);
-            } finally {
-                setLoading(false);
-            }
-        };
-
         fetchSubmissions();
     }, []);
 
@@ -87,6 +104,50 @@ export default function AllSubmissionsPage() {
             submission.author.name.toLowerCase().includes(searchTerm.toLowerCase())
         );
     }, [submissions, searchTerm]);
+    
+    const handleSelectAll = (checked: boolean | 'indeterminate') => {
+        if (checked === true) {
+            const allIds = new Set(filteredSubmissions.map(s => s.id));
+            setSelectedRows(allIds);
+        } else {
+            setSelectedRows(new Set());
+        }
+    };
+
+    const handleRowSelect = (rowId: string) => {
+        const newSelection = new Set(selectedRows);
+        if (newSelection.has(rowId)) {
+            newSelection.delete(rowId);
+        } else {
+            newSelection.add(rowId);
+        }
+        setSelectedRows(newSelection);
+    };
+
+    const handleDeleteSelected = async () => {
+        const batch = writeBatch(db);
+        selectedRows.forEach(id => {
+            const docRef = doc(db, 'submissions', id);
+            batch.delete(docRef);
+        });
+
+        try {
+            await batch.commit();
+            toast({
+                title: 'Submissions Deleted',
+                description: `${selectedRows.size} submission(s) have been permanently removed.`,
+            });
+            setSelectedRows(new Set());
+            await fetchSubmissions(); // Refetch data
+        } catch (error) {
+            console.error("Error deleting submissions:", error);
+            toast({
+                title: 'Error',
+                description: 'Could not delete the selected submissions.',
+                variant: 'destructive',
+            });
+        }
+    }
 
   return (
     <div className="space-y-8">
@@ -109,10 +170,11 @@ export default function AllSubmissionsPage() {
         <CardHeader>
             <div className='flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4'>
                 <div>
-                    <CardTitle className="font-headline">Manuscript Archive</CardTitle>
+                    <CardTitle className="font-headline">Manuscript Archive ({submissions.length})</CardTitle>
                     <CardDescription>A complete list of all submissions.</CardDescription>
                 </div>
-                <div className="relative w-full sm:max-w-sm">
+                <div className="flex gap-2 w-full sm:w-auto">
+                 <div className="relative w-full sm:max-w-sm">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                     <Input 
                         placeholder="Search by title or author..." 
@@ -121,12 +183,42 @@ export default function AllSubmissionsPage() {
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
+                {selectedRows.size > 0 && (
+                    <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                            <Button variant="destructive" className="shrink-0">
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete ({selectedRows.size})
+                            </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    This action cannot be undone. This will permanently delete {selectedRows.size} submission(s).
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleDeleteSelected}>Continue</AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                )}
+                </div>
           </div>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead padding="checkbox" className="w-12">
+                  <Checkbox
+                    checked={selectedRows.size > 0 && selectedRows.size === filteredSubmissions.length}
+                    onCheckedChange={handleSelectAll}
+                    aria-label="Select all rows"
+                  />
+                </TableHead>
                 <TableHead>Title</TableHead>
                 <TableHead className="hidden sm:table-cell">Author</TableHead>
                 <TableHead className="hidden md:table-cell">Submitted</TableHead>
@@ -138,6 +230,7 @@ export default function AllSubmissionsPage() {
               {loading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
+                        <TableCell><Skeleton className="h-5 w-5" /></TableCell>
                         <TableCell><Skeleton className="h-5 w-32" /></TableCell>
                         <TableCell className="hidden sm:table-cell"><Skeleton className="h-5 w-24" /></TableCell>
                         <TableCell className="hidden md:table-cell"><Skeleton className="h-5 w-20" /></TableCell>
@@ -147,7 +240,14 @@ export default function AllSubmissionsPage() {
                 ))
               ) : filteredSubmissions.length > 0 ? (
                 filteredSubmissions.map((submission) => (
-                    <TableRow key={submission.id}>
+                    <TableRow key={submission.id} data-state={selectedRows.has(submission.id) && "selected"}>
+                    <TableCell padding="checkbox">
+                        <Checkbox
+                            checked={selectedRows.has(submission.id)}
+                            onCheckedChange={() => handleRowSelect(submission.id)}
+                            aria-label={`Select row for ${submission.title}`}
+                        />
+                    </TableCell>
                     <TableCell className="font-medium max-w-[200px] sm:max-w-xs truncate">{submission.title}</TableCell>
                     <TableCell className="hidden sm:table-cell">{submission.author.name}</TableCell>
                     <TableCell className="hidden md:table-cell">
@@ -170,7 +270,7 @@ export default function AllSubmissionsPage() {
                 ))
               ) : (
                 <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center">
+                    <TableCell colSpan={6} className="h-24 text-center">
                         No submissions found.
                     </TableCell>
                 </TableRow>

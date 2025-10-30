@@ -40,7 +40,6 @@ import { SubmittedReviews } from '@/components/submitted-reviews';
 import { SubmissionHistory } from '@/components/submission-history';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
-import { screenManuscript, ScreenManuscriptInput, ScreenManuscriptOutput } from '@/ai/flows/screen-manuscript';
 
 
 const getStatusVariant = (status: SubmissionStatus) => {
@@ -375,6 +374,7 @@ export default function SubmissionDetailPage() {
 
   const isEditor = userProfile?.role === 'Editor' || userProfile?.role === 'Admin';
   const isReviewer = submission.reviewers?.some(r => r.id === user?.uid);
+  const isDecisionMade = submission.status === 'Accepted' || submission.status === 'Rejected';
 
 
   return (
@@ -435,7 +435,7 @@ export default function SubmissionDetailPage() {
 
       <div className="space-y-8 lg:col-span-1">
         
-        {isEditor && (
+        {isEditor && !isDecisionMade && (
         <Card>
           <CardHeader>
             <CardTitle className="font-headline">Decision</CardTitle>
@@ -471,7 +471,7 @@ export default function SubmissionDetailPage() {
                 <p className="text-sm text-muted-foreground text-center py-4">No reviewers assigned yet.</p>
             )}
           </CardContent>
-          {isEditor && (
+          {isEditor && !isDecisionMade && (
           <CardFooter>
             <Dialog>
               <DialogTrigger asChild>
