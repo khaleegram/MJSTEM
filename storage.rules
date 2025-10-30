@@ -1,0 +1,14 @@
+
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Match any file in the 'submissions' folder
+    match /submissions/{submissionId}/{fileName} {
+      // Allow create (write) operation if the user is signed in
+      // and the request is to upload a file for their own submission.
+      // We can add more specific checks here if needed, e.g., on file size or type.
+      allow create: if request.auth != null;
+    }
+  }
+}

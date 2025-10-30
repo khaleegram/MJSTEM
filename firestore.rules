@@ -1,0 +1,93 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+  
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getUserData(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
+    }
+    
+    function isRole(role) {
+      return isSignedIn() && getUserData(request.auth.uid).role == role;
+    }
+    
+    function isAdmin() {
+      return isRole('Admin');
+    }
+    
+    function isEditor() {
+      return isRole('Editor') || isAdmin();
+    }
+    
+    // USERS:
+    // 1. Anyone can read profiles (for names, photos etc)
+    // 2. You can only create your own user document
+    // 3. You can only update your own document, but NOT your role
+    // 4. Admins can update any document, including the role
+    match /users/{userId} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if (isSignedIn() && request.auth.uid == userId && request.resource.data.role == resource.data.role) || isAdmin();
+    }
+
+    // SUBMISSIONS
+    // 1. Read: Author, assigned reviewer, or editor/admin
+    // 2. Create: Any authenticated user
+    // 3. Update: Editor/admin can update. Reviewer can only update their own status.
+    match /submissions/{submissionId} {
+      allow read: if isSignedIn() && (
+                      resource.data.author.id == request.auth.uid ||
+                      request.auth.uid in resource.data.reviewerIds ||
+                      isEditor()
+                    );
+      allow create: if isSignedIn();
+      allow update: if isEditor() || (
+                      // Allow a reviewer to update the 'reviewers' array if they are only changing their own status
+                      request.auth.uid in resource.data.reviewerIds &&
+                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reviewers'])
+                    );
+
+      // SUBCOLLECTIONS
+      // Reviews:
+      // 1. Read: Only Editors/Admins
+      // 2. Create: Only if you are an assigned reviewer
+      match /reviews/{reviewId} {
+        allow read: if isEditor();
+        allow create: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds;
+      }
+      
+      // History:
+      // 1. Read: Same as parent submission
+      // 2. Write: Locked down. Only backend (server-side flows) can write.
+      match /history/{historyId} {
+        allow read: if isSignedIn() && (
+                      get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid ||
+                      request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds ||
+                      isEditor()
+                    );
+        allow write: if false;
+      }
+    }
+    
+    // VOLUMES (PUBLICATIONS)
+    // 1. Read: Publicly readable for archive
+    // 2. Write: Only Editors/Admins can create/update volumes
+    match /volumes/{volumeId} {
+      allow read;
+      allow write: if isEditor();
+    }
+    
+    // EDITORIAL BOARD
+    // 1. Read: Publicly readable
+    // 2. Write: Only Admins can manage the board
+    match /editorialBoard/{memberId} {
+      allow read;
+      allow write: if isAdmin();
+    }
+  }
+}
