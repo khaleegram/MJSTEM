@@ -2,12 +2,19 @@ import { createUploadthing, type FileRouter } from "uploadthing/next";
 import { UploadThingError } from "uploadthing/server";
 import { auth } from 'firebase-admin';
 import { getApps, initializeApp, cert } from 'firebase-admin/app';
+import { NextRequest } from "next/server";
+import { UTApi } from "uploadthing/server";
+
+export const utapi = new UTApi();
+
 
 // Initialize Firebase Admin SDK
 if (!getApps().length) {
   try {
+    const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+    if (!serviceAccount) throw new Error('Firebase service account key is not set.');
     initializeApp({
-      credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY!))
+      credential: cert(JSON.parse(serviceAccount))
     });
   } catch (e) {
     console.error("Firebase Admin initialization error", e);
@@ -16,27 +23,21 @@ if (!getApps().length) {
 
 const f = createUploadthing();
  
-const handleAuth = async () => {
-    // This function is your auth middleware.
-    // It will run on your server before every upload.
-    //
-    // It will have access to the request object, so you can retrieve cookies,
-    // headers, etc. to determine who is trying to upload.
-    
-    // In this case, we're using Firebase Admin SDK to verify the user's token.
-    // The client should send the token in the Authorization header.
-    // For that, we need to import `utapi` from `uploadthing/server`
-    // and use it to create a new `UploadThing` instance with a custom `auth`
-    // middleware.
-    
-    // Let's assume we have a function to get the current user from the request
-    // using the Firebase Admin SDK.
-    const { currentUser } = await auth();
-    
-    if (!currentUser) throw new UploadThingError("Unauthorized");
+const handleAuth = async ({ req }: { req: NextRequest }) => {
+    const authHeader = req.headers.get("authorization");
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        throw new UploadThingError("Unauthorized: No token provided");
+    }
+    const token = authHeader.split('Bearer ')[1];
 
-    // Whatever is returned here is accessible in onUploadComplete as `metadata`
-    return { userId: currentUser.uid };
+    try {
+        const decodedToken = await auth().verifyIdToken(token);
+        // Whatever is returned here is accessible in onUploadComplete as `metadata`
+        return { userId: decodedToken.uid };
+    } catch (error) {
+        console.error("Firebase Auth Error", error);
+        throw new UploadThingError("Unauthorized: Invalid token");
+    }
 }
  
 // FileRouter for your app, can contain multiple FileRoutes
@@ -50,7 +51,7 @@ export const ourFileRouter = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": { maxFileSize: "16MB", maxFileCount: 1 },
    })
     // Set permissions and file types for this FileRoute
-    .middleware(() => handleAuth())
+    .middleware(handleAuth)
     .onUploadComplete(async ({ metadata, file }) => {
       // This code RUNS ON YOUR SERVER after upload
       console.log("Upload complete for userId:", metadata.userId);
@@ -62,5 +63,3 @@ export const ourFileRouter = {
 } satisfies FileRouter;
  
 export type OurFileRouter = typeof ourFileRouter;
-
-    

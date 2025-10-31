@@ -7,6 +7,7 @@ import { useCallback, useState } from "react";
 import { Button } from "./ui/button";
 import { Progress } from "./ui/progress";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/auth-context";
 
 interface FileUploaderProps {
   endpoint: "documentUploader";
@@ -15,6 +16,7 @@ interface FileUploaderProps {
 }
 
 export function FileUploader({ endpoint, onUploadComplete, onUploadError }: FileUploaderProps) {
+  const { user } = useAuth();
   const [uploadProgress, setUploadProgress] = useState(0);
   const [fileName, setFileName] = useState<string | null>(null);
 
@@ -37,9 +39,16 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError }: File
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
         setFileName(acceptedFiles[0].name);
-        startUpload(acceptedFiles);
+        startUpload(acceptedFiles, {
+            // Pass the user's auth token to the backend
+            // @ts-ignore
+            headers: async () => {
+                const token = await user?.getIdToken();
+                return { Authorization: `Bearer ${token}` };
+            },
+        });
     }
-  }, [startUpload]);
+  }, [startUpload, user]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
