@@ -46,6 +46,7 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError }: File
 
     if (acceptedFiles.length > 0) {
       setFileName(acceptedFiles[0].name);
+      // Pass the token to the server via the middleware
       await startUpload(acceptedFiles);
     }
   }, [startUpload, user, onUploadError]);
