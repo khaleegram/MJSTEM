@@ -48,7 +48,7 @@ service cloud.firestore {
                       request.auth.uid in resource.data.reviewerIds ||
                       isEditor()
                     );
-      allow list: if isEditor() || (isSignedIn() && request.query.where['author.id'] == request.auth.uid);
+      allow list: if isEditor() || (isSignedIn() && request.query.get("where")['author.id'] == request.auth.uid);
       allow create: if isSignedIn();
       allow update: if isEditor() || (
                       // Allow a reviewer to update the 'reviewers' array if they are only changing their own status
