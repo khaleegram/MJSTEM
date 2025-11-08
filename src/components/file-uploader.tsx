@@ -23,36 +23,35 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError }: File
 
   const { startUpload, isUploading } = useUploadThing(endpoint, {
     headers: async () => {
-      if (!user) throw new Error('Not authenticated');
+      if (!user) {
+        // This should ideally not happen if the UI is guarded, but as a fallback.
+        throw new Error('Not authenticated');
+      }
       const token = await user.getIdToken();
       return { Authorization: `Bearer ${token}` };
     },
     onClientUploadComplete: (res) => {
       if (!res?.[0]) {
-        onUploadError(new Error("Upload failed or invalid response"));
+        onUploadError(new Error("Upload failed: No response from server."));
         return;
       };
       setFileName(res[0].name);
       onUploadComplete(res[0].url);
-      setUploadProgress(0);
+      setUploadProgress(0); // Reset progress
     },
     onUploadError,
     onUploadProgress: setUploadProgress,
   });
 
   const onDrop = useCallback(
-    async (acceptedFiles: File[]) => {
+    (acceptedFiles: File[]) => {
       if (!user) {
         onUploadError(new Error('You must be logged in to upload files.'));
         return;
       }
       if (acceptedFiles.length > 0) {
         setFileName(acceptedFiles[0].name);
-        try {
-          await startUpload(acceptedFiles);
-        } catch (err) {
-          onUploadError(err as Error);
-        }
+        startUpload(acceptedFiles).catch(onUploadError);
       }
     },
     [startUpload, user, onUploadError]

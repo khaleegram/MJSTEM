@@ -16,6 +16,8 @@ if (!getApps().length) {
   });
 }
 
+const f = createUploadthing();
+
 // Auth middleware
 const handleAuth = async ({ req }: { req: NextRequest }) => {
   const authHeader = req.headers.get("authorization");
@@ -26,8 +28,7 @@ const handleAuth = async ({ req }: { req: NextRequest }) => {
   return { userId: decoded.uid };
 };
 
-const f = createUploadthing();
-
+// Define the file router
 export const ourFileRouter = {
   documentUploader: f({
     pdf: { maxFileSize: "16MB", maxFileCount: 1 },
@@ -36,7 +37,8 @@ export const ourFileRouter = {
   })
     .middleware(handleAuth)
     .onUploadComplete(async ({ metadata, file }) => {
-      // Return plain JSON
+      console.log("Upload complete for userId:", metadata.userId);
+      console.log("file url", file.url);
       return { uploadedBy: metadata.userId, url: file.url };
     }),
 
@@ -45,6 +47,8 @@ export const ourFileRouter = {
   })
     .middleware(handleAuth)
     .onUploadComplete(async ({ metadata, file }) => {
+      console.log("Image upload complete for userId:", metadata.userId);
+      console.log("file url", file.url);
       return { uploadedBy: metadata.userId, url: file.url };
     }),
 } satisfies FileRouter;
