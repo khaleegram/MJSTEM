@@ -18,10 +18,12 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/auth-context';
 import { useEffect, useState } from 'react';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
+
 
 const getStatusVariant = (status: SubmissionStatus) => {
   switch (status) {
@@ -43,49 +45,55 @@ export default function AuthorPage() {
     const { user } = useAuth();
     const [submissions, setSubmissions] = useState<Submission[]>([]);
     const [loading, setLoading] = useState(true);
-    const { toast } = useToast();
 
     useEffect(() => {
-        const fetchSubmissions = async () => {
-            if (!user) {
-                setLoading(false);
-                return;
-            };
-            setLoading(true);
-            try {
-                const q = query(
-                    collection(db, 'submissions'), 
-                    where('author.id', '==', user.uid),
-                    orderBy('submittedAt', 'desc')
-                );
-                const querySnapshot = await getDocs(q);
-                const subs: Submission[] = querySnapshot.docs.map(doc => {
-                    const data = doc.data();
-                    return {
-                        id: doc.id,
-                        title: data.title || 'Untitled',
-                        author: data.author || { name: 'Unknown Author' },
-                        status: data.status || 'Submitted',
-                        submittedAt: data.submittedAt ? data.submittedAt.toDate() : new Date(),
-                        abstract: data.abstract || '',
-                        keywords: data.keywords || '',
-                        manuscriptUrl: data.manuscriptUrl || '',
-                        reviewers: data.reviewers || [],
-                    } as Submission;
-                })
-                setSubmissions(subs);
-            } catch (error) {
-                 toast({
-                    title: "Error",
-                    description: "Could not fetch your submissions.",
-                    variant: "destructive"
-                });
-            } finally {
-                setLoading(false);
-            }
-        }
-        fetchSubmissions();
-    }, [user, toast]);
+        if (!user) {
+            setLoading(false);
+            return;
+        };
+        
+        setLoading(true);
+
+        const q = query(
+            collection(db, 'submissions'), 
+            where('author.id', '==', user.uid),
+            orderBy('submittedAt', 'desc')
+        );
+
+        const unsubscribe = onSnapshot(q, (querySnapshot) => {
+            const subs: Submission[] = querySnapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    title: data.title || 'Untitled',
+                    author: data.author || { name: 'Unknown Author' },
+                    status: data.status || 'Submitted',
+                    submittedAt: data.submittedAt ? data.submittedAt.toDate() : new Date(),
+                    abstract: data.abstract || '',
+                    keywords: data.keywords || '',
+                    manuscriptUrl: data.manuscriptUrl || '',
+                    reviewers: data.reviewers || [],
+                } as Submission;
+            });
+            setSubmissions(subs);
+            setLoading(false);
+        }, (serverError) => {
+            // This block handles Firestore permission errors or other query failures.
+            setLoading(false);
+            const permissionError = new FirestorePermissionError({
+                path: 'submissions',
+                operation: 'list',
+                // We add context about the query to help debug security rules
+                requestResourceData: { 
+                    query: `submissions where author.id == ${user.uid}`
+                },
+            });
+            errorEmitter.emit('permission-error', permissionError);
+        });
+
+        // Cleanup subscription on unmount
+        return () => unsubscribe();
+    }, [user]);
 
   return (
     <div className="space-y-8">
