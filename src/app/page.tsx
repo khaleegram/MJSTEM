@@ -20,7 +20,7 @@ const HowItWorksCard = ({ icon, title, children }: { icon: React.ReactNode, titl
       <CardTitle className="font-headline text-xl">{title}</CardTitle>
     </CardHeader>
     <CardContent className="flex-1 flex flex-col">
-      <p className="text-muted-foreground flex-1">{children}</p>
+      <div className="text-muted-foreground flex-1">{children}</div>
     </CardContent>
   </Card>
 );
@@ -257,5 +257,3 @@ export default async function HomePage() {
     </div>
   );
 }
-
-    
