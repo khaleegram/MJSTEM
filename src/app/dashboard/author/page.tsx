@@ -60,7 +60,6 @@ const getStatusProgress = (status: SubmissionStatus): number => {
     if (index === -1) {
         // Handle legacy statuses
         if (status === 'Revisions Required') return 60;
-        if (status === 'Under Review') return 40;
     }
     return ((index + 1) / statusWorkflow.length) * 100;
 }
@@ -110,7 +109,7 @@ export default function AuthorPage() {
                 operation: 'list',
                 // We add context about the query to help debug security rules
                 requestResourceData: { 
-                    query: `submissions where author.id == ${user.uid}`
+                    query: `Query on 'submissions' where 'author.id' == '${user.uid}'`
                 },
             });
             errorEmitter.emit('permission-error', permissionError);
@@ -197,5 +196,3 @@ export default function AuthorPage() {
     </div>
   );
 }
-
-    
