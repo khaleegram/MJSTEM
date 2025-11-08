@@ -1,4 +1,3 @@
-
 rules_version = '2';
 
 service cloud.firestore {
@@ -48,7 +47,7 @@ service cloud.firestore {
                       request.auth.uid in resource.data.reviewerIds ||
                       isEditor()
                     );
-      allow list: if isEditor() || (isSignedIn() && request.query.get("where")['author.id'] == request.auth.uid);
+      allow list: if isEditor() || (isSignedIn() && resource.data.author.id == request.auth.uid);
       allow create: if isSignedIn();
       allow update: if isEditor() || (
                       // Allow a reviewer to update the 'reviewers' array if they are only changing their own status
@@ -68,7 +67,7 @@ service cloud.firestore {
       
       // History:
       // 1. Read: Same as parent submission
-      // 2. Write: Locked down.
+      // 2. Write: Only Editors/Admins can write
       match /history/{historyId} {
         allow read: if isSignedIn() && (
                       get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid ||
