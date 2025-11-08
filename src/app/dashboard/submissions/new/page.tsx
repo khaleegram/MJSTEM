@@ -5,7 +5,7 @@ import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useRouter } from 'next/navigation';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, getDoc, doc } from 'firebase/firestore';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -50,14 +50,16 @@ export default function NewSubmissionPage() {
   const [templateUrl, setTemplateUrl] = useState('');
 
   useEffect(() => {
-    // In a real app, you'd fetch this from a settings collection in Firestore
-    // For now, we'll hardcode a placeholder URL.
-    // Replace this with your actual template URL from Firebase Storage.
     const getTemplateUrl = async () => {
-        // This is a placeholder. You would normally fetch this from a 'settings' doc.
-        const fetchedUrl = "https://firebasestorage.googleapis.com/v0/b/your-project-id.appspot.com/o/templates%2Fsubmission-template.docx?alt=media";
-        // To avoid broken links, only set it if it's a real URL.
-        // setTemplateUrl(fetchedUrl); 
+        try {
+            const docRef = doc(db, 'settings', 'journalInfo');
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists() && docSnap.data().submissionTemplateUrl) {
+                setTemplateUrl(docSnap.data().submissionTemplateUrl);
+            }
+        } catch (error) {
+            console.error("Could not fetch submission template URL:", error);
+        }
     };
     getTemplateUrl();
   }, []);
