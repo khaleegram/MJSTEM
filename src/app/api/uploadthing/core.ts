@@ -1,4 +1,3 @@
-
 'use server';
 
 import { createUploadthing, type FileRouter } from 'uploadthing/next';
@@ -19,15 +18,8 @@ const handleAuth = async ({ req }: { req: NextRequest }) => {
   if (!authHeader?.startsWith("Bearer ")) throw new Error("Unauthorized: No token");
 
   const token = authHeader.split(" ")[1];
-  if (!token) throw new Error("Unauthorized: Malformed token");
-
-  try {
-    const decoded = await adminAuth().verifyIdToken(token);
-    return { userId: decoded.uid };
-  } catch (err) {
-    console.error('Firebase token verification failed:', err);
-    throw new Error('Unauthorized: Invalid token');
-  }
+  const decoded = await adminAuth().verifyIdToken(token);
+  return { userId: decoded.uid };
 };
 
 const f = createUploadthing();
@@ -40,14 +32,15 @@ export const ourFileRouter = {
   })
     .middleware(handleAuth)
     .onUploadComplete(async ({ metadata, file }) => {
-      console.log('Document uploaded by:', metadata.userId, 'URL:', file.url);
+      // Return plain JSON
       return { uploadedBy: metadata.userId, url: file.url };
     }),
 
-  imageUploader: f({ image: { maxFileSize: "4MB", maxFileCount: 1 } })
+  imageUploader: f({
+    image: { maxFileSize: "4MB", maxFileCount: 1 },
+  })
     .middleware(handleAuth)
     .onUploadComplete(async ({ metadata, file }) => {
-      console.log('Image uploaded by:', metadata.userId, 'URL:', file.url);
       return { uploadedBy: metadata.userId, url: file.url };
     }),
 } satisfies FileRouter;
