@@ -32,6 +32,7 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError }: File
     },
     onUploadError: (error: Error) => {
       onUploadError(error);
+      setFileName(null);
     },
     onUploadProgress: (p: number) => {
       setUploadProgress(p);
@@ -39,13 +40,13 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError }: File
   });
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    if (acceptedFiles.length > 0 && user) {
-        setFileName(acceptedFiles[0].name);
-        // The useUploadThing hook should automatically handle auth
-        // by fetching the token from our middleware.
-        startUpload(acceptedFiles);
-    } else if (!user) {
-        onUploadError(new Error("You must be logged in to upload files."));
+    if (!user) {
+      onUploadError(new Error("You must be logged in to upload files."));
+      return;
+    }
+    if (acceptedFiles.length > 0) {
+      setFileName(acceptedFiles[0].name);
+      startUpload(acceptedFiles);
     }
   }, [startUpload, user, onUploadError]);
 
