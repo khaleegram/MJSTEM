@@ -44,9 +44,10 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError }: File
       onUploadError(new Error("You must be logged in to upload files."));
       return;
     }
+
     if (acceptedFiles.length > 0) {
       setFileName(acceptedFiles[0].name);
-      startUpload(acceptedFiles);
+      await startUpload(acceptedFiles);
     }
   }, [startUpload, user, onUploadError]);
 
