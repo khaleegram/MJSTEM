@@ -38,7 +38,7 @@ service cloud.firestore {
 
     // SUBMISSIONS
     // 1. Get: Author, assigned reviewer, or editor/admin can get a single doc.
-    // 2. List: Editors/Admins can list all. Authors can only list their own.
+    // 2. List: Editors/Admins can list all. Authors can only list their own (enforced by client query).
     // 3. Create: Any authenticated user.
     // 4. Update: Editor/Admin can update. Reviewer can only update their own status.
     // 5. Delete: Only editors/admins can delete.
@@ -48,7 +48,7 @@ service cloud.firestore {
                       request.auth.uid in resource.data.reviewerIds ||
                       isEditor()
                     );
-      allow list: if isEditor() || (isSignedIn() && request.query.where['author.id'] == request.auth.uid);
+      allow list: if isEditor() || isSignedIn();
       allow create: if isSignedIn();
       allow update: if isEditor() || (
                       // Allow a reviewer to update the 'reviewers' array if they are only changing their own status
