@@ -36,15 +36,13 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError }: File
     },
   });
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    if (acceptedFiles.length > 0) {
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    if (acceptedFiles.length > 0 && user) {
         setFileName(acceptedFiles[0].name);
+        const token = await user.getIdToken();
         startUpload(acceptedFiles, {
-            // Pass the user's auth token to the backend
-            // @ts-ignore
-            headers: async () => {
-                const token = await user?.getIdToken();
-                return { Authorization: `Bearer ${token}` };
+            headers: {
+                Authorization: `Bearer ${token}` 
             },
         });
     }
