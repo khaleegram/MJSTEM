@@ -51,7 +51,6 @@ const getStatusVariant = (status: SubmissionStatus) => {
         return 'destructive';
       case 'Minor Revision':
       case 'Major Revision':
-      case 'Revisions Required':
         return 'secondary';
       case 'Under Peer Review':
       case 'Under Initial Review':
@@ -351,7 +350,7 @@ export default function SubmissionDetailPage() {
           reviewerIds: arrayUnion(reviewer.uid),
       };
 
-      if (submission.status === 'Submitted') {
+      if (submission.status === 'Submitted' || submission.status === 'Under Initial Review') {
           updateData.status = 'Under Peer Review';
       }
 
@@ -362,8 +361,8 @@ export default function SubmissionDetailPage() {
                 eventType: 'REVIEWER_ASSIGNED',
                 context: { reviewerName: reviewer.displayName }
             });
-            // If status was 'Submitted', log a status change too
-            if (submission.status === 'Submitted' && userProfile) {
+            // If status was changed, log a status change too
+            if ((submission.status === 'Submitted' || submission.status === 'Under Initial Review') && userProfile) {
                  await logSubmissionEvent({
                     submissionId: submission.id,
                     eventType: 'STATUS_CHANGED',
@@ -542,5 +541,3 @@ export default function SubmissionDetailPage() {
     </div>
   );
 }
-
-    

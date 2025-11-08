@@ -43,7 +43,6 @@ export const SubmissionSchema = z.object({
     'Submitted',
     'Under Initial Review',
     'Under Peer Review',
-    'Revisions Required', // Legacy
     'Minor Revision',
     'Major Revision',
     'Accepted',
@@ -88,5 +87,3 @@ export const EditorialBoardMemberSchema = z.object({
   imageSeed: z.string().min(1, "Image Seed is required."),
   order: z.number().optional(),
 });
-
-    

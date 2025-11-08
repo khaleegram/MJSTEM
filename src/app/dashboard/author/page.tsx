@@ -21,7 +21,6 @@ import { useEffect, useState } from 'react';
 import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useToast } from '@/hooks/use-toast';
 import { Progress } from '@/components/ui/progress';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -34,7 +33,6 @@ const getStatusVariant = (status: SubmissionStatus) => {
       return 'destructive';
     case 'Minor Revision':
     case 'Major Revision':
-    case 'Revisions Required':
       return 'secondary';
     case 'Under Peer Review':
     case 'Under Initial Review':
@@ -56,10 +54,7 @@ const statusWorkflow: SubmissionStatus[] = [
 const getStatusProgress = (status: SubmissionStatus): number => {
     if (status === 'Rejected') return 0;
     const index = statusWorkflow.indexOf(status);
-    if (index === -1) {
-        // Handle legacy statuses
-        if (status === 'Revisions Required') return 60;
-    }
+    if (index === -1) return 0;
     return ((index + 1) / statusWorkflow.length) * 100;
 }
 
@@ -68,7 +63,6 @@ export default function AuthorPage() {
     const { user } = useAuth();
     const [submissions, setSubmissions] = useState<Submission[]>([]);
     const [loading, setLoading] = useState(true);
-    const { toast } = useToast();
 
     useEffect(() => {
         if (!user) {
@@ -104,16 +98,11 @@ export default function AuthorPage() {
         }, (error) => {
             console.error("Firestore Error:", error);
             setLoading(false);
-            toast({
-                title: "Could Not Fetch Submissions",
-                description: "You may not have permission to view these resources. Please check your console for more details.",
-                variant: "destructive"
-            });
         });
 
         // Cleanup subscription on unmount
         return () => unsubscribe();
-    }, [user, toast]);
+    }, [user]);
 
   return (
     <div className="space-y-8">
@@ -145,7 +134,7 @@ export default function AuthorPage() {
                                 <TableRow key={i}>
                                     <TableCell><Skeleton className="h-5 w-32" /></TableCell>
                                     <TableCell className="hidden md:table-cell"><Skeleton className="h-5 w-24" /></TableCell>
-                                    <TableCell><Skeleton className="h-10 w-48 rounded-full" /></TableCell>
+                                    <TableCell><Skeleton className="h-10 w-48" /></TableCell>
                                     <TableCell className="text-right"><Skeleton className="h-8 w-24 ml-auto" /></TableCell>
                                 </TableRow>
                             ))

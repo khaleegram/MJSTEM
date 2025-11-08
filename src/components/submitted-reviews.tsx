@@ -14,7 +14,7 @@ import { format } from 'date-fns';
 interface Review {
     id: string;
     reviewerName: string;
-    recommendation: 'Accept' | 'Revisions Required' | 'Reject';
+    recommendation: 'Accept' | 'Minor Revision' | 'Major Revision' | 'Reject';
     commentsForEditor: string;
     commentsForAuthor: string;
     submittedAt: Date;
@@ -24,7 +24,9 @@ const getRecommendationVariant = (recommendation: string) => {
     switch(recommendation) {
         case 'Accept': return 'success';
         case 'Reject': return 'destructive';
-        case 'Revisions Required': return 'secondary';
+        case 'Minor Revision':
+        case 'Major Revision': 
+            return 'secondary';
         default: return 'outline';
     }
 }

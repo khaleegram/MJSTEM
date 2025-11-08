@@ -26,5 +26,3 @@ export type Volume = z.infer<typeof VolumeSchema>;
 export type Issue = z.infer<typeof IssueSchema>;
 export type Article = z.infer<typeof ArticleSchema>;
 export type EditorialBoardMember = z.infer<typeof EditorialBoardMemberSchema>;
-
-    

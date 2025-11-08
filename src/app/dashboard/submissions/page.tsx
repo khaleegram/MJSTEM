@@ -49,9 +49,11 @@ const getStatusVariant = (status: SubmissionStatus) => {
       return 'success';
     case 'Rejected':
       return 'destructive';
-    case 'Revisions Required':
+    case 'Minor Revision':
+    case 'Major Revision':
       return 'secondary';
-    case 'Under Review':
+    case 'Under Peer Review':
+    case 'Under Initial Review':
       return 'default';
     default:
       return 'outline';
@@ -254,7 +256,7 @@ export default function AllSubmissionsPage() {
                         {format(submission.submittedAt, 'PPP')}
                     </TableCell>
                     <TableCell>
-                        <Badge variant={getStatusVariant(submission.status)} className={cn(submission.status === 'Under Review' && 'bg-blue-500')}>
+                        <Badge variant={getStatusVariant(submission.status)} className={cn(submission.status.startsWith('Under') && 'bg-blue-500')}>
                         {submission.status}
                         </Badge>
                     </TableCell>
