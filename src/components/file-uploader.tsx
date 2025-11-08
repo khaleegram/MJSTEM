@@ -23,6 +23,7 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError }: File
   const [fileName, setFileName] = useState<string | null>(null);
 
   const { startUpload, isUploading } = useUploadThing(endpoint, {
+    // This is the key change: a headers function that dynamically gets the token.
     headers: async () => {
         if (!user) return {};
         try {
@@ -32,6 +33,7 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError }: File
           };
         } catch (error) {
           console.error("Failed to get Firebase token:", error);
+          onUploadError(new Error("Authentication failed."));
           return {};
         }
     },
@@ -59,6 +61,7 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError }: File
 
     if (acceptedFiles.length > 0) {
       setFileName(acceptedFiles[0].name);
+      // The headers function in useUploadThing will handle auth. No need to pass tokens here.
       await startUpload(acceptedFiles);
     }
   }, [startUpload, user, onUploadError]);

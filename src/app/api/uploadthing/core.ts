@@ -7,14 +7,17 @@ import { UTApi } from "uploadthing/server";
 
 export const utapi = new UTApi();
 
-// Initialize Firebase Admin SDK
+// Initialize Firebase Admin SDK only once
 if (!getApps().length) {
   try {
     const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
-    if (!serviceAccount) throw new Error('Firebase service account key is not set.');
-    initializeApp({
-      credential: cert(JSON.parse(serviceAccount))
-    });
+    if (!serviceAccount) {
+      console.error('Firebase service account key is not set in environment variables.');
+    } else {
+      initializeApp({
+        credential: cert(JSON.parse(serviceAccount))
+      });
+    }
   } catch (e) {
     console.error("Firebase Admin initialization error", e);
   }
@@ -22,6 +25,7 @@ if (!getApps().length) {
 
 const f = createUploadthing();
 
+// Reusable authentication middleware
 const handleAuth = async ({ req }: { req: NextRequest }) => {
   const authHeader = req.headers.get("authorization");
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -33,7 +37,7 @@ const handleAuth = async ({ req }: { req: NextRequest }) => {
     const decodedToken = await adminAuth().verifyIdToken(token);
     return { userId: decodedToken.uid };
   } catch (error) {
-    console.error("Firebase Auth Error", error);
+    console.error("Firebase Auth Error on server:", error);
     throw new UploadThingError("Unauthorized: Invalid token");
   }
 };
@@ -48,7 +52,7 @@ export const ourFileRouter = {
     "application/msword": { maxFileSize: "16MB", maxFileCount: 1 },
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": { maxFileSize: "16MB", maxFileCount: 1 },
    })
-    .middleware(handleAuth)
+    .middleware(handleAuth) // Apply the reusable auth middleware
     .onUploadComplete(async ({ metadata, file }) => {
       console.log("Upload complete for userId:", metadata.userId);
       console.log("file url", file.url);
@@ -58,7 +62,7 @@ export const ourFileRouter = {
   imageUploader: f({
       image: { maxFileSize: "4MB", maxFileCount: 1 },
     })
-    .middleware(handleAuth)
+    .middleware(handleAuth) // Apply the reusable auth middleware
     .onUploadComplete(async ({ metadata, file }) => {
       console.log("Image upload complete for userId:", metadata.userId);
       console.log("file url", file.url);
