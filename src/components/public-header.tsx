@@ -6,8 +6,11 @@ import { ArrowRight, Menu } from 'lucide-react';
 import { Icons } from './icons';
 import { Button } from './ui/button';
 import { Sheet, SheetTrigger, SheetContent, SheetTitle } from './ui/sheet';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ThemeToggle } from './theme-toggle';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import Image from 'next/image';
 
 const NavLink = ({ href, children }: { href: string; children: React.ReactNode }) => (
     <Link href={href} className="text-muted-foreground hover:text-foreground">
@@ -18,12 +21,32 @@ const NavLink = ({ href, children }: { href: string; children: React.ReactNode }
 
 export function PublicHeader() {
     const [isOpen, setIsOpen] = useState(false);
+    const [logoUrl, setLogoUrl] = useState<string | null>(null);
+
+    useEffect(() => {
+        const fetchLogo = async () => {
+            try {
+                const docRef = doc(db, 'settings', 'branding');
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists() && docSnap.data().logoUrl) {
+                    setLogoUrl(docSnap.data().logoUrl);
+                }
+            } catch (error) {
+                console.error("Could not fetch logo:", error);
+            }
+        };
+        fetchLogo();
+    }, []);
 
   return (
     <header className="container mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between border-b">
       <div className="flex items-center gap-2">
-        <Link href="/" className="flex items-center gap-2 font-semibold">
-            <Icons.logo className="h-8 w-8 text-primary" />
+        <Link href="/" className="flex items-center gap-3 font-semibold">
+            {logoUrl ? (
+                <Image src={logoUrl} alt="Journal Logo" width={40} height={40} className="object-contain" />
+            ) : (
+                <Icons.logo className="h-8 w-8 text-primary" />
+            )}
             <h1 className="text-xl sm:text-2xl font-bold font-headline text-foreground">
                 MJSTEM
             </h1>

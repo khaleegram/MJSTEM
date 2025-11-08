@@ -1,16 +1,18 @@
+
 "use client";
 
 import { useUploadThing } from "@/lib/uploadthing";
-import { UploadCloud, File as FileIcon, X } from "lucide-react";
+import { UploadCloud, File as FileIcon, X, Image as ImageIcon } from "lucide-react";
 import { useDropzone } from "@uploadthing/react";
 import { useCallback, useState } from "react";
 import { Button } from "./ui/button";
 import { Progress } from "./ui/progress";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/auth-context";
+import { OurFileRouter } from "@/app/api/uploadthing/core";
 
 interface FileUploaderProps {
-  endpoint: "documentUploader";
+  endpoint: keyof OurFileRouter;
   onUploadComplete: (url: string) => void;
   onUploadError: (error: Error) => void;
 }
@@ -20,7 +22,7 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError }: File
   const [uploadProgress, setUploadProgress] = useState(0);
   const [fileName, setFileName] = useState<string | null>(null);
 
-  const { startUpload, isUploading, permittedFileInfo } = useUploadThing(endpoint, {
+  const { startUpload, isUploading } = useUploadThing(endpoint, {
     onClientUploadComplete: (res) => {
       if (res && res[0]) {
         setFileName(res[0].name);
@@ -39,20 +41,23 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError }: File
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0 && user) {
         setFileName(acceptedFiles[0].name);
-        // We need to pass the token to the server
-        // but it is handled by the middleware configuration.
-        // My previous attempts to pass headers here were incorrect.
-        const token = await user.getIdToken();
-        // The library seems to handle the auth token via a separate mechanism
-        // let's ensure we are passing files correctly.
+        // The useUploadThing hook should automatically handle auth
+        // by fetching the token from our middleware.
         startUpload(acceptedFiles);
+    } else if (!user) {
+        onUploadError(new Error("You must be logged in to upload files."));
     }
-  }, [startUpload, user]);
+  }, [startUpload, user, onUploadError]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     multiple: false,
   });
+
+  const isImageUploader = endpoint === 'imageUploader';
+  const Icon = isImageUploader ? ImageIcon : FileIcon;
+  const description = isImageUploader ? "PNG, JPG, GIF up to 4MB" : "PDF, DOC, DOCX up to 16MB.";
+
 
   if (isUploading) {
     return (
@@ -68,7 +73,7 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError }: File
      return (
         <div className="p-4 rounded-lg border flex items-center justify-between">
             <div className="flex items-center gap-3">
-                <FileIcon className="h-6 w-6 text-primary" />
+                <Icon className="h-6 w-6 text-primary" />
                 <p className="text-sm font-medium">{fileName}</p>
             </div>
             <Button variant="ghost" size="icon" onClick={() => {
@@ -96,7 +101,7 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError }: File
         <p className="font-medium">
           {isDragActive ? "Drop the file here..." : "Drag & drop file or click to select"}
         </p>
-        <p className="text-xs">PDF, DOC, DOCX up to 16MB.</p>
+        <p className="text-xs">{description}</p>
       </div>
     </div>
   );

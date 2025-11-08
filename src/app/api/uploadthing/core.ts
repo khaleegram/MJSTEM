@@ -1,3 +1,4 @@
+
 import { createUploadthing, type FileRouter } from "uploadthing/next";
 import { UploadThingError } from "uploadthing/server";
 import { auth as adminAuth } from 'firebase-admin';
@@ -23,18 +24,8 @@ if (!getApps().length) {
 
 const f = createUploadthing();
  
-const handleAuth = async () => {
-    // This auth logic is not being hit correctly by the client
-    // For now, let's allow uploads from any user and revisit
-    // the auth implementation. THIS IS NOT SECURE FOR PRODUCTION.
-    const userId = "placeholder-user-id";
-    return { userId };
-}
-
-// THIS IS THE REAL AUTH LOGIC THAT SHOULD BE USED
-const handleAuthWithToken = async ({ req }: { req: NextRequest }) => {
+const handleAuth = async ({ req }: { req: NextRequest }) => {
     const authHeader = req.headers.get("authorization");
-
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         throw new UploadThingError("Unauthorized: No token provided");
     }
@@ -59,34 +50,23 @@ export const ourFileRouter = {
     "application/msword": { maxFileSize: "16MB", maxFileCount: 1 },
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": { maxFileSize: "16MB", maxFileCount: 1 },
    })
-    // Set permissions and file types for this FileRoute
-    .middleware(async ({ req }) => {
-        // This is the auth logic that should be used.
-        // It seems the client is not correctly passing the auth header
-        // and for now we will bypass it.
-        const authHeader = req.headers.get("authorization");
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-             const userId = "placeholder-user-id";
-             return { userId };
-        }
-        const token = authHeader.split('Bearer ')[1];
-        try {
-            const decodedToken = await adminAuth().verifyIdToken(token);
-            return { userId: decodedToken.uid };
-        } catch (error) {
-            console.error("Firebase Auth Error", error);
-            const userId = "placeholder-user-id";
-            return { userId };
-        }
-    })
+    .middleware(handleAuth)
     .onUploadComplete(async ({ metadata, file }) => {
-      // This code RUNS ON YOUR SERVER after upload
       console.log("Upload complete for userId:", metadata.userId);
       console.log("file url", file.url);
- 
-      // !!! Whatever is returned here is sent to the clientside `onClientUploadComplete` callback
       return { uploadedBy: metadata.userId, url: file.url };
     }),
+
+  imageUploader: f({
+      image: { maxFileSize: "4MB", maxFileCount: 1 },
+    })
+    .middleware(handleAuth)
+    .onUploadComplete(async ({ metadata, file }) => {
+      console.log("Image upload complete for userId:", metadata.userId);
+      console.log("file url", file.url);
+      return { uploadedBy: metadata.userId, url: file.url };
+    }),
+
 } satisfies FileRouter;
  
 export type OurFileRouter = typeof ourFileRouter;

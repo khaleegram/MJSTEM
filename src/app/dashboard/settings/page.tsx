@@ -30,8 +30,8 @@ export default function SettingsPage() {
                     </CardContent>
                 </Card>
             </Link>
-            <Link href="#">
-                <Card className="hover:bg-muted/50 hover:border-primary/50 transition-colors cursor-not-allowed opacity-60">
+            <Link href="/dashboard/settings/branding">
+                <Card className="hover:bg-muted/50 hover:border-primary/50 transition-colors">
                     <CardHeader>
                         <CardTitle className="font-headline flex items-center gap-3">
                             <Palette className="h-6 w-6 text-primary" />
@@ -40,7 +40,7 @@ export default function SettingsPage() {
                     </CardHeader>
                     <CardContent>
                         <CardDescription>
-                            Customize the journal's logo, colors, and overall appearance. (Coming Soon)
+                            Customize the journal's logo, colors, and overall appearance.
                         </CardDescription>
                     </CardContent>
                 </Card>
