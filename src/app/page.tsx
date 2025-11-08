@@ -9,6 +9,7 @@ import { Icons } from '@/components/icons';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import Image from 'next/image';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 const HowItWorksCard = ({ icon, title, children }: { icon: React.ReactNode, title: string, children: React.ReactNode }) => (
   <Card className="overflow-hidden bg-card/50 backdrop-blur-sm border-border/20 shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 group">
@@ -78,14 +79,25 @@ export default async function HomePage() {
                     <Button size="lg" asChild>
                         <Link href="/dashboard/submissions/new">Submit Your Manuscript</Link>
                     </Button>
-                    {journalInfo.submissionTemplateUrl && (
-                      <Button size="lg" variant="outline" asChild>
-                          <Link href={journalInfo.submissionTemplateUrl} target="_blank">
-                            <Download className="mr-2 h-5 w-5" />
-                            Download Template
-                          </Link>
-                      </Button>
-                    )}
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className='inline-flex'>
+                            <Button size="lg" variant="outline" asChild disabled={!journalInfo.submissionTemplateUrl}>
+                                <Link href={journalInfo.submissionTemplateUrl || '#'} target="_blank">
+                                  <Download className="mr-2 h-5 w-5" />
+                                  Download Template
+                                </Link>
+                            </Button>
+                          </div>
+                        </TooltipTrigger>
+                        {!journalInfo.submissionTemplateUrl && (
+                           <TooltipContent>
+                            <p>No template uploaded yet. An admin must upload one in Journal Settings.</p>
+                          </TooltipContent>
+                        )}
+                      </Tooltip>
+                    </TooltipProvider>
                 </div>
               </div>
             </div>
@@ -222,3 +234,5 @@ export default async function HomePage() {
     </div>
   );
 }
+
+    
