@@ -41,6 +41,7 @@ import { SubmissionHistory } from '@/components/submission-history';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { logSubmissionEvent } from '@/ai/flows/log-submission-event';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 
 const getStatusVariant = (status: SubmissionStatus) => {
@@ -395,6 +396,12 @@ export default function SubmissionDetailPage() {
   const handleReviewSubmit = () => {
     setRefetchTrigger(prev => prev + 1);
   }
+  
+  const getInitials = (name: string) => {
+    const names = name.split(' ');
+    if (names.length > 1) return names[0][0] + names[names.length - 1][0];
+    return name.substring(0, 2);
+  }
 
   if (loading) {
     return <DetailPageSkeleton />;
@@ -482,15 +489,20 @@ export default function SubmissionDetailPage() {
           <CardContent>
              {submission.reviewers && submission.reviewers.length > 0 ? (
                 <ul className="space-y-4">
-                    {submission.reviewers.map(reviewer => (
+                    {submission.reviewers.map(reviewer => {
+                        const reviewerProfile = availableReviewers.find(r => r.uid === reviewer.id);
+                        return (
                          <li key={reviewer.id} className="flex items-center gap-4">
-                            <Image src={`https://picsum.photos/seed/${reviewer.id}/40/40`} width={40} height={40} alt="Reviewer" className="rounded-full" data-ai-hint="person face" />
+                            <Avatar>
+                                <AvatarImage src={reviewerProfile?.photoURL || ''} alt={reviewer.name} />
+                                <AvatarFallback>{getInitials(reviewer.name)}</AvatarFallback>
+                            </Avatar>
                             <div>
                                 <p className="font-medium">{reviewer.name}</p>
                                 <p className="text-sm text-muted-foreground">{reviewer.status}</p>
                             </div>
                         </li>
-                    ))}
+                    )})}
                 </ul>
             ) : (
                 <p className="text-sm text-muted-foreground text-center py-4">No reviewers assigned yet.</p>
@@ -517,7 +529,10 @@ export default function SubmissionDetailPage() {
                     {availableReviewers.map(reviewer => (
                       <li key={reviewer.uid} className='flex justify-between items-center p-3 rounded-lg border hover:bg-secondary/50'>
                          <div className="flex items-center gap-4">
-                            <Image src={`https://picsum.photos/seed/${reviewer.uid}/40/40`} width={40} height={40} alt={reviewer.displayName || 'Reviewer'} className="rounded-full" data-ai-hint="person face" />
+                            <Avatar>
+                                <AvatarImage src={reviewer.photoURL || ''} alt={reviewer.displayName || 'Reviewer'} />
+                                <AvatarFallback>{getInitials(reviewer.displayName || 'R')}</AvatarFallback>
+                            </Avatar>
                             <div>
                                 <p className="font-medium">{reviewer.displayName}</p>
                                 <p className="text-sm text-muted-foreground truncate max-w-48">{reviewer.specialization || 'No specialization listed'}</p>

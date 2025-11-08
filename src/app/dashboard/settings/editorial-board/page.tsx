@@ -20,6 +20,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { PlusCircle, Edit, Trash2 } from 'lucide-react';
 import Image from 'next/image';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { FileUploader } from '@/components/file-uploader';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 
 const MemberForm = ({ member, onSave, onCancel, allUsers }: { member?: EditorialBoardMember, onSave: () => void, onCancel: () => void, allUsers: UserProfile[] }) => {
@@ -35,19 +37,19 @@ const MemberForm = ({ member, onSave, onCancel, allUsers }: { member?: Editorial
       affiliation: '',
       country: '',
       role: 'Associate Editor',
-      imageSeed: Math.random().toString(36).substring(7),
+      photoURL: '',
       userId: '',
     },
   });
 
   useEffect(() => {
-    // If we are editing a member that was linked to a user, pre-select that user.
     if (member?.userId) {
       setIsManual(false);
       const linkedUser = allUsers.find(u => u.uid === member.userId);
       if(linkedUser) {
         form.setValue('name', linkedUser.displayName);
         form.setValue('affiliation', linkedUser.specialization || 'N/A');
+        form.setValue('photoURL', linkedUser.photoURL);
       }
     } else {
       setIsManual(true);
@@ -65,6 +67,7 @@ const MemberForm = ({ member, onSave, onCancel, allUsers }: { member?: Editorial
         affiliation: '',
         country: '',
         userId: '',
+        photoURL: '',
       });
     } else {
       setIsManual(false);
@@ -73,7 +76,7 @@ const MemberForm = ({ member, onSave, onCancel, allUsers }: { member?: Editorial
         form.setValue('userId', selectedUser.uid);
         form.setValue('name', selectedUser.displayName);
         form.setValue('affiliation', selectedUser.specialization || 'N/A');
-        form.setValue('imageSeed', selectedUser.uid); // Use UID for consistent image
+        form.setValue('photoURL', selectedUser.photoURL || '');
       }
     }
   }
@@ -83,12 +86,11 @@ const MemberForm = ({ member, onSave, onCancel, allUsers }: { member?: Editorial
     setIsSubmitting(true);
     try {
       if (values.id) {
-        // Update existing member
-        const memberRef = doc(db, 'editorialBoard', values.id);
-        await updateDoc(memberRef, values);
+        const { id, ...dataToUpdate } = values;
+        const memberRef = doc(db, 'editorialBoard', id);
+        await updateDoc(memberRef, dataToUpdate);
         toast({ title: 'Success', description: 'Board member updated.' });
       } else {
-        // Add new member
         await addDoc(collection(db, 'editorialBoard'), {
           ...values,
           order: (await getDocs(collection(db, 'editorialBoard'))).size,
@@ -123,6 +125,22 @@ const MemberForm = ({ member, onSave, onCancel, allUsers }: { member?: Editorial
             </SelectContent>
           </Select>
         </FormItem>
+        
+        {isManual && (
+            <FormField control={form.control} name="photoURL" render={({ field }) => (
+                <FormItem>
+                    <FormLabel>Photo</FormLabel>
+                    <FormControl>
+                        <FileUploader 
+                            endpoint="imageUploader"
+                            onUploadComplete={(url) => field.onChange(url)}
+                            onUploadError={(err) => toast({title: "Upload Error", description: err.message, variant: "destructive"})}
+                        />
+                    </FormControl>
+                    <FormMessage />
+                </FormItem>
+            )} />
+        )}
 
         <div className="grid grid-cols-2 gap-4">
             <FormField control={form.control} name="name" render={({ field }) => (
@@ -152,9 +170,7 @@ const MemberForm = ({ member, onSave, onCancel, allUsers }: { member?: Editorial
               </SelectContent>
             </Select><FormMessage /></FormItem>
         )} />
-        <FormField control={form.control} name="imageSeed" render={({ field }) => (
-          <FormItem><FormLabel>Image Seed</FormLabel><FormControl><Input {...field} placeholder="A unique string for the photo" disabled={!isManual} /></FormControl><FormMessage /></FormItem>
-        )} />
+        
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
           <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Saving...' : 'Save Member'}</Button>
@@ -281,7 +297,10 @@ export default function EditorialBoardSettingsPage() {
                 members.map(member => (
                   <TableRow key={member.id}>
                     <TableCell>
-                      <Image src={`https://picsum.photos/seed/${member.imageSeed}/48/48`} alt={member.name} width={48} height={48} className="rounded-full" data-ai-hint="person face" />
+                      <Avatar className="h-12 w-12">
+                        <AvatarImage src={member.photoURL || ''} alt={member.name} />
+                        <AvatarFallback>{member.name.charAt(0)}</AvatarFallback>
+                      </Avatar>
                     </TableCell>
                     <TableCell className="font-medium">{member.name}</TableCell>
                     <TableCell>{member.affiliation}</TableCell>
@@ -320,5 +339,3 @@ export default function EditorialBoardSettingsPage() {
     </div>
   );
 }
-
-    

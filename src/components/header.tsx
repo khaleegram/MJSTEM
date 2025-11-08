@@ -124,9 +124,8 @@ export function Header() {
           <Button variant="ghost" size="icon" className="rounded-full">
             <Avatar className="h-9 w-9">
               <AvatarImage
-                src={user?.photoURL || ''}
+                src={userProfile?.photoURL || user?.photoURL || ''}
                 alt="User avatar"
-                data-ai-hint="person face"
               />
               <AvatarFallback>{getInitials(user?.displayName)}</AvatarFallback>
             </Avatar>

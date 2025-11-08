@@ -9,19 +9,16 @@ import { db } from '@/lib/firebase';
 import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 import { useEffect, useState, useMemo } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 const BoardMemberCard = ({ member }: { member: EditorialBoardMember }) => (
   <Card className="text-center">
     <CardContent className="pt-6">
       <div className="flex flex-col items-center">
-        <Image
-          src={`https://picsum.photos/seed/${member.imageSeed}/128/128`}
-          alt={member.name}
-          width={128}
-          height={128}
-          className="rounded-full mb-4"
-          data-ai-hint="person face"
-        />
+        <Avatar className="h-32 w-32 mb-4">
+          <AvatarImage src={member.photoURL || ''} alt={member.name} />
+          <AvatarFallback className="text-4xl">{member.name.charAt(0)}</AvatarFallback>
+        </Avatar>
         <h3 className="font-bold font-headline text-lg text-foreground">{member.name}{member.qualifications && `, ${member.qualifications}`}</h3>
         <p className="text-sm text-muted-foreground">{member.affiliation}{member.country && `, ${member.country}`}</p>
       </div>
@@ -126,5 +123,3 @@ export default function EditorialBoardPage() {
     </div>
   );
 }
-
-    

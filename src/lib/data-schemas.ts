@@ -19,6 +19,7 @@ export const UserProfileSchema = z.object({
   uid: z.string(),
   email: z.string().email(),
   displayName: z.string(),
+  photoURL: z.string().url().optional(),
   role: z.enum(['Editor', 'Author', 'Reviewer', 'Admin']),
   specialization: z.string().optional(),
 });
@@ -84,6 +85,6 @@ export const EditorialBoardMemberSchema = z.object({
   affiliation: z.string().min(1, "Affiliation is required."),
   country: z.string().optional(),
   role: z.enum(['Editor-in-Chief', 'Associate Editor', 'Founding Editor', 'Senior Associate Editor']),
-  imageSeed: z.string().min(1, "Image Seed is required."),
+  photoURL: z.string().url().optional(),
   order: z.number().optional(),
 });

@@ -39,57 +39,39 @@ const AuthContext = createContext<AuthContextType>({
   refetchUserProfile: async () => {},
 });
 
+const ensureUserDocument = async (user: FirebaseUser): Promise<UserProfile> => {
+  const userRef = doc(db, 'users', user.uid);
+  const snap = await getDoc(userRef);
+
+  if (snap.exists()) {
+    return snap.data() as UserProfile;
+  } else {
+    const newProfile: UserProfile = {
+      uid: user.uid,
+      email: user.email!,
+      displayName: user.displayName || 'New User',
+      photoURL: user.photoURL || '',
+      role: 'Author', // Default role
+      specialization: '', // Default specialization
+    };
+    await setDoc(userRef, newProfile);
+    return newProfile;
+  }
+};
+
+
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-
-  const fetchUserProfile = async (user: FirebaseUser) => {
-     // Fetch user role from Firestore
-    const userDocRef = doc(db, 'users', user.uid);
-    const userDoc = await getDoc(userDocRef);
-    if (userDoc.exists()) {
-        setUserProfile(userDoc.data() as UserProfile);
-    } else {
-        // This case might happen if user doc creation fails during signup
-        // Or for pre-existing Firebase auth users without a profile doc
-        const profile: UserProfile = {
-          uid: user.uid,
-          email: user.email!,
-          displayName: user.displayName || 'New User',
-          role: 'Author',
-          specialization: 'General Topics',
-        }
-        // Let's create the user doc if it's missing for a google sign in
-        await setDoc(userDocRef, profile, { merge: true });
-        setUserProfile(profile); 
-    }
-  }
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setLoading(true);
       if (user) {
         setUser(user);
-        // Ensure user document exists before proceeding
-        const userDocRef = doc(db, 'users', user.uid);
-        const userDoc = await getDoc(userDocRef);
-        if (!userDoc.exists()) {
-          // If the document doesn't exist, create it.
-          // This is critical for first-time social sign-ins.
-          const newProfile: UserProfile = {
-            uid: user.uid,
-            email: user.email!,
-            displayName: user.displayName || 'New User',
-            role: 'Author', // Assign a default role
-            specialization: 'General Topics',
-          };
-          await setDoc(userDocRef, newProfile);
-          setUserProfile(newProfile);
-        } else {
-          // If it exists, just load the profile.
-          setUserProfile(userDoc.data() as UserProfile);
-        }
+        const profile = await ensureUserDocument(user);
+        setUserProfile(profile);
       } else {
         setUser(null);
         setUserProfile(null);
@@ -109,44 +91,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     
     if(user) {
         await updateProfile(user, { displayName });
-
-        // Create user profile in Firestore
-        const userDocRef = doc(db, 'users', user.uid);
-        const newProfile: UserProfile = {
-            uid: user.uid,
-            email: user.email!,
-            displayName: displayName,
-            role: 'Author', // Default role
-            specialization: 'General Topics', // Default specialization
-        };
-        await setDoc(userDocRef, newProfile);
-        setUserProfile(newProfile);
+        // The onAuthStateChanged listener will handle creating the user document
     }
     return userCredential;
   };
   
   const signInWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
-    const userCredential = await signInWithPopup(auth, provider);
-    const { user } = userCredential;
-
-    // Check if user profile already exists, if not create it
-    const userDocRef = doc(db, 'users', user.uid);
-    const userDoc = await getDoc(userDocRef);
-    if (!userDoc.exists()) {
-        const newProfile: UserProfile = {
-            uid: user.uid,
-            email: user.email!,
-            displayName: user.displayName!,
-            role: 'Author',
-            specialization: 'General Topics',
-        };
-        await setDoc(userDocRef, newProfile);
-        setUserProfile(newProfile);
-    } else {
-        setUserProfile(userDoc.data() as UserProfile);
-    }
-    return userCredential;
+    const result = await signInWithPopup(auth, provider);
+    // The onAuthStateChanged listener will handle creating/fetching the user document
+    return result;
   }
 
   const logout = () => {
@@ -155,7 +109,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const refetchUserProfile = async () => {
     if (auth.currentUser) {
-      await fetchUserProfile(auth.currentUser);
+       const profile = await ensureUserDocument(auth.currentUser);
+       setUserProfile(profile);
     }
   }
 

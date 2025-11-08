@@ -33,6 +33,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { useAuth } from '@/contexts/auth-context';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 
 const RoleManagementCard = ({ user, onRoleUpdate }: { user: UserProfile, onRoleUpdate: () => void }) => {
     const [newRole, setNewRole] = useState<UserRole>(user.role);
@@ -194,6 +195,12 @@ export default function ReviewerProfilePage() {
   }
   
   const isAdmin = adminProfile?.role === 'Admin';
+  
+  const getInitials = (name: string) => {
+    const names = name.split(' ');
+    if (names.length > 1) return names[0][0] + names[names.length - 1][0];
+    return name.substring(0, 2);
+  }
 
 
   return (
@@ -202,7 +209,10 @@ export default function ReviewerProfilePage() {
             <Card>
                 <CardContent className="pt-6">
                     <div className="flex flex-col items-center space-y-4">
-                        <Image src={`https://picsum.photos/seed/${userProfile.uid}/128/128`} width={128} height={128} alt={userProfile.displayName || 'User'} className="rounded-full" data-ai-hint="person face" />
+                        <Avatar className="h-32 w-32">
+                          <AvatarImage src={userProfile.photoURL || ''} alt={userProfile.displayName || 'User'} />
+                          <AvatarFallback className="text-4xl">{getInitials(userProfile.displayName || 'U')}</AvatarFallback>
+                        </Avatar>
                         <div className="text-center">
                             <CardTitle className="font-headline text-2xl">{userProfile.displayName}</CardTitle>
                             <p className="text-muted-foreground">{userProfile.email}</p>

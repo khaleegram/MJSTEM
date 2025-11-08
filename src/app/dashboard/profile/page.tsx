@@ -33,14 +33,20 @@ import { useToast } from '@/hooks/use-toast';
 import { UserRole } from '@/types';
 import { UserProfileSchema } from '@/lib/data-schemas';
 import { useRouter } from 'next/navigation';
+import { FileUploader } from '@/components/file-uploader';
+import Image from 'next/image';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { updateProfile } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 
 const profileFormSchema = UserProfileSchema.pick({
   displayName: true,
   specialization: true,
+  photoURL: true,
 });
 
 export default function ProfilePage() {
-  const { userProfile, loading, refetchUserProfile } = useAuth();
+  const { user, userProfile, loading, refetchUserProfile } = useAuth();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
@@ -50,6 +56,7 @@ export default function ProfilePage() {
     defaultValues: {
       displayName: '',
       specialization: '',
+      photoURL: '',
     },
   });
 
@@ -58,12 +65,13 @@ export default function ProfilePage() {
       form.reset({
         displayName: userProfile.displayName || '',
         specialization: userProfile.specialization || '',
+        photoURL: userProfile.photoURL || '',
       });
     }
   }, [userProfile, form]);
 
   const onSubmit = async (values: z.infer<typeof profileFormSchema>) => {
-    if (!userProfile) {
+    if (!userProfile || !user) {
       toast({ title: "Not Authenticated", description: "You must be logged in to update your profile.", variant: "destructive" });
       return;
     }
@@ -76,6 +84,7 @@ export default function ProfilePage() {
       batch.update(userDocRef, {
         displayName: values.displayName,
         specialization: values.specialization,
+        photoURL: values.photoURL,
       });
 
       // 2. Check if this user is on the editorial board and update their entry
@@ -87,12 +96,19 @@ export default function ProfilePage() {
           const boardDocRef = doc(db, 'editorialBoard', boardDoc.id);
           batch.update(boardDocRef, {
             name: values.displayName,
-            affiliation: values.specialization
+            affiliation: values.specialization,
+            photoURL: values.photoURL,
           });
         });
       }
+      
+      // 3. Update the Firebase Auth user profile
+      await updateProfile(user, {
+        displayName: values.displayName,
+        photoURL: values.photoURL,
+      });
 
-      // 3. Commit all updates atomically
+      // 4. Commit all Firestore updates atomically
       await batch.commit();
       
       await refetchUserProfile(); // Refetch profile data without reloading
@@ -106,6 +122,12 @@ export default function ProfilePage() {
       setIsSubmitting(false);
     }
   };
+  
+  const getInitials = (name: string) => {
+    const names = name.split(' ');
+    if (names.length > 1) return names[0][0] + names[names.length - 1][0];
+    return name.substring(0, 2);
+  }
 
   if (loading) {
     return (
@@ -135,6 +157,31 @@ export default function ProfilePage() {
             <CardDescription>Manage your personal information and journal role.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
+             <FormField
+                control={form.control}
+                name="photoURL"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Profile Photo</FormLabel>
+                     <div className="flex items-center gap-6">
+                        <Avatar className="h-20 w-20">
+                            <AvatarImage src={field.value || ''} />
+                            <AvatarFallback>
+                                {getInitials(form.getValues('displayName') || 'U')}
+                            </AvatarFallback>
+                        </Avatar>
+                        <FormControl>
+                            <FileUploader
+                                endpoint="imageUploader"
+                                onUploadComplete={(url) => field.onChange(url)}
+                                onUploadError={(error) => toast({ title: 'Upload Failed', description: error.message, variant: 'destructive' })}
+                            />
+                        </FormControl>
+                      </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+            />
             <FormField
               control={form.control}
               name="displayName"
@@ -191,5 +238,3 @@ export default function ProfilePage() {
     </Card>
   );
 }
-
-    
