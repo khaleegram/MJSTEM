@@ -27,10 +27,10 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { FileUploader } from '@/components/file-uploader';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Textarea } from '@/components/ui/textarea';
+import Image from 'next/image';
 
 const journalInfoFormSchema = z.object({
-  coverLetter: z.string().optional(),
+  coverLetterUrl: z.string().url().optional(),
   submissionTemplateUrl: z.string().url().optional(),
 });
 
@@ -42,7 +42,7 @@ export default function JournalInfoSettingsPage() {
   const form = useForm<z.infer<typeof journalInfoFormSchema>>({
     resolver: zodResolver(journalInfoFormSchema),
     defaultValues: {
-      coverLetter: '',
+      coverLetterUrl: '',
       submissionTemplateUrl: '',
     },
   });
@@ -89,32 +89,42 @@ export default function JournalInfoSettingsPage() {
   return (
     <div className="max-w-2xl mx-auto">
       <h1 className="text-3xl font-bold font-headline mb-2">Journal Information</h1>
-      <p className="text-muted-foreground mb-8">Set the cover letter and submission template for authors.</p>
+      <p className="text-muted-foreground mb-8">Set the cover letter image and submission template for authors.</p>
       
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
           <Card>
             <CardHeader>
-              <CardTitle className="font-headline">Cover Letter Template</CardTitle>
-              <CardDescription>This text will be displayed in the hero section of the homepage.</CardDescription>
+              <CardTitle className="font-headline">Cover Letter Image</CardTitle>
+              <CardDescription>This image will be displayed on the homepage. A portrait aspect ratio is recommended.</CardDescription>
             </CardHeader>
             <CardContent>
               {loading ? (
-                <Skeleton className="h-24 w-full" />
+                 <div className="flex items-center space-x-4">
+                  <Skeleton className="h-24 w-24" />
+                  <div className="space-y-2">
+                     <Skeleton className="h-10 w-[400px]" />
+                  </div>
+                </div>
               ) : (
                 <FormField
                   control={form.control}
-                  name="coverLetter"
+                  name="coverLetterUrl"
                   render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Cover Letter Text</FormLabel>
+                     <FormItem>
+                      <FormLabel>Cover Image</FormLabel>
+                      <div className="flex items-center gap-6">
+                        {field.value && (
+                           <Image src={field.value} alt="Current cover" width={96} height={128} className="rounded-md object-contain border p-1" />
+                        )}
                         <FormControl>
-                            <Textarea
-                                placeholder="Enter a brief, welcoming cover letter or mission statement..."
-                                className="min-h-[120px]"
-                                {...field}
-                            />
+                          <FileUploader
+                            endpoint="imageUploader"
+                            onUploadComplete={(url) => field.onChange(url)}
+                            onUploadError={(error) => toast({ title: 'Upload Failed', description: error.message, variant: 'destructive' })}
+                          />
                         </FormControl>
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -162,5 +172,3 @@ export default function JournalInfoSettingsPage() {
     </div>
   );
 }
-
-    

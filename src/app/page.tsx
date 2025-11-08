@@ -8,6 +8,7 @@ import { getLatestIssue } from '@/services/publication-service';
 import { Icons } from '@/components/icons';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import Image from 'next/image';
 
 const HowItWorksCard = ({ icon, title, children }: { icon: React.ReactNode, title: string, children: React.ReactNode }) => (
   <Card className="overflow-hidden bg-card/50 backdrop-blur-sm border-border/20 shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 group">
@@ -25,7 +26,7 @@ const HowItWorksCard = ({ icon, title, children }: { icon: React.ReactNode, titl
 
 export default async function HomePage() {
   const latestIssue = await getLatestIssue();
-  let journalInfo: { coverLetter?: string, submissionTemplateUrl?: string } = {};
+  let journalInfo: { coverLetterUrl?: string, submissionTemplateUrl?: string } = {};
 
   try {
     const docRef = doc(db, 'settings', 'journalInfo');
@@ -42,35 +43,51 @@ export default async function HomePage() {
       <PublicHeader />
 
       <main className="flex-1">
-        <section className="relative flex items-center text-center text-foreground py-24 md:py-32">
-          <div className="absolute inset-0 -z-10 h-full w-full bg-background bg-[linear-gradient(to_right,hsl(var(--primary)/0.05)_1px,transparent_1px),linear-gradient(to_bottom,hsl(var(--primary)/0.05)_1px,transparent_1px)] bg-[size:6rem_4rem] dark:bg-[linear-gradient(to_right,hsl(var(--primary)/0.1)_1px,transparent_1px),linear-gradient(to_bottom,hsl(var(--primary)/0.1)_1px,transparent_1px)]">
+        <section className="relative flex items-center py-24 md:py-32">
+           <div className="absolute inset-0 -z-10 h-full w-full bg-background bg-[linear-gradient(to_right,hsl(var(--primary)/0.05)_1px,transparent_1px),linear-gradient(to_bottom,hsl(var(--primary)/0.05)_1px,transparent_1px)] bg-[size:6rem_4rem] dark:bg-[linear-gradient(to_right,hsl(var(--primary)/0.1)_1px,transparent_1px),linear-gradient(to_bottom,hsl(var(--primary)/0.1)_1px,transparent_1px)]">
              <div className="absolute bottom-0 left-0 right-0 top-0 bg-[radial-gradient(circle_500px_at_50%_200px,hsl(var(--background)),transparent)] dark:bg-[radial-gradient(circle_500px_at_50%_200px,hsl(var(--accent)/0.1),transparent)]"></div>
           </div>
           <div className="relative z-10 container px-4 mx-auto">
-             <h1 className="text-4xl md:text-6xl font-extrabold font-headline tracking-tight drop-shadow-md">
-                MJSTEM
-            </h1>
-            {journalInfo.coverLetter ? (
-              <p className="mt-6 max-w-3xl mx-auto text-lg md:text-xl text-muted-foreground drop-shadow-sm font-body italic">
-                &ldquo;{journalInfo.coverLetter}&rdquo;
-              </p>
-            ) : (
-              <p className="mt-4 max-w-3xl mx-auto text-lg md:text-xl text-muted-foreground drop-shadow-sm">
-                  A premier, peer-reviewed journal for science, technology, education, and management.
-              </p>
-            )}
-            <div className="mt-8 flex flex-col sm:flex-row justify-center gap-4">
-                <Button size="lg" asChild>
-                    <Link href="/dashboard/submissions/new">Submit Your Manuscript</Link>
-                </Button>
-                {journalInfo.submissionTemplateUrl && (
-                  <Button size="lg" variant="outline" asChild>
-                      <Link href={journalInfo.submissionTemplateUrl} target="_blank">
-                        <Download className="mr-2 h-5 w-5" />
-                        Download Template
-                      </Link>
-                  </Button>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-8 items-center">
+              {journalInfo.coverLetterUrl && (
+                <div className="md:col-span-2 flex justify-center">
+                  <Image 
+                    src={journalInfo.coverLetterUrl} 
+                    alt="Cover Letter"
+                    width={300}
+                    height={400}
+                    className="rounded-lg shadow-2xl object-cover"
+                    priority
+                  />
+                </div>
+              )}
+              <div className={journalInfo.coverLetterUrl ? 'md:col-span-3 text-center md:text-left' : 'md:col-span-5 text-center'}>
+                 <h1 className="text-4xl md:text-6xl font-extrabold font-headline tracking-tight drop-shadow-md">
+                    MJSTEM
+                </h1>
+                {latestIssue ? (
+                  <p className="mt-6 max-w-2xl mx-auto md:mx-0 text-lg md:text-xl text-muted-foreground drop-shadow-sm font-body">
+                    Read our latest publication: <span className="font-semibold text-foreground">{latestIssue.title}</span> from <span className="font-semibold text-foreground">{latestIssue.volumeTitle}</span>.
+                  </p>
+                ) : (
+                  <p className="mt-6 max-w-2xl mx-auto md:mx-0 text-lg md:text-xl text-muted-foreground drop-shadow-sm font-body">
+                    A premier, peer-reviewed journal for science, technology, education, and management.
+                  </p>
                 )}
+                <div className="mt-8 flex flex-col sm:flex-row justify-center md:justify-start gap-4">
+                    <Button size="lg" asChild>
+                        <Link href="/dashboard/submissions/new">Submit Your Manuscript</Link>
+                    </Button>
+                    {journalInfo.submissionTemplateUrl && (
+                      <Button size="lg" variant="outline" asChild>
+                          <Link href={journalInfo.submissionTemplateUrl} target="_blank">
+                            <Download className="mr-2 h-5 w-5" />
+                            Download Template
+                          </Link>
+                      </Button>
+                    )}
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -108,7 +125,7 @@ export default async function HomePage() {
           </div>
         </section>
 
-        {latestIssue ? (
+        {latestIssue && (
           <section className="py-16 sm:py-24 bg-primary/10">
             <div className="container mx-auto px-4 sm:px-6 lg:px-8">
               <div className="text-center mb-12">
@@ -145,17 +162,6 @@ export default async function HomePage() {
               </div>
             </div>
           </section>
-        ) : (
-             <section className="py-16 sm:py-24 bg-primary/10">
-                <div className="container mx-auto px-4 sm:px-6 lg:px-8 text-center">
-                     <h2 className="text-3xl md:text-4xl font-bold font-headline text-foreground">
-                        Coming Soon
-                    </h2>
-                     <p className="text-muted-foreground mt-2 max-w-2xl mx-auto">
-                        Our first issue is currently being prepared for publication. Check back soon to read the latest research.
-                    </p>
-                </div>
-            </section>
         )}
 
       </main>
@@ -216,5 +222,3 @@ export default async function HomePage() {
     </div>
   );
 }
-
-    
