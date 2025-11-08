@@ -22,6 +22,11 @@ const isPathAllowed = (role: string, path: string): boolean => {
     if (path === '/dashboard' || path === '/dashboard/profile' || path.startsWith('/dashboard/submissions/')) {
         return true;
     }
+
+    // Admins can access the import page
+    if (role === 'Admin' && path.startsWith('/dashboard/settings/import')) {
+        return true;
+    }
     
     // Check role-specific permissions
     const allowedPaths = rolePermissions[role] || [];

@@ -55,6 +55,7 @@ export const SubmissionSchema = z.object({
   manuscriptUrl: z.string().url().min(1, 'Manuscript file is required.'),
   reviewers: z.array(AssignedReviewerSchema).optional(),
   reviewerIds: z.array(z.string()).optional(), // For querying
+  originalSubmissionDate: z.date().optional().nullable(),
 });
 
 export const ArticleSchema = z.object({
