@@ -53,25 +53,45 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     } else {
         // This case might happen if user doc creation fails during signup
         // Or for pre-existing Firebase auth users without a profile doc
-          const profile: UserProfile = {
+        const profile: UserProfile = {
           uid: user.uid,
           email: user.email!,
-          displayName: user.displayName!,
+          displayName: user.displayName || 'New User',
           role: 'Author',
           specialization: 'General Topics',
         }
         // Let's create the user doc if it's missing for a google sign in
-        await setDoc(userDocRef, profile);
+        await setDoc(userDocRef, profile, { merge: true });
         setUserProfile(profile); 
     }
   }
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setUser(user);
+      setLoading(true);
       if (user) {
-        await fetchUserProfile(user);
+        setUser(user);
+        // Ensure user document exists before proceeding
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDoc = await getDoc(userDocRef);
+        if (!userDoc.exists()) {
+          // If the document doesn't exist, create it.
+          // This is critical for first-time social sign-ins.
+          const newProfile: UserProfile = {
+            uid: user.uid,
+            email: user.email!,
+            displayName: user.displayName || 'New User',
+            role: 'Author', // Assign a default role
+            specialization: 'General Topics',
+          };
+          await setDoc(userDocRef, newProfile);
+          setUserProfile(newProfile);
+        } else {
+          // If it exists, just load the profile.
+          setUserProfile(userDoc.data() as UserProfile);
+        }
       } else {
+        setUser(null);
         setUserProfile(null);
       }
       setLoading(false);
