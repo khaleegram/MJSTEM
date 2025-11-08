@@ -38,7 +38,7 @@ export const ourFileRouter = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": { maxFileSize: "16MB", maxFileCount: 1 },
   })
     .middleware(handleAuth)
-    .onUploadComplete(({ metadata, file }) => {
+    .onUploadComplete(async ({ metadata, file }) => {
       // Return plain JSON
       return { uploadedBy: metadata.userId, url: file.url };
     }),
@@ -47,7 +47,7 @@ export const ourFileRouter = {
     image: { maxFileSize: "4MB", maxFileCount: 1 },
   })
     .middleware(handleAuth)
-    .onUploadComplete(({ metadata, file }) => {
+    .onUploadComplete(async ({ metadata, file }) => {
       return { uploadedBy: metadata.userId, url: file.url };
     }),
 } satisfies FileRouter;
