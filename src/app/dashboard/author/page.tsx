@@ -21,9 +21,9 @@ import { useEffect, useState } from 'react';
 import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useToast } from '@/hooks/use-toast';
 import { Progress } from '@/components/ui/progress';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { useToast } from '@/hooks/use-toast';
 
 
 const getStatusVariant = (status: SubmissionStatus) => {
