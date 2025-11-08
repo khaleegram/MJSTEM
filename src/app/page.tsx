@@ -1,10 +1,13 @@
+
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowRight, Feather, Microscope, BookOpen, BookText } from 'lucide-react';
+import { ArrowRight, Feather, Microscope, BookOpen, BookText, Download } from 'lucide-react';
 import { PublicHeader } from '@/components/public-header';
 import { getLatestIssue } from '@/services/publication-service';
 import { Icons } from '@/components/icons';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 const HowItWorksCard = ({ icon, title, children }: { icon: React.ReactNode, title: string, children: React.ReactNode }) => (
   <Card className="overflow-hidden bg-card/50 backdrop-blur-sm border-border/20 shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 group">
@@ -22,30 +25,52 @@ const HowItWorksCard = ({ icon, title, children }: { icon: React.ReactNode, titl
 
 export default async function HomePage() {
   const latestIssue = await getLatestIssue();
+  let journalInfo: { coverLetter?: string, submissionTemplateUrl?: string } = {};
+
+  try {
+    const docRef = doc(db, 'settings', 'journalInfo');
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      journalInfo = docSnap.data();
+    }
+  } catch (e) {
+    console.error("Could not fetch journal info", e);
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
       <PublicHeader />
 
       <main className="flex-1">
-        <section className="relative flex items-center justify-center text-center text-foreground py-24 md:py-32">
+        <section className="relative flex items-center text-center text-foreground py-24 md:py-32">
           <div className="absolute inset-0 -z-10 h-full w-full bg-background bg-[linear-gradient(to_right,hsl(var(--primary)/0.05)_1px,transparent_1px),linear-gradient(to_bottom,hsl(var(--primary)/0.05)_1px,transparent_1px)] bg-[size:6rem_4rem] dark:bg-[linear-gradient(to_right,hsl(var(--primary)/0.1)_1px,transparent_1px),linear-gradient(to_bottom,hsl(var(--primary)/0.1)_1px,transparent_1px)]">
              <div className="absolute bottom-0 left-0 right-0 top-0 bg-[radial-gradient(circle_500px_at_50%_200px,hsl(var(--background)),transparent)] dark:bg-[radial-gradient(circle_500px_at_50%_200px,hsl(var(--accent)/0.1),transparent)]"></div>
           </div>
-          <div className="relative z-10 px-4">
+          <div className="relative z-10 container px-4 mx-auto">
              <h1 className="text-4xl md:text-6xl font-extrabold font-headline tracking-tight drop-shadow-md">
                 MJSTEM
             </h1>
-            <p className="mt-4 max-w-3xl mx-auto text-lg md:text-xl text-muted-foreground drop-shadow-sm">
-                A premier, peer-reviewed journal for science, technology, education, and management.
-            </p>
+            {journalInfo.coverLetter ? (
+              <p className="mt-6 max-w-3xl mx-auto text-lg md:text-xl text-muted-foreground drop-shadow-sm font-body italic">
+                &ldquo;{journalInfo.coverLetter}&rdquo;
+              </p>
+            ) : (
+              <p className="mt-4 max-w-3xl mx-auto text-lg md:text-xl text-muted-foreground drop-shadow-sm">
+                  A premier, peer-reviewed journal for science, technology, education, and management.
+              </p>
+            )}
             <div className="mt-8 flex flex-col sm:flex-row justify-center gap-4">
                 <Button size="lg" asChild>
                     <Link href="/dashboard/submissions/new">Submit Your Manuscript</Link>
                 </Button>
-                 <Button size="lg" variant="outline" asChild>
-                    <Link href="/archive">Browse Archives</Link>
-                </Button>
+                {journalInfo.submissionTemplateUrl && (
+                  <Button size="lg" variant="outline" asChild>
+                      <Link href={journalInfo.submissionTemplateUrl} target="_blank">
+                        <Download className="mr-2 h-5 w-5" />
+                        Download Template
+                      </Link>
+                  </Button>
+                )}
             </div>
           </div>
         </section>
@@ -137,14 +162,18 @@ export default async function HomePage() {
 
       <footer className="bg-secondary/50 border-t">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
-           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-                <div className="flex items-center gap-2">
-                    <Icons.logo className="h-8 w-8 text-primary" />
-                    <h2 className="text-2xl font-bold font-headline text-foreground">
-                        MJSTEM
-                    </h2>
+           <div className="grid grid-cols-2 md:grid-cols-5 gap-8">
+                <div className="col-span-2 md:col-span-1 flex items-start flex-col gap-2">
+                    <Link href="/" className="flex items-center gap-2">
+                        <Icons.logo className="h-8 w-8 text-primary" />
+                        <h2 className="text-2xl font-bold font-headline text-foreground">
+                            MJSTEM
+                        </h2>
+                    </Link>
+                    <p className="text-sm text-muted-foreground mt-2">Print ISSN: 3121-6552</p>
+                    <p className="text-sm text-muted-foreground">Barcode: 9773121655008</p>
                 </div>
-                <div className="md:col-span-3">
+                <div className="md:col-span-4">
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-8">
                          <div>
                             <h4 className="font-headline font-semibold mb-3">Journal</h4>
@@ -161,10 +190,11 @@ export default async function HomePage() {
                             </ul>
                         </div>
                          <div>
-                            <h4 className="font-headline font-semibold mb-3">Explore</h4>
+                            <h4 className="font-headline font-semibold mb-3">Information</h4>
                             <ul className="space-y-2 text-sm text-muted-foreground">
-                                <li><Link href="/archive" className="hover:text-primary">Archives</Link></li>
-                                <li><Link href="#" className="hover:text-primary">Most Read</Link></li>
+                                <li><Link href="/for-readers" className="hover:text-primary">For Readers</Link></li>
+                                <li><Link href="/for-authors" className="hover:text-primary">For Authors</Link></li>
+                                <li><Link href="/for-librarians" className="hover:text-primary">For Librarians</Link></li>
                             </ul>
                         </div>
                         <div>
@@ -177,11 +207,14 @@ export default async function HomePage() {
                     </div>
                 </div>
            </div>
-           <div className="mt-12 pt-8 border-t text-center text-sm text-muted-foreground">
-              © {new Date().getFullYear()} MJSTEM. All Rights Reserved.
+           <div className="mt-8 pt-8 border-t text-center text-sm text-muted-foreground">
+              <p className="mb-2">The views expressed in articles published by MJSTEM are solely those of contributing authors. Therefore, the journal cannot be held liable for such opinions. MJSTEM is solely a scholarly publication meant to satisfy the intellectual needs of the academic community.</p>
+              <p>© {new Date().getFullYear()} MJSTEM. All Rights Reserved.</p>
             </div>
         </div>
       </footer>
     </div>
   );
 }
+
+    

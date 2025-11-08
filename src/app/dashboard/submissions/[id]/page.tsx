@@ -49,9 +49,12 @@ const getStatusVariant = (status: SubmissionStatus) => {
         return 'success';
       case 'Rejected':
         return 'destructive';
+      case 'Minor Revision':
+      case 'Major Revision':
       case 'Revisions Required':
         return 'secondary';
-      case 'Under Review':
+      case 'Under Peer Review':
+      case 'Under Initial Review':
         return 'default';
       default:
         return 'outline';
@@ -140,7 +143,8 @@ const ReviewSubmissionForm = ({ submission, onReviewSubmit }: { submission: Subm
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="Accept">Accept</SelectItem>
-                                <SelectItem value="Revisions Required">Revisions Required</SelectItem>
+                                <SelectItem value="Minor Revision">Minor Revision</SelectItem>
+                                <SelectItem value="Major Revision">Major Revision</SelectItem>
                                 <SelectItem value="Reject">Reject</SelectItem>
                             </SelectContent>
                         </Select>
@@ -268,7 +272,6 @@ export default function SubmissionDetailPage() {
                 abstract: data.abstract,
                 keywords: data.keywords,
                 manuscriptUrl: data.manuscriptUrl || '',
-                coverLetterUrl: data.coverLetterUrl || '',
                 reviewers: data.reviewers || [],
                 reviewerIds: data.reviewerIds || [],
             });
@@ -338,15 +341,20 @@ export default function SubmissionDetailPage() {
       setIsUpdating(true);
 
       const submissionRef = doc(db, 'submissions', submission.id);
-      const updateData = {
+      const newStatus = submission.status === 'Submitted' ? 'Under Initial Review' : submission.status;
+      
+      const updateData: any = {
           reviewers: arrayUnion({
             id: reviewer.uid,
             name: reviewer.displayName,
             status: 'Pending',
           }),
           reviewerIds: arrayUnion(reviewer.uid),
-          status: 'Under Review' as const
       };
+
+      if (submission.status === 'Submitted') {
+          updateData.status = 'Under Peer Review';
+      }
 
       updateDoc(submissionRef, updateData)
         .then(async () => {
@@ -360,13 +368,13 @@ export default function SubmissionDetailPage() {
                  await logSubmissionEvent({
                     submissionId: submission.id,
                     eventType: 'STATUS_CHANGED',
-                    context: { actorName: userProfile.displayName, status: 'Under Review' }
+                    context: { actorName: userProfile.displayName, status: 'Under Peer Review' }
                 });
             }
             setRefetchTrigger(prev => prev + 1);
             toast({
                 title: "Reviewer Assigned",
-                description: `${reviewer.displayName} has been assigned and status is now 'Under Review'.`,
+                description: `${reviewer.displayName} has been assigned.`,
             });
         })
         .catch(serverError => {
@@ -376,7 +384,7 @@ export default function SubmissionDetailPage() {
                 requestResourceData: { 
                     reviewers: `(arrayUnion with ${reviewer.displayName})`, 
                     reviewerIds: `(arrayUnion with ${reviewer.uid})`,
-                    status: 'Under Review'
+                    status: 'Under Peer Review'
                 }
             });
             errorEmitter.emit('permission-error', permissionError);
@@ -408,7 +416,7 @@ export default function SubmissionDetailPage() {
       <div className="lg:col-span-2 space-y-8">
         <Card>
           <CardHeader>
-            <Badge variant={getStatusVariant(submission.status)} className={cn("w-fit mb-2", submission.status === 'Under Review' && 'bg-blue-500')}>
+            <Badge variant={getStatusVariant(submission.status)} className={cn("w-fit mb-2", submission.status.startsWith('Under') && 'bg-blue-500')}>
                 {submission.status}
             </Badge>
             <CardTitle className="font-headline text-3xl">{submission.title}</CardTitle>
@@ -445,14 +453,6 @@ export default function SubmissionDetailPage() {
                     </Link>
                 </Button>
             )}
-             {submission.coverLetterUrl && (
-                <Button variant="outline" asChild>
-                    <Link href={submission.coverLetterUrl} target="_blank" rel="noopener noreferrer">
-                        <Download className="mr-2 h-4 w-4" />
-                        Download Cover Letter
-                    </Link>
-                </Button>
-            )}
           </CardFooter>
         </Card>
 
@@ -468,7 +468,8 @@ export default function SubmissionDetailPage() {
           </CardHeader>
           <CardContent className="grid gap-2">
             <Button className="bg-green-600 hover:bg-green-700" onClick={() => handleDecision('Accepted')} disabled={isUpdating}>Accept</Button>
-            <Button variant="secondary" onClick={() => handleDecision('Revisions Required')} disabled={isUpdating}>Request Revisions</Button>
+            <Button variant="secondary" onClick={() => handleDecision('Minor Revision')} disabled={isUpdating}>Request Minor Revision</Button>
+            <Button variant="secondary" onClick={() => handleDecision('Major Revision')} disabled={isUpdating}>Request Major Revision</Button>
             <Button variant="destructive" onClick={() => handleDecision('Rejected')} disabled={isUpdating}>Reject</Button>
           </CardContent>
         </Card>
@@ -531,7 +532,6 @@ export default function SubmissionDetailPage() {
                     ))}
                   </ul>
                 </div>
-                {/* Footer removed to simplify action to clicking the plus icon */}
               </DialogContent>
             </Dialog>
           </CardFooter>
@@ -543,3 +543,5 @@ export default function SubmissionDetailPage() {
     </div>
   );
 }
+
+    

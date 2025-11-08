@@ -2,7 +2,7 @@
 'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Award, Palette } from 'lucide-react';
+import { Award, Palette, Info } from 'lucide-react';
 import Link from 'next/link';
 
 export default function SettingsPage() {
@@ -45,7 +45,24 @@ export default function SettingsPage() {
                     </CardContent>
                 </Card>
             </Link>
+            <Link href="/dashboard/settings/journal-info">
+                <Card className="hover:bg-muted/50 hover:border-primary/50 transition-colors">
+                    <CardHeader>
+                        <CardTitle className="font-headline flex items-center gap-3">
+                            <Info className="h-6 w-6 text-primary" />
+                            Journal Information
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <CardDescription>
+                            Set the cover letter text and upload the submission template.
+                        </CardDescription>
+                    </CardContent>
+                </Card>
+            </Link>
         </div>
     </div>
   );
 }
+
+    

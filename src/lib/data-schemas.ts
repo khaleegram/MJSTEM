@@ -1,9 +1,16 @@
+
 'use client';
 import { z } from 'zod';
+
+const orcidRegex = /^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/;
 
 export const ContributorSchema = z.object({
   name: z.string().min(1, 'Contributor name is required.'),
   email: z.string().email('Please enter a valid email for the contributor.'),
+  institution: z.string().min(1, 'Institution is required.'),
+  orcid: z.string().refine(val => val === '' || orcidRegex.test(val), {
+    message: "Invalid ORCID iD format. Expected: 0000-0000-0000-0000",
+  }).optional(),
   role: z.string().default('Author'),
   isPrimaryContact: z.boolean().default(false),
 });
@@ -34,8 +41,11 @@ export const SubmissionSchema = z.object({
   submittedAt: z.date(),
   status: z.enum([
     'Submitted',
-    'Under Review',
-    'Revisions Required',
+    'Under Initial Review',
+    'Under Peer Review',
+    'Revisions Required', // Legacy
+    'Minor Revision',
+    'Major Revision',
     'Accepted',
     'Rejected',
     'Uploading',
@@ -43,7 +53,6 @@ export const SubmissionSchema = z.object({
   abstract: z.string().min(50, 'Abstract must be at least 50 characters long.'),
   keywords: z.string().min(3, 'Please provide at least one keyword.'),
   manuscriptUrl: z.string().url().min(1, 'Manuscript file is required.'),
-  coverLetterUrl: z.string().url().optional(),
   reviewers: z.array(AssignedReviewerSchema).optional(),
   reviewerIds: z.array(z.string()).optional(), // For querying
 });
@@ -79,3 +88,5 @@ export const EditorialBoardMemberSchema = z.object({
   imageSeed: z.string().min(1, "Image Seed is required."),
   order: z.number().optional(),
 });
+
+    

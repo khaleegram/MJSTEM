@@ -1,3 +1,4 @@
+
 import { Check, ArrowRight } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { PublicHeader } from '@/components/public-header';
@@ -178,7 +179,7 @@ export default function AuthorGuidelinesPage() {
                             <CardTitle className="font-headline">Editorial Disclaimer</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <p className="text-muted-foreground">The views expressed in articles published by MJSTEM are solely those of contributing authors. Therefore, the journal cannot be held liable for such opinions.</p>
+                             <p className="text-muted-foreground">The views expressed in articles published by MJSTEM are solely those of contributing authors. Therefore, the journal cannot be held liable for such opinions. MJSTEM is solely a scholarly publication meant to satisfy the intellectual needs of the academic community.</p>
                         </CardContent>
                     </Card>
                      <Card>
@@ -186,7 +187,7 @@ export default function AuthorGuidelinesPage() {
                             <CardTitle className="font-headline">ISSN</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <p className="text-muted-foreground">Not yet assigned.</p>
+                            <p className="text-muted-foreground">3121-6552</p>
                         </CardContent>
                     </Card>
                 </div>
@@ -194,9 +195,12 @@ export default function AuthorGuidelinesPage() {
         </main>
         <footer className="bg-background border-t">
              <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 text-center text-sm text-muted-foreground">
+                <p className="mb-2">Print ISSN: 3121-6552 | Barcode: 9773121655008</p>
                 © {new Date().getFullYear()} MJSTEM. All Rights Reserved.
             </div>
         </footer>
     </div>
   );
 }
+
+    

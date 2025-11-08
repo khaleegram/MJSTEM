@@ -2,7 +2,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowRight, Menu } from 'lucide-react';
+import { ArrowRight, Menu, ChevronDown } from 'lucide-react';
 import { Icons } from './icons';
 import { Button } from './ui/button';
 import { Sheet, SheetTrigger, SheetContent, SheetTitle } from './ui/sheet';
@@ -11,11 +11,33 @@ import { ThemeToggle } from './theme-toggle';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import Image from 'next/image';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { cn } from '@/lib/utils';
 
 const NavLink = ({ href, children }: { href: string; children: React.ReactNode }) => (
     <Link href={href} className="text-muted-foreground hover:text-foreground">
         {children}
     </Link>
+);
+
+const NavDropdown = () => (
+    <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="text-muted-foreground hover:text-foreground px-2">
+                Information <ChevronDown className="w-4 h-4 ml-1" />
+            </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+            <DropdownMenuItem asChild><Link href="/for-readers">For Readers</Link></DropdownMenuItem>
+            <DropdownMenuItem asChild><Link href="/for-authors">For Authors</Link></DropdownMenuItem>
+            <DropdownMenuItem asChild><Link href="/for-librarians">For Librarians</Link></DropdownMenuItem>
+        </DropdownMenuContent>
+    </DropdownMenu>
 );
 
 
@@ -52,11 +74,12 @@ export function PublicHeader() {
             </h1>
         </Link>
       </div>
-      <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
+      <nav className="hidden md:flex items-center gap-4 text-sm font-medium">
         <NavLink href="/aims-scope">Aims & Scope</NavLink>
         <NavLink href="/editorial-board">Editorial Board</NavLink>
         <NavLink href="/author-guidelines">Author Guidelines</NavLink>
         <NavLink href="/archive">Browse Archives</NavLink>
+        <NavDropdown />
       </nav>
       <div className="flex items-center gap-2">
         <ThemeToggle />
@@ -87,6 +110,11 @@ export function PublicHeader() {
                         <Link href="/editorial-board" className="hover:text-foreground" onClick={() => setIsOpen(false)}>Editorial Board</Link>
                         <Link href="/author-guidelines" className="hover:text-foreground" onClick={() => setIsOpen(false)}>Author Guidelines</Link>
                         <Link href="/archive" className="hover:text-foreground" onClick={() => setIsOpen(false)}>Browse Archives</Link>
+                         <hr />
+                        <span className="text-muted-foreground text-base">Information</span>
+                        <Link href="/for-readers" className="hover:text-foreground pl-4" onClick={() => setIsOpen(false)}>For Readers</Link>
+                        <Link href="/for-authors" className="hover:text-foreground pl-4" onClick={() => setIsOpen(false)}>For Authors</Link>
+                        <Link href="/for-librarians" className="hover:text-foreground pl-4" onClick={() => setIsOpen(false)}>For Librarians</Link>
                         <hr className="my-4" />
                         <Button asChild>
                             <Link href="/login" onClick={() => setIsOpen(false)}>Login</Link>
@@ -102,3 +130,5 @@ export function PublicHeader() {
     </header>
   );
 }
+
+    

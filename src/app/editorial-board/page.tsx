@@ -119,9 +119,12 @@ export default function EditorialBoardPage() {
       </main>
       <footer className="bg-background border-t">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 text-center text-sm text-muted-foreground">
+          <p className="mb-2">Print ISSN: 3121-6552 | Barcode: 9773121655008</p>
           © {new Date().getFullYear()} MJSTEM. All Rights Reserved.
         </div>
       </footer>
     </div>
   );
 }
+
+    

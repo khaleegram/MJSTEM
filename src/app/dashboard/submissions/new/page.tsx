@@ -5,7 +5,7 @@ import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useRouter } from 'next/navigation';
-import { collection, addDoc, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -21,7 +21,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Trash2, PlusCircle } from 'lucide-react';
+import { Trash2, PlusCircle, Download } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/auth-context';
 import { useState, useEffect } from 'react';
@@ -31,6 +31,7 @@ import { FileUploader } from '@/components/file-uploader';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { logSubmissionEvent } from '@/ai/flows/log-submission-event';
+import Link from 'next/link';
 
 
 const formSchema = z.object({
@@ -38,7 +39,6 @@ const formSchema = z.object({
   abstract: z.string().min(50, 'Abstract must be at least 50 characters long.'),
   keywords: z.string().min(3, 'Please provide at least one keyword.'),
   manuscriptUrl: z.string().url('Manuscript file is required.'),
-  coverLetterUrl: z.string().url().optional(),
   contributors: z.array(ContributorSchema).min(1, 'At least one contributor is required.'),
 });
 
@@ -47,6 +47,20 @@ export default function NewSubmissionPage() {
   const { toast } = useToast();
   const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [templateUrl, setTemplateUrl] = useState('');
+
+  useEffect(() => {
+    // In a real app, you'd fetch this from a settings collection in Firestore
+    // For now, we'll hardcode a placeholder URL.
+    // Replace this with your actual template URL from Firebase Storage.
+    const getTemplateUrl = async () => {
+        // This is a placeholder. You would normally fetch this from a 'settings' doc.
+        const fetchedUrl = "https://firebasestorage.googleapis.com/v0/b/your-project-id.appspot.com/o/templates%2Fsubmission-template.docx?alt=media";
+        // To avoid broken links, only set it if it's a real URL.
+        // setTemplateUrl(fetchedUrl); 
+    };
+    getTemplateUrl();
+  }, []);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -56,7 +70,6 @@ export default function NewSubmissionPage() {
       keywords: '',
       contributors: [],
       manuscriptUrl: '',
-      coverLetterUrl: '',
     },
   });
 
@@ -70,6 +83,8 @@ export default function NewSubmissionPage() {
       append({
         name: user.displayName || '',
         email: user.email || '',
+        institution: '',
+        orcid: '',
         role: 'Author',
         isPrimaryContact: true,
       });
@@ -112,7 +127,6 @@ export default function NewSubmissionPage() {
         abstract: values.abstract,
         keywords: values.keywords,
         manuscriptUrl: values.manuscriptUrl,
-        coverLetterUrl: values.coverLetterUrl || '',
         contributors: values.contributors,
         reviewers: [],
         reviewerIds: [],
@@ -156,10 +170,22 @@ export default function NewSubmissionPage() {
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
             <Card>
                 <CardHeader>
-                <CardTitle className="font-headline text-2xl">Submit New Manuscript</CardTitle>
-                <CardDescription>
-                    Fill out the form below to submit your work for review.
-                </CardDescription>
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <CardTitle className="font-headline text-2xl">Submit New Manuscript</CardTitle>
+                            <CardDescription>
+                                Fill out the form below to submit your work for review.
+                            </CardDescription>
+                        </div>
+                        {templateUrl && (
+                             <Button asChild variant="outline">
+                                <Link href={templateUrl} target="_blank">
+                                    <Download className="mr-2" />
+                                    Download Template
+                                </Link>
+                            </Button>
+                        )}
+                    </div>
                 </CardHeader>
                 <CardContent className="space-y-8">
                     <FormField
@@ -231,30 +257,7 @@ export default function NewSubmissionPage() {
                                         }}
                                     />
                                 </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
-
-                    <FormField
-                        control={form.control}
-                        name="coverLetterUrl"
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Cover Letter (Optional)</FormLabel>
-                                <FormControl>
-                                    <FileUploader
-                                        endpoint="documentUploader"
-                                        onUploadComplete={(url) => field.onChange(url)}
-                                        onUploadError={(error) => {
-                                            toast({
-                                                title: 'Upload Failed',
-                                                description: error.message,
-                                                variant: 'destructive'
-                                            })
-                                        }}
-                                    />
-                                </FormControl>
+                                 <FormDescription>Please upload your manuscript in .docx format.</FormDescription>
                                 <FormMessage />
                             </FormItem>
                         )}
@@ -265,12 +268,12 @@ export default function NewSubmissionPage() {
              <Card>
                 <CardHeader>
                     <CardTitle className="font-headline text-xl">List of Contributors</CardTitle>
-                    <CardDescription>Add all contributing authors to the manuscript. One author must be the primary contact.</CardDescription>
+                    <CardDescription>Add all contributing authors. Designate one as the primary contact.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     {fields.map((field, index) => (
                         <Card key={field.id} className="p-4 bg-secondary/50">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                                 <FormField
                                     control={form.control}
                                     name={`contributors.${index}.name`}
@@ -289,6 +292,28 @@ export default function NewSubmissionPage() {
                                         <FormItem>
                                             <FormLabel>Email</FormLabel>
                                             <FormControl><Input type="email" placeholder="contributor@example.com" {...field} disabled={isSubmitting}/></FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                 <FormField
+                                    control={form.control}
+                                    name={`contributors.${index}.institution`}
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Institution</FormLabel>
+                                            <FormControl><Input placeholder="University or Organization" {...field} disabled={isSubmitting}/></FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name={`contributors.${index}.orcid`}
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>ORCID ID (Optional)</FormLabel>
+                                            <FormControl><Input placeholder="0000-0000-0000-0000" {...field} disabled={isSubmitting}/></FormControl>
                                             <FormMessage />
                                         </FormItem>
                                     )}
@@ -327,7 +352,7 @@ export default function NewSubmissionPage() {
                         type="button" 
                         variant="outline" 
                         size="sm" 
-                        onClick={() => append({ name: '', email: '', role: 'Author', isPrimaryContact: false })}
+                        onClick={() => append({ name: '', email: '', institution: '', orcid: '', role: 'Author', isPrimaryContact: false })}
                         disabled={isSubmitting}
                     >
                         <PlusCircle className="mr-2 h-4 w-4" /> Add Contributor
@@ -347,3 +372,5 @@ export default function NewSubmissionPage() {
     </div>
   );
 }
+
+    
