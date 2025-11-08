@@ -320,3 +320,5 @@ export default function EditorialBoardSettingsPage() {
     </div>
   );
 }
+
+    

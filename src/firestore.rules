@@ -37,7 +37,7 @@ service cloud.firestore {
     }
 
     // SUBMISSIONS
-    // 1. Get: Author, assigned reviewer, or editor/admin.
+    // 1. Get: Author, assigned reviewer, or editor/admin can get a single doc.
     // 2. List: Editors/Admins can list all. Authors can only list their own.
     // 3. Create: Any authenticated user.
     // 4. Update: Editor/Admin can update. Reviewer can only update their own status.
@@ -104,3 +104,5 @@ service cloud.firestore {
     }
   }
 }
+
+    

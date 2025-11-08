@@ -76,3 +76,5 @@ export async function logSubmissionEvent(input: LogEventInput): Promise<void> {
         errorEmitter.emit('permission-error', permissionError);
     });
 }
+
+    

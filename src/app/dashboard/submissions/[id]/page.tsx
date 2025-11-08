@@ -341,7 +341,6 @@ export default function SubmissionDetailPage() {
       setIsUpdating(true);
 
       const submissionRef = doc(db, 'submissions', submission.id);
-      const newStatus = submission.status === 'Submitted' ? 'Under Initial Review' : submission.status;
       
       const updateData: any = {
           reviewers: arrayUnion({
