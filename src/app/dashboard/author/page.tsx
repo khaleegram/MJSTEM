@@ -21,10 +21,9 @@ import { useEffect, useState } from 'react';
 import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
 import { Progress } from '@/components/ui/progress';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useToast } from '@/hooks/use-toast';
 
 
 const getStatusVariant = (status: SubmissionStatus) => {
@@ -69,6 +68,7 @@ export default function AuthorPage() {
     const { user } = useAuth();
     const [submissions, setSubmissions] = useState<Submission[]>([]);
     const [loading, setLoading] = useState(true);
+    const { toast } = useToast();
 
     useEffect(() => {
         if (!user) {
@@ -101,23 +101,19 @@ export default function AuthorPage() {
             });
             setSubmissions(subs);
             setLoading(false);
-        }, (serverError) => {
-            // This block handles Firestore permission errors or other query failures.
+        }, (error) => {
+            console.error("Firestore Error:", error);
             setLoading(false);
-            const permissionError = new FirestorePermissionError({
-                path: 'submissions',
-                operation: 'list',
-                // We add context about the query to help debug security rules
-                requestResourceData: { 
-                    query: `Query on 'submissions' where 'author.id' == '${user.uid}'`
-                },
+            toast({
+                title: "Could Not Fetch Submissions",
+                description: "You may not have permission to view these resources. Please check your console for more details.",
+                variant: "destructive"
             });
-            errorEmitter.emit('permission-error', permissionError);
         });
 
         // Cleanup subscription on unmount
         return () => unsubscribe();
-    }, [user]);
+    }, [user, toast]);
 
   return (
     <div className="space-y-8">
