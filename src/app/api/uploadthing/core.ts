@@ -4,7 +4,6 @@ import { auth as adminAuth } from 'firebase-admin';
 import { getApps, initializeApp, cert } from 'firebase-admin/app';
 import { NextRequest } from "next/server";
 import { UTApi } from "uploadthing/server";
-import { auth } from "@/lib/firebase";
 
 export const utapi = new UTApi();
 
@@ -21,17 +20,7 @@ if (!getApps().length) {
   }
 }
 
-const f = createUploadthing({
-  /**
-   * @see https://docs.uploadthing.com/getting-started/helpers#using-your-router
-   */
-  fetch: async (url: RequestInfo | URL, init?: RequestInit) => {
-    // This is a workaround for the fact that UploadThing's fetch doesn't
-    // automatically pass the auth header on the server side.
-    // We get the token on the client and pass it here.
-    return fetch(url, init);
-  },
-});
+const f = createUploadthing();
 
 const handleAuth = async ({ req }: { req: NextRequest }) => {
   const authHeader = req.headers.get("authorization");
@@ -59,21 +48,7 @@ export const ourFileRouter = {
     "application/msword": { maxFileSize: "16MB", maxFileCount: 1 },
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": { maxFileSize: "16MB", maxFileCount: 1 },
    })
-    .middleware(async ({ req }) => {
-      // This is the auth logic that should be used.
-      const authHeader = req.headers.get("authorization");
-      if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        throw new UploadThingError("Unauthorized: No token provided");
-      }
-      const token = authHeader.split("Bearer ")[1];
-      try {
-        const decodedToken = await adminAuth().verifyIdToken(token);
-        return { userId: decodedToken.uid };
-      } catch (error) {
-        console.error("Firebase Auth Error", error);
-        throw new UploadThingError("Unauthorized: Invalid token");
-      }
-    })
+    .middleware(handleAuth)
     .onUploadComplete(async ({ metadata, file }) => {
       console.log("Upload complete for userId:", metadata.userId);
       console.log("file url", file.url);
@@ -83,21 +58,7 @@ export const ourFileRouter = {
   imageUploader: f({
       image: { maxFileSize: "4MB", maxFileCount: 1 },
     })
-    .middleware(async ({ req }) => {
-      // This is the auth logic that should be used.
-      const authHeader = req.headers.get("authorization");
-      if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        throw new UploadThingError("Unauthorized: No token provided");
-      }
-      const token = authHeader.split("Bearer ")[1];
-      try {
-        const decodedToken = await adminAuth().verifyIdToken(token);
-        return { userId: decodedToken.uid };
-      } catch (error) {
-        console.error("Firebase Auth Error", error);
-        throw new UploadThingError("Unauthorized: Invalid token");
-      }
-    })
+    .middleware(handleAuth)
     .onUploadComplete(async ({ metadata, file }) => {
       console.log("Image upload complete for userId:", metadata.userId);
       console.log("file url", file.url);
