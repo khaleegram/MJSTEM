@@ -23,7 +23,11 @@ if (!getApps().length) {
   }
 }
 
-const f = createUploadthing();
+// This is the key fix: Wrapping fetch to ensure headers are passed correctly in the App Router.
+const f = createUploadthing({
+  fetch: async (url, init) => fetch(url, init),
+});
+
 
 // Reusable authentication middleware
 const handleAuth = async ({ req }: { req: NextRequest }) => {
