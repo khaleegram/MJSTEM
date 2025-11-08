@@ -125,12 +125,12 @@ export default async function HomePage() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
                <HowItWorksCard icon={<Download className="w-6 h-6"/>} title="1. Get the Template">
-                    Ensure your work meets our formatting standards by starting with the official submission template.
+                    <div className="flex-1">Ensure your work meets our formatting standards by starting with the official submission template.</div>
                     <div className="mt-4">
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
-                                    <div className="inline-flex">
+                                    <div className="inline-flex w-full">
                                         <Button asChild variant="outline" size="sm" className="w-full" disabled={!journalInfo.submissionTemplateUrl}>
                                             <Link href={journalInfo.submissionTemplateUrl || '#'} target="_blank">
                                                 Download Template
@@ -257,3 +257,5 @@ export default async function HomePage() {
     </div>
   );
 }
+
+    

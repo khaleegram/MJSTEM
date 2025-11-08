@@ -172,3 +172,5 @@ export default function JournalInfoSettingsPage() {
     </div>
   );
 }
+
+    
