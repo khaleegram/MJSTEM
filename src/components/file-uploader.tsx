@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useUploadThing } from "@/lib/uploadthing";
@@ -22,6 +23,18 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError }: File
   const [fileName, setFileName] = useState<string | null>(null);
 
   const { startUpload, isUploading } = useUploadThing(endpoint, {
+    headers: async () => {
+        if (!user) return {};
+        try {
+          const token = await user.getIdToken();
+          return {
+            Authorization: `Bearer ${token}`,
+          };
+        } catch (error) {
+          console.error("Failed to get Firebase token:", error);
+          return {};
+        }
+    },
     onClientUploadComplete: (res) => {
       if (res && res[0]) {
         setFileName(res[0].name);
@@ -46,7 +59,6 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError }: File
 
     if (acceptedFiles.length > 0) {
       setFileName(acceptedFiles[0].name);
-      // Pass the token to the server via the middleware
       await startUpload(acceptedFiles);
     }
   }, [startUpload, user, onUploadError]);
