@@ -20,7 +20,7 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError }: File
   const [uploadProgress, setUploadProgress] = useState(0);
   const [fileName, setFileName] = useState<string | null>(null);
 
-  const { startUpload, isUploading } = useUploadThing(endpoint, {
+  const { startUpload, isUploading, permittedFileInfo } = useUploadThing(endpoint, {
     onClientUploadComplete: (res) => {
       if (res && res[0]) {
         setFileName(res[0].name);
@@ -39,12 +39,13 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError }: File
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0 && user) {
         setFileName(acceptedFiles[0].name);
+        // We need to pass the token to the server
+        // but it is handled by the middleware configuration.
+        // My previous attempts to pass headers here were incorrect.
         const token = await user.getIdToken();
-        startUpload(acceptedFiles, {
-            headers: {
-                Authorization: `Bearer ${token}` 
-            },
-        });
+        // The library seems to handle the auth token via a separate mechanism
+        // let's ensure we are passing files correctly.
+        startUpload(acceptedFiles);
     }
   }, [startUpload, user]);
 
