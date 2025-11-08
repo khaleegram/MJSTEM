@@ -12,15 +12,15 @@ import Image from 'next/image';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 const HowItWorksCard = ({ icon, title, children }: { icon: React.ReactNode, title: string, children: React.ReactNode }) => (
-  <Card className="overflow-hidden bg-card/50 backdrop-blur-sm border-border/20 shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 group">
+  <Card className="overflow-hidden bg-card/50 backdrop-blur-sm border-border/20 shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 group flex flex-col">
     <CardHeader className="flex flex-row items-center gap-4">
       <div className="bg-primary/10 text-primary p-3 rounded-lg">
         {icon}
       </div>
       <CardTitle className="font-headline text-xl">{title}</CardTitle>
     </CardHeader>
-    <CardContent>
-      <p className="text-muted-foreground">{children}</p>
+    <CardContent className="flex-1 flex flex-col">
+      <p className="text-muted-foreground flex-1">{children}</p>
     </CardContent>
   </Card>
 );
@@ -83,7 +83,7 @@ export default async function HomePage() {
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <div className='inline-flex'>
-                            <Button size="lg" variant="outline" asChild disabled={!journalInfo.submissionTemplateUrl}>
+                             <Button size="lg" variant="outline" asChild disabled={!journalInfo.submissionTemplateUrl}>
                                 <Link href={journalInfo.submissionTemplateUrl || '#'} target="_blank">
                                   <Download className="mr-2 h-5 w-5" />
                                   Download Template
@@ -123,14 +123,37 @@ export default async function HomePage() {
                 <h2 className="text-3xl md:text-4xl font-bold font-headline text-foreground">How It Works</h2>
                 <p className="text-muted-foreground mt-2 max-w-2xl mx-auto">A streamlined process from submission to publication, designed for authors.</p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-               <HowItWorksCard icon={<Feather className="w-6 h-6"/>} title="1. Effortless Submission">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+               <HowItWorksCard icon={<Download className="w-6 h-6"/>} title="1. Get the Template">
+                    Ensure your work meets our formatting standards by starting with the official submission template.
+                    <div className="mt-4">
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <div className="inline-flex">
+                                        <Button asChild variant="outline" size="sm" className="w-full" disabled={!journalInfo.submissionTemplateUrl}>
+                                            <Link href={journalInfo.submissionTemplateUrl || '#'} target="_blank">
+                                                Download Template
+                                            </Link>
+                                        </Button>
+                                    </div>
+                                </TooltipTrigger>
+                                {!journalInfo.submissionTemplateUrl && (
+                                   <TooltipContent>
+                                    <p>No template uploaded yet.</p>
+                                  </TooltipContent>
+                                )}
+                            </Tooltip>
+                        </TooltipProvider>
+                    </div>
+                </HowItWorksCard>
+               <HowItWorksCard icon={<Feather className="w-6 h-6"/>} title="2. Effortless Submission">
                     Our clear guidelines and intuitive submission portal make sharing your manuscript straightforward. Focus on your research, not the paperwork.
                 </HowItWorksCard>
-                 <HowItWorksCard icon={<Microscope className="w-6 h-6"/>} title="2. Rigorous Peer Review">
+                 <HowItWorksCard icon={<Microscope className="w-6 h-6"/>} title="3. Rigorous Peer Review">
                     Benefit from constructive, double-blind peer review by experts in your field to ensure the quality and validity of your work.
                 </HowItWorksCard>
-                 <HowItWorksCard icon={<BookOpen className="w-6 h-6"/>} title="3. Timely Publication">
+                 <HowItWorksCard icon={<BookOpen className="w-6 h-6"/>} title="4. Timely Publication">
                     Accepted articles are formatted, assigned a DOI, and published online swiftly, ensuring your research reaches the global community without delay.
                 </HowItWorksCard>
             </div>
