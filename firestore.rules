@@ -37,11 +37,11 @@ service cloud.firestore {
     }
 
     // SUBMISSIONS
-    // 1. Get: Author, assigned reviewer, or editor/admin
-    // 2. List: Author can query their own, Editors can query all
-    // 3. Create: Any authenticated user
-    // 4. Update: Editor/admin can update. Reviewer can only update their own status.
-    // 5. Delete: Only editors/admins can delete
+    // 1. Get: Author, assigned reviewer, or editor/admin can get a single doc.
+    // 2. List: Editors/Admins can list all. Authors can only list their own.
+    // 3. Create: Any authenticated user.
+    // 4. Update: Editor/Admin can update. Reviewer can only update their own status.
+    // 5. Delete: Only editors/admins can delete.
     match /submissions/{submissionId} {
       allow get: if isSignedIn() && (
                       resource.data.author.id == request.auth.uid ||
@@ -68,7 +68,7 @@ service cloud.firestore {
       
       // History:
       // 1. Read: Same as parent submission
-      // 2. Write: Locked down. 
+      // 2. Write: Locked down.
       match /history/{historyId} {
         allow read: if isSignedIn() && (
                       get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid ||
