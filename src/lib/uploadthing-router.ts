@@ -1,3 +1,5 @@
+
+import 'dotenv/config';
 import { createUploadthing, type FileRouter } from "uploadthing/next";
 import admin from '@/lib/firebase-admin'; // Import the initialized admin app
 
