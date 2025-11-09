@@ -19,14 +19,19 @@ if (!getApps().length) {
 
 const f = createUploadthing();
 
-// Auth middleware
+// Auth middleware with logging
 const handleAuth = async ({ req }: { req: NextRequest }) => {
-  const authHeader = req.headers.get("authorization");
-  if (!authHeader?.startsWith("Bearer ")) throw new Error("Unauthorized: No token");
+  try {
+    const authHeader = req.headers.get("authorization");
+    if (!authHeader?.startsWith("Bearer ")) throw new Error("Unauthorized: No token");
 
-  const token = authHeader.split(" ")[1];
-  const decoded = await adminAuth().verifyIdToken(token);
-  return { userId: decoded.uid };
+    const token = authHeader.split(" ")[1];
+    const decoded = await adminAuth().verifyIdToken(token);
+    return { userId: decoded.uid };
+  } catch (err) {
+    console.error("🔥 AUTH ERROR", err);
+    throw err;
+  }
 };
 
 // Define the file router
