@@ -48,7 +48,6 @@ export const SubmissionSchema = z.object({
     'Major Revision',
     'Accepted',
     'Rejected',
-    'Uploading',
   ]),
   abstract: z.string().min(50, 'Abstract must be at least 50 characters long.'),
   keywords: z.string().min(3, 'Please provide at least one keyword.'),

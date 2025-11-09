@@ -83,7 +83,6 @@ export default function AllSubmissionsPage() {
                     abstract: data.abstract || '',
                     keywords: data.keywords || '',
                     manuscriptUrl: data.manuscriptUrl || '',
-                    coverLetterUrl: data.coverLetterUrl || '',
                 } as Submission;
             });
             setSubmissions(subs);
