@@ -1,3 +1,4 @@
+
 import { createUploadthing, type FileRouter } from "uploadthing/next";
 import { auth as adminAuth } from 'firebase-admin';
 import '@/lib/firebase-admin'; // Ensures Firebase Admin is initialized
@@ -27,7 +28,7 @@ const handleAuth = async ({ req }: { req: Request }) => {
     return { userId: decoded.uid };
   } catch (error: any) {
     console.error("🔥 AUTH ERROR", error);
-    throw new Error(`Unauthorized: ${error.message}`);
+    throw new Error(`Unauthorized: ${error.message || 'Authentication failed.'}`);
   }
 };
 
