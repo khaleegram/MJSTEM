@@ -32,13 +32,13 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { logSubmissionEvent } from '@/ai/flows/log-submission-event';
 import Link from 'next/link';
+import { useUploadThing } from '@/lib/uploadthing';
 
 
 const formSchema = z.object({
   title: z.string().min(10, 'Title must be at least 10 characters long.'),
   abstract: z.string().min(50, 'Abstract must be at least 50 characters long.'),
   keywords: z.string().min(3, 'Please provide at least one keyword.'),
-  manuscriptUrl: z.string().url('Manuscript file is required.'),
   contributors: z.array(ContributorSchema).min(1, 'At least one contributor is required.'),
 });
 
@@ -48,6 +48,9 @@ export default function NewSubmissionPage() {
   const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [templateUrl, setTemplateUrl] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const { startUpload, isUploading } = useUploadThing("documentUploader");
+
 
   useEffect(() => {
     const getTemplateUrl = async () => {
@@ -71,7 +74,6 @@ export default function NewSubmissionPage() {
       abstract: '',
       keywords: '',
       contributors: [],
-      manuscriptUrl: '',
     },
   });
 
@@ -113,6 +115,15 @@ export default function NewSubmissionPage() {
         return;
     }
     
+    if (!file) {
+      toast({
+        title: "Manuscript file is required",
+        description: "Please select your manuscript file before submitting.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const primaryContact = values.contributors.find(c => c.isPrimaryContact);
     if (!primaryContact) {
         toast({ title: "Primary contact missing", description: "One author must be designated as the primary contact.", variant: 'destructive'});
@@ -121,49 +132,58 @@ export default function NewSubmissionPage() {
 
     setIsSubmitting(true);
 
-    const submissionData = {
-        author: { id: user.uid, name: primaryContact.name, email: primaryContact.email },
-        status: 'Submitted' as const,
-        submittedAt: serverTimestamp(),
-        title: values.title,
-        abstract: values.abstract,
-        keywords: values.keywords,
-        manuscriptUrl: values.manuscriptUrl,
-        contributors: values.contributors,
-        reviewers: [],
-        reviewerIds: [],
-    };
-    
-    const submissionsCollectionRef = collection(db, 'submissions');
+    try {
+      const uploadRes = await startUpload([file]);
+      if (!uploadRes || !uploadRes[0]) {
+        throw new Error("File upload failed to return a result.");
+      }
+      const manuscriptUrl = uploadRes[0].url;
 
-    addDoc(submissionsCollectionRef, submissionData)
-    .then(async (docRef) => {
-        // Log the creation event
-        await logSubmissionEvent({
-            submissionId: docRef.id,
-            eventType: 'SUBMISSION_CREATED',
-            context: { authorName: primaryContact.name },
-        });
+      const submissionData = {
+          author: { id: user.uid, name: primaryContact.name, email: primaryContact.email },
+          status: 'Submitted' as const,
+          submittedAt: serverTimestamp(),
+          title: values.title,
+          abstract: values.abstract,
+          keywords: values.keywords,
+          manuscriptUrl: manuscriptUrl,
+          contributors: values.contributors,
+          reviewers: [],
+          reviewerIds: [],
+      };
+      
+      const submissionsCollectionRef = collection(db, 'submissions');
 
-        toast({
-            title: 'Submission Successful!',
-            description: 'Your manuscript has been received.',
-            variant: 'default',
-            className: 'bg-green-500 text-white',
-        });
-        router.push('/dashboard/author');
-    })
-    .catch(serverError => {
-        const permissionError = new FirestorePermissionError({
-            path: submissionsCollectionRef.path,
-            operation: 'create',
-            requestResourceData: submissionData
-        });
-        errorEmitter.emit('permission-error', permissionError);
-    })
-    .finally(() => {
+      const docRef = await addDoc(submissionsCollectionRef, submissionData);
+      
+      await logSubmissionEvent({
+          submissionId: docRef.id,
+          eventType: 'SUBMISSION_CREATED',
+          context: { authorName: primaryContact.name },
+      });
+
+      toast({
+          title: 'Submission Successful!',
+          description: 'Your manuscript has been received.',
+          variant: 'default',
+          className: 'bg-green-500 text-white',
+      });
+      router.push('/dashboard/author');
+
+    } catch (error: any) {
+       console.error("Submission failed:", error);
+       if(error.message?.includes("permission-error")) {
+          // The error emitter will handle this
+       } else {
+         toast({
+          title: 'Submission Failed',
+          description: error.message || 'Could not submit your manuscript.',
+          variant: 'destructive',
+         });
+       }
+    } finally {
         setIsSubmitting(false);
-    });
+    }
   }
 
   return (
@@ -240,30 +260,25 @@ export default function NewSubmissionPage() {
                         )}
                     />
                     
-                    <FormField
-                        control={form.control}
-                        name="manuscriptUrl"
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Manuscript File</FormLabel>
-                                <FormControl>
-                                    <FileUploader
-                                        endpoint="documentUploader"
-                                        onUploadComplete={(url) => field.onChange(url)}
-                                        onUploadError={(error) => {
-                                            toast({
-                                                title: 'Upload Failed',
-                                                description: error.message,
-                                                variant: 'destructive'
-                                            })
-                                        }}
-                                    />
-                                </FormControl>
-                                 <FormDescription>Please upload your manuscript in .docx format.</FormDescription>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
+                    <FormItem>
+                        <FormLabel>Manuscript File</FormLabel>
+                        <FormControl>
+                            <FileUploader
+                                endpoint="documentUploader"
+                                onUploadComplete={(url, key) => {}}
+                                onUploadError={(error) => {
+                                    toast({
+                                        title: 'Upload Failed',
+                                        description: error.message,
+                                        variant: 'destructive'
+                                    })
+                                }}
+                                onFileSelect={setFile}
+                            />
+                        </FormControl>
+                            <FormDescription>Please upload your manuscript in .docx format.</FormDescription>
+                         <FormMessage />
+                    </FormItem>
                 </CardContent>
             </Card>
 
@@ -365,8 +380,8 @@ export default function NewSubmissionPage() {
 
 
             <div className="flex justify-end">
-                <Button type="submit" disabled={isSubmitting} size="lg">
-                    {isSubmitting ? 'Submitting...' : 'Submit Manuscript'}
+                <Button type="submit" disabled={isSubmitting || isUploading} size="lg">
+                    {isUploading ? 'Uploading file...' : isSubmitting ? 'Submitting...' : 'Submit Manuscript'}
                 </Button>
             </div>
         </form>

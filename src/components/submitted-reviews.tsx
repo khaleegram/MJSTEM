@@ -31,7 +31,7 @@ const getRecommendationVariant = (recommendation: string) => {
     }
 }
 
-export const SubmittedReviews = ({ submissionId }: { submissionId: string }) => {
+export const SubmittedReviews = ({ submissionId, showForAuthor = false }: { submissionId: string; showForAuthor?: boolean }) => {
     const [reviews, setReviews] = useState<Review[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -72,8 +72,8 @@ export const SubmittedReviews = ({ submissionId }: { submissionId: string }) => 
         return (
             <Card>
                 <CardHeader>
-                    <CardTitle className="font-headline">Submitted Reviews</CardTitle>
-                    <CardDescription>Reviewer feedback will appear here once submitted.</CardDescription>
+                    <CardTitle className="font-headline">{showForAuthor ? "Reviewer Comments" : "Submitted Reviews"}</CardTitle>
+                    <CardDescription>{showForAuthor ? "Feedback from reviewers to guide your revision." : "Reviewer feedback will appear here once submitted."}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <Skeleton className="h-12 w-full" />
@@ -87,8 +87,8 @@ export const SubmittedReviews = ({ submissionId }: { submissionId: string }) => 
         return (
              <Card>
                 <CardHeader>
-                    <CardTitle className="font-headline">Submitted Reviews</CardTitle>
-                    <CardDescription>Reviewer feedback will appear here once submitted.</CardDescription>
+                    <CardTitle className="font-headline">{showForAuthor ? "Reviewer Comments" : "Submitted Reviews"}</CardTitle>
+                    <CardDescription>{showForAuthor ? "Feedback from reviewers to guide your revision." : "Reviewer feedback will appear here once submitted."}</CardDescription>
                 </CardHeader>
                 <CardContent>
                    <div className="text-center text-muted-foreground py-8">
@@ -103,8 +103,8 @@ export const SubmittedReviews = ({ submissionId }: { submissionId: string }) => 
     return (
         <Card>
             <CardHeader>
-                <CardTitle className="font-headline">Submitted Reviews</CardTitle>
-                <CardDescription>Feedback from the assigned peer reviewers.</CardDescription>
+                <CardTitle className="font-headline">{showForAuthor ? "Reviewer Comments" : "Submitted Reviews"}</CardTitle>
+                <CardDescription>{showForAuthor ? "Feedback from reviewers to guide your revision." : "Feedback from the assigned peer reviewers."}</CardDescription>
             </CardHeader>
             <CardContent>
                 <Accordion type="single" collapsible className="w-full">
@@ -114,14 +114,14 @@ export const SubmittedReviews = ({ submissionId }: { submissionId: string }) => 
                                <div className="flex items-center justify-between w-full pr-4">
                                     <div className='flex items-center gap-2'>
                                         <User className="w-4 h-4" />
-                                        <span>Review from {review.reviewerName}</span>
+                                        <span>Review from {showForAuthor ? `Reviewer #${index + 1}` : review.reviewerName}</span>
                                     </div>
-                                    <Badge variant={getRecommendationVariant(review.recommendation)}>{review.recommendation}</Badge>
+                                    {!showForAuthor && <Badge variant={getRecommendationVariant(review.recommendation)}>{review.recommendation}</Badge>}
                                </div>
                             </AccordionTrigger>
                             <AccordionContent className="space-y-6 pt-4">
                                 <p className='text-xs text-muted-foreground'>Submitted on {format(review.submittedAt, 'PPP')}</p>
-                                {review.commentsForEditor && (
+                                {!showForAuthor && review.commentsForEditor && (
                                      <div>
                                         <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
                                             <Shield className="w-4 h-4" />
@@ -150,3 +150,5 @@ export const SubmittedReviews = ({ submissionId }: { submissionId: string }) => 
         </Card>
     )
 };
+
+    

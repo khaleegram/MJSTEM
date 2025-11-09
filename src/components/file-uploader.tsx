@@ -1,77 +1,61 @@
+
 'use client';
 
 import { useUploadThing } from '@/lib/uploadthing';
 import { UploadCloud, File as FileIcon, X, Image as ImageIcon } from 'lucide-react';
-import { useDropzone } from '@uploadthing/react';
+import { useDropzone } from 'react-dropzone';
 import { useState, useCallback } from 'react';
 import { Button } from './ui/button';
 import { Progress } from './ui/progress';
 import { cn } from '@/lib/utils';
-import { useAuth } from '@/contexts/auth-context';
 import { OurFileRouter } from '@/app/api/uploadthing/core';
+import { useAuth } from '@/contexts/auth-context';
+
 
 interface FileUploaderProps {
   endpoint: keyof OurFileRouter;
-  onUploadComplete: (url: string) => void;
+  onUploadComplete: (url: string, key: string) => void;
   onUploadError: (error: Error) => void;
+  onUploadBegin?: () => void;
+  onFileSelect?: (file: File | null) => void;
 }
 
-export function FileUploader({ endpoint, onUploadComplete, onUploadError }: FileUploaderProps) {
+export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFileSelect, onUploadBegin }: FileUploaderProps) {
   const { user } = useAuth();
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [fileName, setFileName] = useState<string | null>(null);
 
-  const { startUpload, isUploading } = useUploadThing(endpoint, {
-    headers: async () => {
-      if (!user) {
-        // This should ideally not happen if the UI is guarded, but as a fallback.
-        throw new Error('Not authenticated');
+  const onDrop = useCallback((acceptedFiles: File[]) => {
+    if (acceptedFiles.length > 0) {
+      setFileName(acceptedFiles[0].name);
+      if (onFileSelect) {
+        onFileSelect(acceptedFiles[0]);
+      } else {
+        // Kept for immediate upload behavior if needed
+        if (!user) {
+          onUploadError(new Error('You must be logged in to upload files.'));
+          return;
+        }
       }
-      const token = await user.getIdToken();
-      return { Authorization: `Bearer ${token}` };
-    },
-    onClientUploadComplete: (res) => {
-      if (!res?.[0]) {
-        onUploadError(new Error("Upload failed: No response from server."));
-        return;
-      };
-      setFileName(res[0].name);
-      onUploadComplete(res[0].url);
-      setUploadProgress(0); // Reset progress
-    },
-    onUploadError,
-    onUploadProgress: setUploadProgress,
+    }
+  }, [user, onUploadError, onFileSelect]);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    multiple: false,
   });
-
-  const onDrop = useCallback(
-    (acceptedFiles: File[]) => {
-      if (!user) {
-        onUploadError(new Error('You must be logged in to upload files.'));
-        return;
-      }
-      if (acceptedFiles.length > 0) {
-        setFileName(acceptedFiles[0].name);
-        startUpload(acceptedFiles).catch(onUploadError);
-      }
-    },
-    [startUpload, user, onUploadError]
-  );
-
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, multiple: false });
 
   const isImageUploader = endpoint === 'imageUploader';
   const Icon = isImageUploader ? ImageIcon : FileIcon;
   const description = isImageUploader ? 'PNG, JPG, GIF up to 4MB' : 'PDF, DOC, DOCX up to 16MB.';
 
-  if (isUploading) {
-    return (
-      <div className="p-4 rounded-lg border border-dashed flex flex-col items-center justify-center text-center">
-        <p className="text-sm font-medium mb-2">{fileName || 'Uploading...'}</p>
-        <Progress value={uploadProgress} className="w-full h-2" />
-        <p className="text-xs text-muted-foreground mt-2">{uploadProgress}%</p>
-      </div>
-    );
-  }
+  const handleRemove = () => {
+    setFileName(null);
+    if(onFileSelect) {
+      onFileSelect(null);
+    }
+    // Note: Deletion logic for already uploaded files should be handled separately
+    // by calling a server action with the file key if it exists.
+  };
 
   if (fileName) {
     return (
@@ -83,10 +67,7 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError }: File
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => {
-            setFileName(null);
-            onUploadComplete('');
-          }}
+          onClick={handleRemove}
         >
           <X className="h-4 w-4" />
         </Button>
@@ -111,3 +92,5 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError }: File
     </div>
   );
 }
+
+    

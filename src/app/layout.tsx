@@ -7,6 +7,8 @@ import { Inter as FontSans } from 'next/font/google';
 import { AuthProvider } from '@/contexts/auth-context';
 import { ThemeProvider } from '@/components/theme-provider';
 import { FirebaseErrorListener } from '@/components/firebase-error-listener';
+import { getDoc, doc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 export const metadata: Metadata = {
   title: 'MJSTEM - Multidisciplinary Journal of Science, Technology, Education and Management',
@@ -18,17 +20,35 @@ const fontSans = FontSans({
   variable: '--font-sans',
 });
 
-export default function RootLayout({
+async function getLogoUrl() {
+    try {
+        const docRef = doc(db, 'settings', 'branding');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists() && docSnap.data().logoUrl) {
+            return docSnap.data().logoUrl;
+        }
+    } catch (e) {
+        console.error("Could not pre-fetch logo:", e);
+    }
+    return null;
+}
+
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+
+  const logoUrl = await getLogoUrl();
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,700;1,7..72,400&family=PT+Sans:wght@400;700&display=swap" rel="stylesheet" />
+        {logoUrl && <link rel="preload" href={logoUrl} as="image" />}
+        {logoUrl && <link rel="icon" href={logoUrl} type="image/png" sizes="any" />}
       </head>
       <body className={cn("font-body antialiased", fontSans.variable)}>
         <ThemeProvider

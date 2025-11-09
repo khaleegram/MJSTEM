@@ -15,7 +15,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { File, Calendar, User, Mail, PlusCircle, Download, BookCopy, Edit, Sparkles, UserCheck, MessageSquare, Shield } from 'lucide-react';
+import { File, Calendar, User, Mail, PlusCircle, Download, BookCopy, Edit, Sparkles, UserCheck, MessageSquare, Shield, Upload } from 'lucide-react';
 import { format } from 'date-fns';
 import { SubmissionStatus, Reviewer, Submission, UserProfile } from '@/types';
 import { cn } from '@/lib/utils';
@@ -42,7 +42,8 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { logSubmissionEvent } from '@/ai/flows/log-submission-event';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-
+import { FileUploader } from '@/components/file-uploader';
+import { useUploadThing } from '@/lib/uploadthing';
 
 const getStatusVariant = (status: SubmissionStatus) => {
     switch (status) {
@@ -181,6 +182,78 @@ const ReviewSubmissionForm = ({ submission, onReviewSubmit }: { submission: Subm
         </Card>
     )
 }
+
+const AuthorRevisionForm = ({ submission, onRevisionSubmit }: { submission: Submission, onRevisionSubmit: () => void }) => {
+    const { toast } = useToast();
+    const [isSubmitting, setIsSubmitting] = React.useState(false);
+    const [file, setFile] = React.useState<File | null>(null);
+    const { startUpload, isUploading } = useUploadThing("documentUploader");
+    const { userProfile } = useAuth();
+
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!file) {
+            toast({ title: "No file selected", description: "Please upload your revised manuscript.", variant: "destructive" });
+            return;
+        }
+        setIsSubmitting(true);
+
+        try {
+            const uploadRes = await startUpload([file]);
+            if (!uploadRes || !uploadRes[0]) {
+                throw new Error("File upload failed to return a result.");
+            }
+            const newManuscriptUrl = uploadRes[0].url;
+            
+            const submissionRef = doc(db, 'submissions', submission.id);
+            const newStatus = 'Under Initial Review'; // Or a new 'Resubmitted' status if you add it
+            
+            await updateDoc(submissionRef, { 
+                manuscriptUrl: newManuscriptUrl,
+                status: newStatus
+            });
+
+            await logSubmissionEvent({
+                submissionId: submission.id,
+                eventType: 'STATUS_CHANGED',
+                context: { actorName: userProfile?.displayName || 'Author', status: 'Revision Submitted' }
+            });
+
+            toast({ title: "Revision Submitted", description: "Your updated manuscript has been sent to the editor." });
+            onRevisionSubmit();
+        } catch (error: any) {
+            console.error("Error submitting revision:", error);
+            toast({ title: "Submission Failed", description: error.message, variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
+        }
+    }
+    
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle className="font-headline">Submit Revision</CardTitle>
+                <CardDescription>Upload your revised manuscript file. The editor will be notified.</CardDescription>
+            </CardHeader>
+            <form onSubmit={handleSubmit}>
+                <CardContent className="space-y-4">
+                    <FileUploader 
+                        endpoint="documentUploader" 
+                        onUploadComplete={() => {}} 
+                        onUploadError={(err) => toast({ title: "Upload Error", description: err.message, variant: "destructive"})}
+                        onFileSelect={setFile}
+                    />
+                </CardContent>
+                <CardFooter>
+                    <Button type="submit" disabled={isSubmitting || isUploading}>
+                        {isUploading ? 'Uploading...' : isSubmitting ? 'Submitting...' : 'Submit Revision'}
+                    </Button>
+                </CardFooter>
+            </form>
+        </Card>
+    );
+};
   
 const DetailPageSkeleton = () => (
     <div className="grid gap-8 lg:grid-cols-3">
@@ -412,8 +485,10 @@ export default function SubmissionDetailPage() {
   }
 
   const isEditor = userProfile?.role === 'Editor' || userProfile?.role === 'Admin';
+  const isAuthor = userProfile?.uid === submission.author.id;
   const isReviewer = submission.reviewers?.some(r => r.id === user?.uid);
   const isDecisionMade = submission.status === 'Accepted' || submission.status === 'Rejected';
+  const needsRevision = submission.status === 'Minor Revision' || submission.status === 'Major Revision';
 
 
   return (
@@ -438,7 +513,7 @@ export default function SubmissionDetailPage() {
           </CardHeader>
           <CardContent>
             <h3 className="font-semibold mb-2 font-headline">Abstract</h3>
-            <p className="text-muted-foreground leading-relaxed">
+            <p className="text-muted-foreground leading-relaxed break-words">
               {submission.abstract}
             </p>
             <Separator className="my-6" />
@@ -461,7 +536,11 @@ export default function SubmissionDetailPage() {
           </CardFooter>
         </Card>
 
-        {isEditor && <SubmittedReviews submissionId={submission.id} />}
+        {/* Show reviews to both Editor and Author */}
+        {(isEditor || (isAuthor && needsRevision)) && <SubmittedReviews submissionId={submission.id} showForAuthor={isAuthor && needsRevision} />}
+
+        {isAuthor && needsRevision && <AuthorRevisionForm submission={submission} onRevisionSubmit={handleReviewSubmit} />}
+
       </div>
 
       <div className="space-y-8 lg:col-span-1">
@@ -556,3 +635,5 @@ export default function SubmissionDetailPage() {
     </div>
   );
 }
+
+    

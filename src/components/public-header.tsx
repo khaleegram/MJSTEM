@@ -18,6 +18,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { Skeleton } from './ui/skeleton';
 
 const NavLink = ({ href, children }: { href: string; children: React.ReactNode }) => (
     <Link href={href} className="text-muted-foreground hover:text-foreground">
@@ -44,9 +45,11 @@ const NavDropdown = () => (
 export function PublicHeader() {
     const [isOpen, setIsOpen] = useState(false);
     const [logoUrl, setLogoUrl] = useState<string | null>(null);
+    const [loadingLogo, setLoadingLogo] = useState(true);
 
     useEffect(() => {
         const fetchLogo = async () => {
+            setLoadingLogo(true);
             try {
                 const docRef = doc(db, 'settings', 'branding');
                 const docSnap = await getDoc(docRef);
@@ -55,6 +58,8 @@ export function PublicHeader() {
                 }
             } catch (error) {
                 console.error("Could not fetch logo:", error);
+            } finally {
+                setLoadingLogo(false);
             }
         };
         fetchLogo();
@@ -64,7 +69,9 @@ export function PublicHeader() {
     <header className="container mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between border-b">
       <div className="flex items-center gap-2">
         <Link href="/" className="flex items-center gap-3 font-semibold">
-            {logoUrl ? (
+            {loadingLogo ? (
+                <Skeleton className="h-10 w-10" />
+            ) : logoUrl ? (
                 <Image src={logoUrl} alt="Journal Logo" width={40} height={40} className="object-contain" />
             ) : (
                 <Icons.logo className="h-8 w-8 text-primary" />
@@ -103,7 +110,11 @@ export function PublicHeader() {
                     <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
                      <nav className="grid gap-6 text-lg font-medium mt-8">
                         <Link href="/" className="flex items-center gap-2 text-lg font-semibold mb-4" onClick={() => setIsOpen(false)}>
-                            <Icons.logo className="h-6 w-6 text-primary" />
+                             {logoUrl ? (
+                                <Image src={logoUrl} alt="Journal Logo" width={32} height={32} className="object-contain" />
+                            ) : (
+                                <Icons.logo className="h-6 w-6 text-primary" />
+                            )}
                             <span className="font-headline text-lg">MJSTEM</span>
                         </Link>
                         <Link href="/aims-scope" className="hover:text-foreground" onClick={() => setIsOpen(false)}>Aims & Scope</Link>
