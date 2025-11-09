@@ -1,17 +1,10 @@
-import 'dotenv/config';
 import { createUploadthing, type FileRouter } from "uploadthing/next";
-import { auth as adminAuth } from 'firebase-admin';
-import '@/lib/firebase-admin'; // Ensures Firebase Admin is initialized
+import admin from '@/lib/firebase-admin'; // Import the initialized admin app
 
 const f = createUploadthing({
-    /**
-     * Log out more information about the error, but don't return it to the client
-     * @see https://docs.uploadthing.com/errors#error-formatting
-     */
     errorFormatter: (err) => {
       console.log("Error uploading file", err.message);
       console.log("  - Above error caused by:", err.cause);
-  
       return { message: err.message };
     },
   });
@@ -24,7 +17,11 @@ const handleAuth = async ({ req }: { req: Request }) => {
         throw new Error("Unauthorized: No token provided");
     }
     const token = authHeader.split(" ")[1];
-    const decoded = await adminAuth().verifyIdToken(token);
+    
+    // Get the auth service from the initialized admin app
+    const auth = admin.auth();
+    const decoded = await auth.verifyIdToken(token);
+
     return { userId: decoded.uid };
   } catch (error: any) {
     console.error("🔥 AUTH ERROR", error);

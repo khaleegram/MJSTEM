@@ -1,12 +1,11 @@
 
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import 'dotenv/config';
+import * as admin from 'firebase-admin';
 
 // Initialize Firebase Admin SDK only once.
-if (!getApps().length) {
+if (!admin.apps.length) {
   try {
-    initializeApp({
-      credential: cert({
+    admin.initializeApp({
+      credential: admin.credential.cert({
         projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
         clientEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
         privateKey: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
@@ -18,6 +17,5 @@ if (!getApps().length) {
   }
 }
 
-// Export an empty object to satisfy module requirements.
-// The main purpose of this file is the side effect of initialization.
-export {};
+// Export the initialized admin app
+export default admin;
