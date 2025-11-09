@@ -31,6 +31,7 @@ const nextConfig: NextConfig = {
       }
     ],
   },
+  transpilePackages: ['effect'],
 };
 
 export default nextConfig;
