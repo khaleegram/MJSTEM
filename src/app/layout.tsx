@@ -68,8 +68,8 @@ export default async function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,700;1,7..72,400&family=PT+Sans:wght@400;700&display=swap" rel="stylesheet" />
-        {logoUrl && <link rel="preload" href={logoUrl} as="image" />}
-        {logoUrl && <link rel="icon" href={logoUrl} type="image/png" sizes="any" />}
+        {logoUrl ? <link rel="icon" href={logoUrl} type="image/png" sizes="any" /> : <link rel="icon" href="/favicon.ico" />}
+        <link rel="apple-touch-icon" href="/icons/apple/apple-touch-icon.png" />
       </head>
       <body className={cn("font-body antialiased", fontSans.variable)}>
         <ThemeProvider
