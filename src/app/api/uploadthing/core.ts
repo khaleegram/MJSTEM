@@ -4,7 +4,6 @@
 import { createUploadthing, type FileRouter } from 'uploadthing/next';
 import { getApps, initializeApp, cert } from 'firebase-admin/app';
 import { auth as adminAuth } from 'firebase-admin';
-import { NextRequest } from 'next/server';
 
 // Initialize Firebase Admin SDK
 if (!getApps().length) {
@@ -20,17 +19,27 @@ if (!getApps().length) {
 const f = createUploadthing();
 
 // Auth middleware with logging
-const handleAuth = async ({ req }: { req: NextRequest }) => {
+const handleAuth = async ({ req }: { req: Request }) => {
   try {
     const authHeader = req.headers.get("authorization");
-    if (!authHeader?.startsWith("Bearer ")) throw new Error("Unauthorized: No token");
+    if (!authHeader?.startsWith("Bearer ")) {
+        throw new Error("Unauthorized: No token provided.");
+    }
 
     const token = authHeader.split(" ")[1];
+    if (!token) {
+        throw new Error("Unauthorized: Bearer token is missing.");
+    }
+    
     const decoded = await adminAuth().verifyIdToken(token);
     return { userId: decoded.uid };
-  } catch (err) {
+  } catch (err: any) {
+    const errorMessage = err.code === 'auth/id-token-expired'
+        ? 'Authentication Error: Token expired. Please refresh and try again.'
+        : `Authentication Error: ${err.message || 'Failed to verify token.'}`;
+
     console.error("🔥 AUTH ERROR", err);
-    throw err;
+    throw new Error(errorMessage);
   }
 };
 
