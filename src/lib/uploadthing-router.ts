@@ -1,4 +1,4 @@
-
+import 'dotenv/config';
 import { createUploadthing, type FileRouter } from "uploadthing/next";
 import { auth as adminAuth } from 'firebase-admin';
 import '@/lib/firebase-admin'; // Ensures Firebase Admin is initialized
