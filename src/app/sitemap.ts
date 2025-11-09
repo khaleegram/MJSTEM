@@ -4,7 +4,7 @@ import { db } from '@/lib/firebase';
 import { Volume } from '@/types';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = 'https://your-domain.com'; // IMPORTANT: Replace with your actual domain
+  const baseUrl = 'https://mjstem.org'; // IMPORTANT: Replace with your actual domain
 
   // Static pages
   const staticRoutes = [

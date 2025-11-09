@@ -1,7 +1,7 @@
-# Allow all user agents full access
 User-agent: *
+Allow: /
 Disallow: /dashboard/
 Disallow: /login
 Disallow: /signup
 
-Sitemap: https://your-domain.com/sitemap.xml
+Sitemap: https://mjstem.org/sitemap.xml
