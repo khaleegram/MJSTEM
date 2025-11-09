@@ -1,5 +1,6 @@
 
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import 'dotenv/config';
 
 // Initialize Firebase Admin SDK only once.
 if (!getApps().length) {
