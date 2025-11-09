@@ -12,8 +12,29 @@ import { db } from '@/lib/firebase';
 
 export const metadata: Metadata = {
   title: 'MJSTEM - Multidisciplinary Journal of Science, Technology, Education and Management',
-  description: 'A Multidisciplinary Journal of Science, Technology, Education and Management (MJSTEM)',
+  description: 'A premier, peer-reviewed, open-access journal dedicated to the rapid publication of high-quality research across science, technology, education, and management.',
+  applicationName: 'MJSTEM',
+  keywords: ['journal', 'academic', 'research', 'science', 'technology', 'education', 'management', 'peer-reviewed'],
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'MJSTEM',
+  },
+  openGraph: {
+    type: 'website',
+    url: 'https://mjstem.com', // Replace with your actual domain
+    title: 'MJSTEM - Multidisciplinary Journal',
+    description: 'A premier, peer-reviewed, open-access journal.',
+    siteName: 'MJSTEM',
+  },
+  twitter: {
+    card: 'summary',
+    title: 'MJSTEM - Multidisciplinary Journal',
+    description: 'A premier, peer-reviewed, open-access journal.',
+  }
 };
+
 
 const fontSans = FontSans({
   subsets: ['latin'],
@@ -67,5 +88,3 @@ export default async function RootLayout({
     </html>
   );
 }
-
-    

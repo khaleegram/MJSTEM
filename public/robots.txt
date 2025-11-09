@@ -1,0 +1,7 @@
+# Allow all user agents full access
+User-agent: *
+Disallow: /dashboard/
+Disallow: /login
+Disallow: /signup
+
+Sitemap: https://your-domain.com/sitemap.xml
