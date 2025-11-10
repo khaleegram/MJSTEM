@@ -24,6 +24,19 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFile
   const [fileName, setFileName] = useState<string | null>(null);
   const [localValue, setLocalValue] = useState(value);
 
+  // Moved useUploadThing to the top level of the component.
+  const { startUpload } = useUploadThing(endpoint, {
+    onClientUploadComplete: (res) => {
+        if (res && res[0]) {
+            onUploadComplete(res[0].url, res[0].key);
+            setLocalValue(res[0].url);
+        }
+    },
+    onUploadError: (error: Error) => {
+        onUploadError(error);
+    },
+  });
+
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
       const file = acceptedFiles[0];
@@ -32,25 +45,14 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFile
         onFileSelect(file);
       }
       
-      // For settings pages that pass `onUploadComplete` directly
-      const { startUpload } = useUploadThing(endpoint, {
-          onClientUploadComplete: (res) => {
-              if (res && res[0]) {
-                  onUploadComplete(res[0].url, res[0].key);
-                  setLocalValue(res[0].url);
-              }
-          },
-          onUploadError: (error: Error) => {
-              onUploadError(error);
-          },
-      });
-
+      // If onFileSelect is not provided, start the upload immediately.
+      // This is for settings pages that don't need a separate submit button.
       if (!onFileSelect) {
          startUpload([file]);
       }
 
     }
-  }, [onFileSelect, endpoint, onUploadComplete, onUploadError]);
+  }, [onFileSelect, startUpload]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
