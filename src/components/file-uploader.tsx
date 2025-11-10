@@ -1,19 +1,19 @@
-
 'use client';
 
 import { useUploadThing } from '@/lib/uploadthing';
-import { UploadCloud, File as FileIcon, X, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { UploadCloud, File as FileIcon, X, Image as ImageIcon } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import { useState, useCallback } from 'react';
 import { Button } from './ui/button';
+import { Progress } from './ui/progress';
 import { cn } from '@/lib/utils';
-import type { OurFileRouter } from '@/lib/uploadthing-router';
 import { useAuth } from '@/contexts/auth-context';
+import type { OurFileRouter } from '@/lib/uploadthing-router';
 import Image from 'next/image';
 
 interface FileUploaderProps {
   endpoint: keyof OurFileRouter;
-  onUploadComplete: (url: string, key: string) => void;
+  onUploadComplete: (url: string, key?: string) => void;
   onUploadError: (error: Error) => void;
   onFileSelect?: (file: File | null) => void;
   value?: string;
@@ -21,64 +21,71 @@ interface FileUploaderProps {
 
 export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFileSelect, value }: FileUploaderProps) {
   const { user } = useAuth();
-  const [fileName, setFileName] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [fileName, setFileName] = useState<string | null>(value ? value.split('/').pop()?.split('?')[0] || 'Uploaded file' : null);
   const [localValue, setLocalValue] = useState(value);
-  const [isUploading, setIsUploading] = useState(false);
 
-  const { startUpload } = useUploadThing(endpoint, {
+
+  const { startUpload, isUploading } = useUploadThing(endpoint, {
     headers: async () => {
-      const token = await user?.getIdToken();
+      if (!user) {
+        throw new Error('Not authenticated');
+      }
+      const token = await user.getIdToken();
       return { Authorization: `Bearer ${token}` };
     },
     onClientUploadComplete: (res) => {
-        setIsUploading(false);
-        if (res && res[0]) {
-            onUploadComplete(res[0].url, res[0].key);
-            setLocalValue(res[0].url);
-        }
+      if (!res?.[0]) {
+        onUploadError(new Error("Upload failed: No response from server."));
+        return;
+      };
+      setLocalValue(res[0].url);
+      onUploadComplete(res[0].url, res[0].key);
+      setUploadProgress(0); // Reset progress
     },
-    onUploadError: (error: Error) => {
-        setIsUploading(false);
-        onUploadError(error);
-    },
-    onUploadBegin: () => {
-        setIsUploading(true);
-    },
+    onUploadError,
+    onUploadProgress: setUploadProgress,
   });
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    if (acceptedFiles.length > 0) {
-      const file = acceptedFiles[0];
-      setFileName(file.name);
-      if (onFileSelect) {
-        onFileSelect(file);
-      } else {
-         startUpload([file]);
+  const onDrop = useCallback(
+    (acceptedFiles: File[]) => {
+      if (!user) {
+        onUploadError(new Error('You must be logged in to upload files.'));
+        return;
       }
-    }
-  }, [onFileSelect, startUpload]);
+      if (acceptedFiles.length > 0) {
+        const file = acceptedFiles[0];
+        setFileName(file.name);
+        if (onFileSelect) {
+            onFileSelect(file);
+        } else {
+            startUpload([file]).catch(onUploadError);
+        }
+      }
+    },
+    [startUpload, user, onUploadError, onFileSelect]
+  );
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    multiple: false,
-    disabled: isUploading,
-  });
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, multiple: false });
 
   const isImageUploader = endpoint === 'imageUploader';
   const Icon = isImageUploader ? ImageIcon : FileIcon;
-  const description = isImageUploader ? 'PNG, JPG, GIF up to 4MB' : 'PDF, DOC, DOCX up to 16MB.';
+  const description = isImageUploader ? 'PNG, JPG, GIF up to 4MB' : 'PDF, DOCX up to 16MB.';
 
-  const handleRemove = () => {
-    setFileName(null);
-    if (onFileSelect) {
-      onFileSelect(null);
-    }
-  };
+  if (isUploading) {
+    return (
+      <div className="p-4 rounded-lg border border-dashed flex flex-col items-center justify-center text-center">
+        <p className="text-sm font-medium mb-2">{fileName || 'Uploading...'}</p>
+        <Progress value={uploadProgress} className="w-full h-2" />
+        <p className="text-xs text-muted-foreground mt-2">{uploadProgress}%</p>
+      </div>
+    );
+  }
 
-  if (localValue && !fileName) {
+  if (localValue) {
       return (
           <div className="flex items-center gap-4">
-              {isImageUploader ? (
+              {isImageUploader && localValue ? (
                   <Image src={localValue} alt="Current file" width={64} height={64} className="rounded-md object-contain border p-1" />
               ) : (
                   <div className="p-4 rounded-lg border flex items-center gap-3">
@@ -91,6 +98,8 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFile
                   variant="outline"
                   onClick={() => {
                       setLocalValue('');
+                      setFileName(null);
+                      if (onFileSelect) onFileSelect(null);
                       onUploadComplete('', ''); 
                   }}
               >
@@ -100,37 +109,12 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFile
       )
   }
 
-  if (fileName) {
-    return (
-      <div className="p-4 rounded-lg border flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          {isUploading ? (
-            <Loader2 className="h-6 w-6 text-primary animate-spin" />
-          ) : (
-            <Icon className="h-6 w-6 text-primary" />
-          )}
-          <p className="text-sm font-medium">{isUploading ? 'Uploading...' : fileName}</p>
-        </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={handleRemove}
-          disabled={isUploading}
-        >
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
-    );
-  }
-
   return (
     <div
       {...getRootProps()}
       className={cn(
         'group relative cursor-pointer rounded-lg border-2 border-dashed p-8 text-center transition-colors hover:border-primary/50',
-        isDragActive && 'border-primary bg-primary/10',
-        isUploading && 'cursor-not-allowed opacity-50'
+        isDragActive && 'border-primary bg-primary/10'
       )}
     >
       <input {...getInputProps()} />
