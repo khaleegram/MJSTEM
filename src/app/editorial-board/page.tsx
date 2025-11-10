@@ -58,17 +58,26 @@ export default function EditorialBoardPage() {
   }, []);
 
   const boardSections = useMemo(() => {
-    return members.reduce((acc, member) => {
-        const role = member.role;
-        if (!acc[role]) {
-            acc[role] = [];
+    const sections: Record<string, EditorialBoardMember[]> = {
+      'Editor-in-Chief': [],
+      'Founding Editor': [],
+      'Associate Editors': [],
+    };
+
+    members.forEach((member) => {
+        if (member.role === 'Editor-in-Chief') {
+            sections['Editor-in-Chief'].push(member);
+        } else if (member.role === 'Founding Editor') {
+            sections['Founding Editor'].push(member);
+        } else if (member.role === 'Associate Editor' || member.role === 'Senior Associate Editor') {
+            sections['Associate Editors'].push(member);
         }
-        acc[role].push(member);
-        return acc;
-    }, {} as Record<string, EditorialBoardMember[]>);
+    });
+
+    return sections;
   }, [members]);
 
-  const sectionOrder: (keyof typeof boardSections)[] = ['Editor-in-Chief', 'Founding Editor', 'Senior Associate Editor', 'Associate Editor'];
+  const sectionOrder: (keyof typeof boardSections)[] = ['Editor-in-Chief', 'Founding Editor', 'Associate Editors'];
 
 
   return (
@@ -88,18 +97,16 @@ export default function EditorialBoardPage() {
                     <section><h2 className="text-3xl font-bold font-headline text-center mb-8"><Skeleton className="h-9 w-64 mx-auto" /></h2><div className="max-w-sm mx-auto"><BoardMemberSkeleton /></div></section>
                     <section><h2 className="text-3xl font-bold font-headline text-center mb-8"><Skeleton className="h-9 w-64 mx-auto" /></h2><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">{Array.from({length: 3}).map((_, i) => <BoardMemberSkeleton key={i} />)}</div></section>
                 </>
-            ) : sectionOrder.map(role => {
-                const sectionMembers = boardSections[role];
+            ) : sectionOrder.map(title => {
+                const sectionMembers = boardSections[title];
                 if (!sectionMembers || sectionMembers.length === 0) return null;
                 
-                const title = role.replace(/([A-Z])/g, ' $1').trim() + (role.endsWith('s') ? '' : 's');
-                const gridCols = role === 'Editor-in-Chief' ? 'lg:grid-cols-1' : role === 'Senior Associate Editor' ? 'lg:grid-cols-2' : 'lg:grid-cols-3';
-
+                const gridCols = title === 'Editor-in-Chief' ? 'lg:grid-cols-1' : title === 'Founding Editor' ? 'lg:grid-cols-2' : 'lg:grid-cols-3';
 
                 return (
-                    <section key={role}>
+                    <section key={title}>
                         <h2 className="text-3xl font-bold font-headline text-center mb-8">{title}</h2>
-                        <div className={`grid grid-cols-1 sm:grid-cols-2 ${gridCols} gap-8 ${role === 'Editor-in-Chief' ? 'max-w-sm mx-auto' : ''}`}>
+                        <div className={`grid grid-cols-1 sm:grid-cols-2 ${gridCols} gap-8 ${title === 'Editor-in-Chief' ? 'max-w-sm mx-auto' : ''}`}>
                             {sectionMembers.map((member) => (
                                 <BoardMemberCard key={member.id} member={member} />
                             ))}
@@ -116,7 +123,7 @@ export default function EditorialBoardPage() {
       </main>
       <footer className="bg-background border-t">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 text-center text-sm text-muted-foreground">
-          <p className="mb-2">Print ISSN: 3121-6552 | Barcode: 9773121655008</p>
+          <p className="mb-2">ISSN (Print): 3121-6552 | Barcode: 9773121655008</p>
           © {new Date().getFullYear()} MJSTEM. All Rights Reserved.
         </div>
       </footer>

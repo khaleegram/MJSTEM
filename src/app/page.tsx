@@ -211,7 +211,7 @@ export default async function HomePage() {
                             MJSTEM
                         </h2>
                     </Link>
-                    <p className="text-sm text-muted-foreground mt-2">Print ISSN: 3121-6552</p>
+                    <p className="text-sm text-muted-foreground mt-2">ISSN (Print): 3121-6552</p>
                     <p className="text-sm text-muted-foreground">Barcode: 9773121655008</p>
                 </div>
                 <div className="md:col-span-4">
@@ -257,5 +257,3 @@ export default async function HomePage() {
     </div>
   );
 }
-
-    

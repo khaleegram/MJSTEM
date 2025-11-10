@@ -1,7 +1,12 @@
 
-import { Check, ArrowRight } from 'lucide-react';
+import { Check, ArrowRight, Download } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { PublicHeader } from '@/components/public-header';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
+import { getDoc, doc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+
 
 const ChecklistItem = ({ children }: { children: React.ReactNode }) => (
   <li className="flex items-start gap-3">
@@ -17,7 +22,23 @@ const StructuredAbstractItem = ({ title, description }: { title: string, descrip
     </div>
 )
 
-export default function AuthorGuidelinesPage() {
+async function getJournalInfo() {
+    try {
+        const docRef = doc(db, 'settings', 'journalInfo');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            return docSnap.data();
+        }
+    } catch (e) {
+        console.error("Could not fetch journal info", e);
+    }
+    return { submissionTemplateUrl: null };
+}
+
+export default async function AuthorGuidelinesPage() {
+
+  const journalInfo = await getJournalInfo();
+
   return (
     <div className="flex flex-col min-h-screen bg-background">
         <PublicHeader />
@@ -150,9 +171,18 @@ export default function AuthorGuidelinesPage() {
                                 />
                                 </div>
                             </div>
-                             <div>
+                            <div>
                                 <h3 className="font-bold text-lg font-headline">How to Submit</h3>
-                                <p className="text-muted-foreground">Register as a user and follow the instructions to submit your manuscript.</p>
+                                <p className="text-muted-foreground">
+                                    Register as a user, download the official manuscript template, and follow the instructions on the submission page.
+                                </p>
+                                {journalInfo?.submissionTemplateUrl && (
+                                    <Button asChild className="mt-4">
+                                        <Link href={journalInfo.submissionTemplateUrl} target="_blank">
+                                            <Download className="mr-2" /> Download Submission Template
+                                        </Link>
+                                    </Button>
+                                )}
                             </div>
                         </CardContent>
                     </Card>
@@ -195,12 +225,10 @@ export default function AuthorGuidelinesPage() {
         </main>
         <footer className="bg-background border-t">
              <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 text-center text-sm text-muted-foreground">
-                <p className="mb-2">Print ISSN: 3121-6552 | Barcode: 9773121655008</p>
+                <p className="mb-2">ISSN (Print): 3121-6552 | Barcode: 9773121655008</p>
                 © {new Date().getFullYear()} MJSTEM. All Rights Reserved.
             </div>
         </footer>
     </div>
   );
 }
-
-    
