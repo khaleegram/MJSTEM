@@ -38,7 +38,7 @@ service cloud.firestore {
 
     // SUBMISSIONS
     // 1. Get: Author, assigned reviewer, or editor/admin can get a single doc.
-    // 2. List: Editors/Admins can list all. Authors can only list their own.
+    // 2. List: Editors/Admins can list all. Authors can only list their own (enforced by client query and this rule).
     // 3. Create: Any authenticated user.
     // 4. Update: Editor/Admin can update. Reviewer can only update their own status.
     // 5. Delete: Only editors/admins can delete.
@@ -92,6 +92,14 @@ service cloud.firestore {
     // 2. Write: Only Admins can manage the board
     match /editorialBoard/{memberId} {
       allow read;
+      allow write: if isAdmin();
+    }
+
+    // SETTINGS
+    // 1. Read: Publicly readable for branding
+    // 2. Write: Only Admins can manage settings
+    match /settings/{settingId} {
+      allow read: if true;
       allow write: if isAdmin();
     }
   }
