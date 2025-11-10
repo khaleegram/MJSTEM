@@ -2,9 +2,9 @@
 'use client';
 
 import { useUploadThing } from '@/lib/uploadthing';
-import { UploadCloud, File as FileIcon, X, Image as ImageIcon } from 'lucide-react';
+import { UploadCloud, File as FileIcon, X, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Button } from './ui/button';
 import { cn } from '@/lib/utils';
 import { OurFileRouter } from '@/app/api/uploadthing/core';
@@ -24,7 +24,7 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFile
   const [fileName, setFileName] = useState<string | null>(null);
   const [localValue, setLocalValue] = useState(value);
 
-  const { startUpload } = useUploadThing(endpoint, {
+  const { startUpload, isUploading } = useUploadThing(endpoint, {
     onClientUploadComplete: (res) => {
         if (res && res[0]) {
             onUploadComplete(res[0].url, res[0].key);
@@ -33,11 +33,6 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFile
     },
     onUploadError: (error: Error) => {
         onUploadError(error);
-    },
-    headers: async () => {
-        if (!user) return {};
-        const token = await user.getIdToken();
-        return { Authorization: `Bearer ${token}` };
     },
   });
 
@@ -48,6 +43,7 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFile
       if (onFileSelect) {
         onFileSelect(file);
       } else {
+         // This path is for settings pages where the upload is immediate
          startUpload([file]);
       }
     }
@@ -56,6 +52,7 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFile
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     multiple: false,
+    disabled: isUploading,
   });
 
   const isImageUploader = endpoint === 'imageUploader';
@@ -77,7 +74,7 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFile
               ) : (
                   <div className="p-4 rounded-lg border flex items-center gap-3">
                       <FileIcon className="h-6 w-6 text-primary" />
-                      <p className="text-sm font-medium truncate max-w-[200px]">{localValue.split('/').pop()}</p>
+                      <p className="text-sm font-medium truncate max-w-[200px]">{localValue.split('/').pop()?.split('?')[0]}</p>
                   </div>
               )}
               <Button
@@ -98,14 +95,19 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFile
     return (
       <div className="p-4 rounded-lg border flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Icon className="h-6 w-6 text-primary" />
-          <p className="text-sm font-medium">{fileName}</p>
+          {isUploading ? (
+            <Loader2 className="h-6 w-6 text-primary animate-spin" />
+          ) : (
+            <Icon className="h-6 w-6 text-primary" />
+          )}
+          <p className="text-sm font-medium">{isUploading ? 'Uploading...' : fileName}</p>
         </div>
         <Button
           type="button"
           variant="ghost"
           size="icon"
           onClick={handleRemove}
+          disabled={isUploading}
         >
           <X className="h-4 w-4" />
         </Button>
@@ -118,7 +120,8 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFile
       {...getRootProps()}
       className={cn(
         'group relative cursor-pointer rounded-lg border-2 border-dashed p-8 text-center transition-colors hover:border-primary/50',
-        isDragActive && 'border-primary bg-primary/10'
+        isDragActive && 'border-primary bg-primary/10',
+        isUploading && 'cursor-not-allowed opacity-50'
       )}
     >
       <input {...getInputProps()} />
