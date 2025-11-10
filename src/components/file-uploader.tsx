@@ -6,38 +6,51 @@ import { UploadCloud, File as FileIcon, X, Image as ImageIcon } from 'lucide-rea
 import { useDropzone } from 'react-dropzone';
 import { useState, useCallback } from 'react';
 import { Button } from './ui/button';
-import { Progress } from './ui/progress';
 import { cn } from '@/lib/utils';
 import { OurFileRouter } from '@/app/api/uploadthing/core';
 import { useAuth } from '@/contexts/auth-context';
-
+import Image from 'next/image';
 
 interface FileUploaderProps {
   endpoint: keyof OurFileRouter;
   onUploadComplete: (url: string, key: string) => void;
   onUploadError: (error: Error) => void;
-  onUploadBegin?: () => void;
   onFileSelect?: (file: File | null) => void;
+  value?: string; // Add value prop to accept the current URL
 }
 
-export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFileSelect, onUploadBegin }: FileUploaderProps) {
+export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFileSelect, value }: FileUploaderProps) {
   const { user } = useAuth();
   const [fileName, setFileName] = useState<string | null>(null);
+  const [localValue, setLocalValue] = useState(value);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
-      setFileName(acceptedFiles[0].name);
+      const file = acceptedFiles[0];
+      setFileName(file.name);
       if (onFileSelect) {
-        onFileSelect(acceptedFiles[0]);
-      } else {
-        // Kept for immediate upload behavior if needed
-        if (!user) {
-          onUploadError(new Error('You must be logged in to upload files.'));
-          return;
-        }
+        onFileSelect(file);
       }
+      
+      // For settings pages that pass `onUploadComplete` directly
+      const { startUpload } = useUploadThing(endpoint, {
+          onClientUploadComplete: (res) => {
+              if (res && res[0]) {
+                  onUploadComplete(res[0].url, res[0].key);
+                  setLocalValue(res[0].url);
+              }
+          },
+          onUploadError: (error: Error) => {
+              onUploadError(error);
+          },
+      });
+
+      if (!onFileSelect) {
+         startUpload([file]);
+      }
+
     }
-  }, [user, onUploadError, onFileSelect]);
+  }, [onFileSelect, endpoint, onUploadComplete, onUploadError]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -50,12 +63,37 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFile
 
   const handleRemove = () => {
     setFileName(null);
-    if(onFileSelect) {
+    if (onFileSelect) {
       onFileSelect(null);
     }
-    // Note: Deletion logic for already uploaded files should be handled separately
-    // by calling a server action with the file key if it exists.
   };
+
+  // If a value is provided (URL) and no new file is being selected, show the current file and a change button
+  if (localValue && !fileName) {
+      return (
+          <div className="flex items-center gap-4">
+              {isImageUploader ? (
+                  <Image src={localValue} alt="Current file" width={64} height={64} className="rounded-md object-contain border p-1" />
+              ) : (
+                  <div className="p-4 rounded-lg border flex items-center gap-3">
+                      <FileIcon className="h-6 w-6 text-primary" />
+                      <p className="text-sm font-medium truncate max-w-[200px]">{localValue.split('/').pop()}</p>
+                  </div>
+              )}
+              <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                      setLocalValue('');
+                      onUploadComplete('', ''); // Notify form that value is cleared
+                  }}
+              >
+                  Change
+              </Button>
+          </div>
+      )
+  }
+
 
   if (fileName) {
     return (
@@ -65,6 +103,7 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFile
           <p className="text-sm font-medium">{fileName}</p>
         </div>
         <Button
+          type="button"
           variant="ghost"
           size="icon"
           onClick={handleRemove}
@@ -92,5 +131,3 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFile
     </div>
   );
 }
-
-    

@@ -30,7 +30,7 @@ import Image from 'next/image';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const brandingFormSchema = z.object({
-  logoUrl: z.string().url().optional(),
+  logoUrl: z.string().url().optional().or(z.literal('')),
 });
 
 export default function BrandingSettingsPage() {
@@ -111,18 +111,14 @@ export default function BrandingSettingsPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Logo Image</FormLabel>
-                      <div className="flex items-center gap-6">
-                        {field.value && (
-                           <Image src={field.value} alt="Current logo" width={64} height={64} className="rounded-md object-contain" />
-                        )}
                         <FormControl>
                           <FileUploader
                             endpoint="imageUploader"
+                            value={field.value}
                             onUploadComplete={(url) => field.onChange(url)}
                             onUploadError={(error) => toast({ title: 'Upload Failed', description: error.message, variant: 'destructive' })}
                           />
                         </FormControl>
-                      </div>
                       <FormMessage />
                     </FormItem>
                   )}

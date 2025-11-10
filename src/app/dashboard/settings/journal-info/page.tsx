@@ -30,8 +30,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import Image from 'next/image';
 
 const journalInfoFormSchema = z.object({
-  coverLetterUrl: z.string().url().optional(),
-  submissionTemplateUrl: z.string().url().optional(),
+  coverLetterUrl: z.string().url().optional().or(z.literal('')),
+  submissionTemplateUrl: z.string().url().optional().or(z.literal('')),
 });
 
 export default function JournalInfoSettingsPage() {
@@ -113,18 +113,14 @@ export default function JournalInfoSettingsPage() {
                   render={({ field }) => (
                      <FormItem>
                       <FormLabel>Cover Image</FormLabel>
-                      <div className="flex items-center gap-6">
-                        {field.value && (
-                           <Image src={field.value} alt="Current cover" width={96} height={128} className="rounded-md object-contain border p-1" />
-                        )}
                         <FormControl>
                           <FileUploader
                             endpoint="imageUploader"
+                            value={field.value}
                             onUploadComplete={(url) => field.onChange(url)}
                             onUploadError={(error) => toast({ title: 'Upload Failed', description: error.message, variant: 'destructive' })}
                           />
                         </FormControl>
-                      </div>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -151,6 +147,7 @@ export default function JournalInfoSettingsPage() {
                       <FormControl>
                         <FileUploader
                           endpoint="documentUploader"
+                          value={field.value}
                           onUploadComplete={(url) => field.onChange(url)}
                           onUploadError={(error) => toast({ title: 'Upload Failed', description: error.message, variant: 'destructive' })}
                         />
@@ -172,5 +169,3 @@ export default function JournalInfoSettingsPage() {
     </div>
   );
 }
-
-    
