@@ -16,7 +16,7 @@ interface FileUploaderProps {
   onUploadComplete: (url: string, key: string) => void;
   onUploadError: (error: Error) => void;
   onFileSelect?: (file: File | null) => void;
-  value?: string; // Add value prop to accept the current URL
+  value?: string;
 }
 
 export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFileSelect, value }: FileUploaderProps) {
@@ -24,7 +24,6 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFile
   const [fileName, setFileName] = useState<string | null>(null);
   const [localValue, setLocalValue] = useState(value);
 
-  // Moved useUploadThing to the top level of the component.
   const { startUpload } = useUploadThing(endpoint, {
     onClientUploadComplete: (res) => {
         if (res && res[0]) {
@@ -35,6 +34,11 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFile
     onUploadError: (error: Error) => {
         onUploadError(error);
     },
+    headers: async () => {
+        if (!user) return {};
+        const token = await user.getIdToken();
+        return { Authorization: `Bearer ${token}` };
+    },
   });
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -43,14 +47,9 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFile
       setFileName(file.name);
       if (onFileSelect) {
         onFileSelect(file);
-      }
-      
-      // If onFileSelect is not provided, start the upload immediately.
-      // This is for settings pages that don't need a separate submit button.
-      if (!onFileSelect) {
+      } else {
          startUpload([file]);
       }
-
     }
   }, [onFileSelect, startUpload]);
 
@@ -70,7 +69,6 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFile
     }
   };
 
-  // If a value is provided (URL) and no new file is being selected, show the current file and a change button
   if (localValue && !fileName) {
       return (
           <div className="flex items-center gap-4">
@@ -87,7 +85,7 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFile
                   variant="outline"
                   onClick={() => {
                       setLocalValue('');
-                      onUploadComplete('', ''); // Notify form that value is cleared
+                      onUploadComplete('', ''); 
                   }}
               >
                   Change
@@ -95,7 +93,6 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFile
           </div>
       )
   }
-
 
   if (fileName) {
     return (
