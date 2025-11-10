@@ -1,11 +1,11 @@
-
+import { getApps, initializeApp, cert } from "firebase-admin/app";
 import * as admin from 'firebase-admin';
 
 // Initialize Firebase Admin SDK only once.
-if (!admin.apps.length) {
+if (!getApps().length) {
   try {
-    admin.initializeApp({
-      credential: admin.credential.cert({
+    initializeApp({
+      credential: cert({
         projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
         clientEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
         privateKey: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
@@ -17,5 +17,4 @@ if (!admin.apps.length) {
   }
 }
 
-// Export the initialized admin app
 export default admin;

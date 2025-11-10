@@ -4,10 +4,10 @@
 import { useUploadThing } from '@/lib/uploadthing';
 import { UploadCloud, File as FileIcon, X, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { Button } from './ui/button';
 import { cn } from '@/lib/utils';
-import { OurFileRouter } from '@/app/api/uploadthing/core';
+import type { OurFileRouter } from '@/lib/uploadthing-router';
 import { useAuth } from '@/contexts/auth-context';
 import Image from 'next/image';
 
@@ -23,16 +23,26 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFile
   const { user } = useAuth();
   const [fileName, setFileName] = useState<string | null>(null);
   const [localValue, setLocalValue] = useState(value);
+  const [isUploading, setIsUploading] = useState(false);
 
-  const { startUpload, isUploading } = useUploadThing(endpoint, {
+  const { startUpload } = useUploadThing(endpoint, {
+    headers: async () => {
+      const token = await user?.getIdToken();
+      return { Authorization: `Bearer ${token}` };
+    },
     onClientUploadComplete: (res) => {
+        setIsUploading(false);
         if (res && res[0]) {
             onUploadComplete(res[0].url, res[0].key);
             setLocalValue(res[0].url);
         }
     },
     onUploadError: (error: Error) => {
+        setIsUploading(false);
         onUploadError(error);
+    },
+    onUploadBegin: () => {
+        setIsUploading(true);
     },
   });
 
@@ -43,7 +53,6 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFile
       if (onFileSelect) {
         onFileSelect(file);
       } else {
-         // This path is for settings pages where the upload is immediate
          startUpload([file]);
       }
     }

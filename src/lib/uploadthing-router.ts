@@ -1,7 +1,5 @@
-
-import 'dotenv/config';
 import { createUploadthing, type FileRouter } from "uploadthing/next";
-import admin from '@/lib/firebase-admin'; // Import the initialized admin app
+import admin from '@/lib/firebase-admin';
 
 const f = createUploadthing({
     errorFormatter: (err) => {
@@ -20,7 +18,6 @@ const handleAuth = async ({ req }: { req: Request }) => {
     }
     const token = authHeader.split(" ")[1];
     
-    // Get the auth service from the initialized admin app
     const auth = admin.auth();
     const decoded = await auth.verifyIdToken(token);
 
@@ -43,7 +40,7 @@ export const ourFileRouter = {
     .onUploadComplete(async ({ metadata, file }) => {
       console.log("Upload complete for userId:", metadata.userId);
       console.log("file url", file.url);
-      return { uploadedBy: metadata.userId, url: file.url };
+      return { uploadedBy: metadata.userId };
     }),
 
   imageUploader: f({
@@ -53,7 +50,7 @@ export const ourFileRouter = {
     .onUploadComplete(async ({ metadata, file }) => {
       console.log("Image upload complete for userId:", metadata.userId);
       console.log("file url", file.url);
-      return { uploadedBy: metadata.userId, url: file.url };
+      return { uploadedBy: metadata.userId };
     }),
 } satisfies FileRouter;
 
