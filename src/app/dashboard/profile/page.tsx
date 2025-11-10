@@ -220,6 +220,7 @@ export default function ProfilePage() {
                         <SelectItem value="Author">Author</SelectItem>
                         <SelectItem value="Reviewer">Reviewer</SelectItem>
                         <SelectItem value="Editor">Editor</SelectItem>
+                        <SelectItem value="Managing Editor">Managing Editor</SelectItem>
                         <SelectItem value="Admin">Admin</SelectItem>
                     </SelectContent>
                 </Select>

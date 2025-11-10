@@ -36,7 +36,7 @@ export default function ReviewersPage() {
   const { toast } = useToast();
   const { userProfile } = useAuth();
 
-  const isAdmin = userProfile?.role === 'Admin';
+  const isAdmin = userProfile?.role === 'Admin' || userProfile?.role === 'Managing Editor';
   const pageTitle = isAdmin ? 'User Directory' : 'Reviewer Directory';
   const pageDescription = isAdmin
     ? 'Find and manage all users in the system.'
@@ -69,7 +69,7 @@ export default function ReviewersPage() {
 
     // For editors, only show users who can be reviewers
     if (!isAdmin) {
-        usersToShow = allUsers.filter(user => ['Reviewer', 'Editor', 'Admin'].includes(user.role));
+        usersToShow = allUsers.filter(user => ['Reviewer', 'Editor', 'Admin', 'Managing Editor'].includes(user.role));
     }
 
     if (!searchTerm) return usersToShow;

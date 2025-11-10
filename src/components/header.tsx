@@ -70,7 +70,7 @@ export function Header() {
     navItems = reviewerNavItems;
   } else if (userProfile?.role === 'Editor') {
     navItems = editorNavItems;
-  } else if (userProfile?.role === 'Admin') {
+  } else if (userProfile?.role === 'Admin' || userProfile?.role === 'Managing Editor') {
     navItems = adminNavItems;
   }
 
@@ -148,7 +148,7 @@ export function Header() {
               <span>Profile</span>
             </Link>
           </DropdownMenuItem>
-          {(userProfile?.role === 'Admin') && (
+          {(userProfile?.role === 'Admin' || userProfile?.role === 'Managing Editor') && (
             <DropdownMenuItem asChild>
                 <Link href="/dashboard/settings">
                 <Settings className="mr-2 h-4 w-4" />

@@ -20,7 +20,7 @@ export const UserProfileSchema = z.object({
   email: z.string().email(),
   displayName: z.string(),
   photoURL: z.string().url().optional(),
-  role: z.enum(['Editor', 'Author', 'Reviewer', 'Admin']),
+  role: z.enum(['Editor', 'Author', 'Reviewer', 'Admin', 'Managing Editor']),
   specialization: z.string().optional(),
 });
 

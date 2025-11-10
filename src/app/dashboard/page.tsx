@@ -17,7 +17,7 @@ export default function DashboardRedirectPage() {
 
     if (userProfile) {
       const { role } = userProfile;
-      if (role === 'Editor' || role === 'Admin') {
+      if (role === 'Editor' || role === 'Admin' || role === 'Managing Editor') {
         router.replace('/dashboard/editor');
       } else if (role === 'Author') {
         router.replace('/dashboard/author');

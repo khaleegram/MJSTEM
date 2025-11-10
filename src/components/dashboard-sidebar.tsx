@@ -69,7 +69,7 @@ export function DashboardSidebar() {
     navItems = reviewerNavItems;
   } else if (userProfile?.role === 'Editor') {
     navItems = editorNavItems;
-  } else if (userProfile?.role === 'Admin') {
+  } else if (userProfile?.role === 'Admin' || userProfile?.role === 'Managing Editor') {
     navItems = adminNavItems;
   }
 

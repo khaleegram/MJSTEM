@@ -18,7 +18,7 @@ service cloud.firestore {
     }
     
     function isAdmin() {
-      return isRole('Admin');
+      return isRole('Admin') || isRole('Managing Editor');
     }
     
     function isEditor() {

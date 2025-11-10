@@ -14,6 +14,7 @@ const rolePermissions: { [key: string]: string[] } = {
     'Reviewer': ['/dashboard/reviewer'],
     // Editors have access to everything under /dashboard except other roles' specific views
     'Editor': ['/dashboard/editor', '/dashboard/submissions', '/dashboard/reviewers', '/dashboard/publications'],
+    'Managing Editor': ['/dashboard/editor', '/dashboard/submissions', '/dashboard/reviewers', '/dashboard/publications', '/dashboard/settings'],
     'Admin': ['/dashboard/editor', '/dashboard/submissions', '/dashboard/reviewers', '/dashboard/publications', '/dashboard/settings'], // Admin can also access everything
 };
 
@@ -24,7 +25,7 @@ const isPathAllowed = (role: string, path: string): boolean => {
     }
 
     // Admins can access the import page
-    if (role === 'Admin' && path.startsWith('/dashboard/settings/import')) {
+    if ((role === 'Admin' || role === 'Managing Editor') && path.startsWith('/dashboard/settings/import')) {
         return true;
     }
     
@@ -35,7 +36,7 @@ const isPathAllowed = (role: string, path: string): boolean => {
     }
 
     // Allow editors & admins to access reviewer profiles
-    if ((role === 'Editor' || role === 'Admin') && path.startsWith('/dashboard/reviewers/')) {
+    if ((role === 'Editor' || role === 'Admin' || role === 'Managing Editor') && path.startsWith('/dashboard/reviewers/')) {
         return true;
     }
 
@@ -72,6 +73,9 @@ export default function DashboardLayout({
                     defaultPath = '/dashboard/reviewer';
                     break;
                 case 'Editor':
+                    defaultPath = '/dashboard/editor';
+                    break;
+                 case 'Managing Editor':
                     defaultPath = '/dashboard/editor';
                     break;
                 case 'Admin':

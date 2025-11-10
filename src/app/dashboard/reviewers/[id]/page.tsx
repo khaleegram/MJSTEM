@@ -72,6 +72,7 @@ const RoleManagementCard = ({ user, onRoleUpdate }: { user: UserProfile, onRoleU
                         <SelectItem value="Author">Author</SelectItem>
                         <SelectItem value="Reviewer">Reviewer</SelectItem>
                         <SelectItem value="Editor">Editor</SelectItem>
+                        <SelectItem value="Managing Editor">Managing Editor</SelectItem>
                         <SelectItem value="Admin">Admin</SelectItem>
                     </SelectContent>
                 </Select>
@@ -194,7 +195,7 @@ export default function ReviewerProfilePage() {
     notFound();
   }
   
-  const isAdmin = adminProfile?.role === 'Admin';
+  const isAdmin = adminProfile?.role === 'Admin' || adminProfile?.role === 'Managing Editor';
   
   const getInitials = (name: string) => {
     const names = name.split(' ');
