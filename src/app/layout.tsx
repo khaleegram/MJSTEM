@@ -7,7 +7,7 @@ import { Inter as FontSans } from 'next/font/google';
 import { AuthProvider } from '@/contexts/auth-context';
 import { ThemeProvider } from '@/components/theme-provider';
 import { FirebaseErrorListener } from '@/components/firebase-error-listener';
-import { getDoc, doc } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 export const metadata: Metadata = {
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     type: 'website',
-    url: 'https://mjstem.com', // Replace with your actual domain
+    url: 'https://mjstem.org',
     title: 'MJSTEM - Multidisciplinary Journal',
     description: 'A premier, peer-reviewed, open-access journal.',
     siteName: 'MJSTEM',
@@ -35,12 +35,6 @@ export const metadata: Metadata = {
   }
 };
 
-
-const fontSans = FontSans({
-  subsets: ['latin'],
-  variable: '--font-sans',
-});
-
 async function getLogoUrl() {
     try {
         const docRef = doc(db, 'settings', 'branding');
@@ -49,10 +43,15 @@ async function getLogoUrl() {
             return docSnap.data().logoUrl;
         }
     } catch (e) {
-        console.error("Could not pre-fetch logo:", e);
+        console.error("Could not fetch logo for layout", e);
     }
     return null;
 }
+
+const fontSans = FontSans({
+  subsets: ['latin'],
+  variable: '--font-sans',
+});
 
 export default async function RootLayout({
   children,
@@ -68,7 +67,11 @@ export default async function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,700;1,7..72,400&family=PT+Sans:wght@400;700&display=swap" rel="stylesheet" />
-        {logoUrl ? <link rel="icon" href={logoUrl} type="image/png" sizes="any" /> : <link rel="icon" href="/favicon.ico" />}
+        {logoUrl ? (
+          <link rel="icon" href={logoUrl} type="image/png" sizes="any" />
+        ) : (
+          <link rel="icon" href="/favicon.ico" sizes="any" />
+        )}
         <link rel="apple-touch-icon" href="/icons/apple/apple-touch-icon.png" />
       </head>
       <body className={cn("font-body antialiased", fontSans.variable)}>

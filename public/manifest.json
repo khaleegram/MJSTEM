@@ -1,12 +1,17 @@
 {
-  "name": "MJSTEM - Multidisciplinary Journal",
+  "name": "MJSTEM",
   "short_name": "MJSTEM",
   "description": "A premier, peer-reviewed, open-access journal for science, technology, education, and management.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#111827",
+  "background_color": "#F5F5DC",
+  "theme_color": "#90EE90",
   "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "any",
+      "type": "image/x-icon"
+    },
     {
       "src": "/icons/android/android-launchericon-192-192.png",
       "sizes": "192x192",
