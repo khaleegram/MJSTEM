@@ -214,7 +214,7 @@ export default async function AuthorGuidelinesPage() {
                     </Card>
                      <Card>
                         <CardHeader>
-                            <CardTitle className="font-headline">ISSN</CardTitle>
+                            <CardTitle className="font-headline">ISSN (Print)</CardTitle>
                         </CardHeader>
                         <CardContent>
                             <p className="text-muted-foreground">3121-6552</p>
