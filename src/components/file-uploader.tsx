@@ -16,11 +16,10 @@ interface FileUploaderProps {
   endpoint: keyof OurFileRouter;
   onUploadComplete: (url: string, key?: string) => void;
   onUploadError: (error: Error) => void;
-  onFileSelect?: (file: File | null) => void;
   value?: string;
 }
 
-export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFileSelect, value }: FileUploaderProps) {
+export function FileUploader({ endpoint, onUploadComplete, onUploadError, value }: FileUploaderProps) {
   const { user } = useAuth();
   const [uploadProgress, setUploadProgress] = useState(0);
   const [localValue, setLocalValue] = useState(value);
@@ -40,6 +39,7 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFile
         onUploadError(new Error("Upload failed: No response from server."));
         return;
       };
+      setFileName(res[0].name);
       setLocalValue(res[0].url);
       onUploadComplete(res[0].url, res[0].key);
       setUploadProgress(0); // Reset progress
@@ -57,14 +57,10 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFile
       if (acceptedFiles.length > 0) {
         const file = acceptedFiles[0];
         setFileName(file.name);
-        if (onFileSelect) {
-            onFileSelect(file);
-        } else {
-            startUpload([file]).catch(onUploadError);
-        }
+        startUpload([file]).catch(onUploadError);
       }
     },
-    [startUpload, user, onUploadError, onFileSelect]
+    [startUpload, user, onUploadError]
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, multiple: false });
@@ -83,15 +79,15 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFile
     );
   }
   
-  if (fileName && !onFileSelect) {
+  if (localValue) {
      return (
           <div className="flex items-center gap-4">
-              {isImageUploader && localValue ? (
+              {isImageUploader ? (
                   <Image src={localValue} alt="Current file" width={64} height={64} className="rounded-md object-contain border p-1" />
               ) : (
                   <div className="p-4 rounded-lg border flex items-center gap-3">
                       <FileIcon className="h-6 w-6 text-primary" />
-                      <p className="text-sm font-medium truncate max-w-[200px]">{fileName}</p>
+                      <p className="text-sm font-medium truncate max-w-[200px]">{fileName || 'Uploaded File'}</p>
                   </div>
               )}
               <Button
@@ -100,7 +96,6 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFile
                   onClick={() => {
                       setLocalValue('');
                       setFileName(null);
-                      if (onFileSelect) onFileSelect(null);
                       onUploadComplete('', ''); 
                   }}
               >
@@ -108,28 +103,6 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFile
               </Button>
           </div>
       )
-  }
-  
-   if (fileName && onFileSelect) {
-    return (
-      <div className="p-4 rounded-lg border flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Icon className="h-6 w-6 text-primary" />
-          <p className="text-sm font-medium">{fileName}</p>
-        </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={() => {
-            setFileName(null);
-            if (onFileSelect) onFileSelect(null);
-          }}
-        >
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
-    );
   }
 
   return (

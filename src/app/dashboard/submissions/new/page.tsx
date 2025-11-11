@@ -25,7 +25,7 @@ import { Trash2, PlusCircle, Download } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/auth-context';
 import { useState, useEffect } from 'react';
-import { ContributorSchema } from '@/lib/data-schemas';
+import { ContributorSchema, NewSubmissionSchema } from '@/lib/data-schemas';
 import { Checkbox } from '@/components/ui/checkbox';
 import { FileUploader } from '@/components/file-uploader';
 import { errorEmitter } from '@/firebase/error-emitter';
@@ -35,12 +35,7 @@ import Link from 'next/link';
 import { useUploadThing } from '@/lib/uploadthing';
 
 
-const formSchema = z.object({
-  title: z.string().min(10, 'Title must be at least 10 characters long.'),
-  abstract: z.string().min(50, 'Abstract must be at least 50 characters long.'),
-  keywords: z.string().min(3, 'Please provide at least one keyword.'),
-  contributors: z.array(ContributorSchema).min(1, 'At least one contributor is required.'),
-});
+const formSchema = NewSubmissionSchema;
 
 export default function NewSubmissionPage() {
   const router = useRouter();
@@ -48,10 +43,7 @@ export default function NewSubmissionPage() {
   const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [templateUrl, setTemplateUrl] = useState('');
-  const [file, setFile] = useState<File | null>(null);
-  const { startUpload, isUploading } = useUploadThing("documentUploader");
-
-
+  
   useEffect(() => {
     const getTemplateUrl = async () => {
         try {
@@ -73,6 +65,7 @@ export default function NewSubmissionPage() {
       title: '',
       abstract: '',
       keywords: '',
+      manuscriptUrl: '',
       contributors: [],
     },
   });
@@ -115,10 +108,10 @@ export default function NewSubmissionPage() {
         return;
     }
     
-    if (!file) {
+    if (!values.manuscriptUrl) {
       toast({
         title: "Manuscript file is required",
-        description: "Please select your manuscript file before submitting.",
+        description: "Please upload your manuscript file before submitting.",
         variant: "destructive",
       });
       return;
@@ -133,12 +126,6 @@ export default function NewSubmissionPage() {
     setIsSubmitting(true);
 
     try {
-      const uploadRes = await startUpload([file]);
-      if (!uploadRes || !uploadRes[0]) {
-        throw new Error("File upload failed to return a result.");
-      }
-      const manuscriptUrl = uploadRes[0].url;
-
       const submissionData = {
           author: { id: user.uid, name: primaryContact.name, email: primaryContact.email },
           status: 'Submitted' as const,
@@ -146,7 +133,7 @@ export default function NewSubmissionPage() {
           title: values.title,
           abstract: values.abstract,
           keywords: values.keywords,
-          manuscriptUrl: manuscriptUrl,
+          manuscriptUrl: values.manuscriptUrl,
           contributors: values.contributors,
           reviewers: [],
           reviewerIds: [],
@@ -260,25 +247,33 @@ export default function NewSubmissionPage() {
                         )}
                     />
                     
-                    <FormItem>
-                        <FormLabel>Manuscript File</FormLabel>
-                        <FormControl>
-                            <FileUploader
-                                endpoint="documentUploader"
-                                onUploadComplete={(url, key) => {}}
-                                onUploadError={(error) => {
-                                    toast({
-                                        title: 'Upload Failed',
-                                        description: error.message,
-                                        variant: 'destructive'
-                                    })
-                                }}
-                                onFileSelect={setFile}
-                            />
-                        </FormControl>
-                            <FormDescription>Please upload your manuscript in .docx format.</FormDescription>
-                         <FormMessage />
-                    </FormItem>
+                    <FormField
+                        control={form.control}
+                        name="manuscriptUrl"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Manuscript File</FormLabel>
+                                <FormControl>
+                                    <FileUploader
+                                        endpoint="documentUploader"
+                                        value={field.value}
+                                        onUploadComplete={(url) => {
+                                            field.onChange(url);
+                                        }}
+                                        onUploadError={(error) => {
+                                            toast({
+                                                title: 'Upload Failed',
+                                                description: error.message,
+                                                variant: 'destructive'
+                                            })
+                                        }}
+                                    />
+                                </FormControl>
+                                <FormDescription>Please upload your manuscript in .docx format.</FormDescription>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
                 </CardContent>
             </Card>
 
@@ -380,8 +375,8 @@ export default function NewSubmissionPage() {
 
 
             <div className="flex justify-end">
-                <Button type="submit" disabled={isSubmitting || isUploading} size="lg">
-                    {isUploading ? 'Uploading file...' : isSubmitting ? 'Submitting...' : 'Submit Manuscript'}
+                <Button type="submit" disabled={isSubmitting} size="lg">
+                    {isSubmitting ? 'Submitting...' : 'Submit Manuscript'}
                 </Button>
             </div>
         </form>

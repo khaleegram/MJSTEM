@@ -15,6 +15,15 @@ export const ContributorSchema = z.object({
   isPrimaryContact: z.boolean().default(false),
 });
 
+export const NewSubmissionSchema = z.object({
+  title: z.string().min(10, 'Title must be at least 10 characters long.'),
+  abstract: z.string().min(50, 'Abstract must be at least 50 characters long.'),
+  keywords: z.string().min(3, 'Please provide at least one keyword.'),
+  manuscriptUrl: z.string().url('Manuscript file is required.'),
+  contributors: z.array(ContributorSchema).min(1, 'At least one contributor is required.'),
+});
+
+
 export const UserProfileSchema = z.object({
   uid: z.string(),
   email: z.string().email(),
