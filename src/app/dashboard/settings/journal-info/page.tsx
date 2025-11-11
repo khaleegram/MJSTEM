@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useForm } from 'react-hook-form';
@@ -70,10 +69,15 @@ export default function JournalInfoSettingsPage() {
     try {
       const docRef = doc(db, 'settings', 'journalInfo');
       await setDoc(docRef, values, { merge: true });
+      
+      // Call the API route to revalidate the homepage path
+      await fetch('/api/revalidate?path=/');
+      
       toast({
         title: 'Settings Saved',
-        description: 'Your journal information has been updated.',
+        description: 'Your journal information has been updated. The homepage may take a moment to reflect changes.',
       });
+
     } catch (error) {
       console.error("Error saving journal info:", error);
       toast({
