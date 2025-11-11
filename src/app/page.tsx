@@ -11,7 +11,7 @@ import { db } from '@/lib/firebase';
 import Image from 'next/image';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
-export const revalidate = 0; // Force dynamic rendering
+export const dynamic = 'force-dynamic';
 
 const HowItWorksCard = ({ icon, title, children }: { icon: React.ReactNode, title: string, children: React.ReactNode }) => (
   <Card className="overflow-hidden bg-card/50 backdrop-blur-sm border-border/20 shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 group flex flex-col">
@@ -65,8 +65,8 @@ export default async function HomePage() {
                 </div>
               )}
               <div className={journalInfo.coverLetterUrl ? 'md:col-span-3 text-center md:text-left' : 'md:col-span-5 text-center'}>
-                 <h1 className="text-4xl md:text-6xl font-extrabold font-headline tracking-tight drop-shadow-md">
-                    MJSTEM
+                 <h1 className="text-4xl md:text-5xl font-extrabold font-headline tracking-tight drop-shadow-md">
+                    Multidisciplinary Journal of Science, Technology, Education and Management (MJSTEM)
                 </h1>
                 {latestIssue ? (
                   <p className="mt-6 max-w-2xl mx-auto md:mx-0 text-lg md:text-xl text-muted-foreground drop-shadow-sm font-body">
