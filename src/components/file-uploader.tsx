@@ -22,18 +22,11 @@ interface FileUploaderProps {
 export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFileSelect, value }: FileUploaderProps) {
   const { user } = useAuth();
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [fileName, setFileName] = useState<string | null>(value ? value.split('/').pop()?.split('?')[0] || 'Uploaded file' : null);
   const [localValue, setLocalValue] = useState(value);
+  const [fileName, setFileName] = useState<string | null>(value ? value.split('/').pop()?.split('?')[0] || 'Uploaded file' : null);
 
 
   const { startUpload, isUploading } = useUploadThing(endpoint, {
-    headers: async () => {
-      if (!user) {
-        throw new Error('Not authenticated');
-      }
-      const token = await user.getIdToken();
-      return { Authorization: `Bearer ${token}` };
-    },
     onClientUploadComplete: (res) => {
       if (!res?.[0]) {
         onUploadError(new Error("Upload failed: No response from server."));
@@ -90,7 +83,7 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFile
               ) : (
                   <div className="p-4 rounded-lg border flex items-center gap-3">
                       <FileIcon className="h-6 w-6 text-primary" />
-                      <p className="text-sm font-medium truncate max-w-[200px]">{localValue.split('/').pop()?.split('?')[0]}</p>
+                      <p className="text-sm font-medium truncate max-w-[200px]">{fileName}</p>
                   </div>
               )}
               <Button
