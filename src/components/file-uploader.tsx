@@ -82,9 +82,9 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFile
       </div>
     );
   }
-
-  if (localValue) {
-      return (
+  
+  if (fileName && !onFileSelect) {
+     return (
           <div className="flex items-center gap-4">
               {isImageUploader && localValue ? (
                   <Image src={localValue} alt="Current file" width={64} height={64} className="rounded-md object-contain border p-1" />
@@ -108,6 +108,28 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFile
               </Button>
           </div>
       )
+  }
+  
+   if (fileName && onFileSelect) {
+    return (
+      <div className="p-4 rounded-lg border flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Icon className="h-6 w-6 text-primary" />
+          <p className="text-sm font-medium">{fileName}</p>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={() => {
+            setFileName(null);
+            if (onFileSelect) onFileSelect(null);
+          }}
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+    );
   }
 
   return (
