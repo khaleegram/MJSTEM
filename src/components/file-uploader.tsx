@@ -27,6 +27,13 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, onFile
 
 
   const { startUpload, isUploading } = useUploadThing(endpoint, {
+    headers: async () => {
+      if (!user) {
+        throw new Error('Not authenticated');
+      }
+      const token = await user.getIdToken();
+      return { Authorization: `Bearer ${token}` };
+    },
     onClientUploadComplete: (res) => {
       if (!res?.[0]) {
         onUploadError(new Error("Upload failed: No response from server."));
