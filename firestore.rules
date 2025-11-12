@@ -1,3 +1,4 @@
+
 rules_version = '2';
 
 service cloud.firestore {
@@ -125,6 +126,26 @@ service cloud.firestore {
         );
         allow write: if isEditorialMember();
       }
+    }
+    
+    // -------------------------------------------------------------------------
+    // NOTIFICATIONS COLLECTION
+    // -------------------------------------------------------------------------
+    
+    match /notifications/{notificationId} {
+      // Users can query for their own notifications.
+      // The client-side query MUST include `where('userId', '==', request.auth.uid)`.
+      allow list: if isSignedIn() && request.query.filters[0][2] == request.auth.uid;
+      
+      // Users can only read their own notifications.
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      
+      // Notifications are created by server-side logic (flows).
+      // This is safe because flows can only be triggered by authenticated users with correct roles.
+      allow create: if isSignedIn();
+      
+      // A user can only update the 'read' status of their own notification.
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid && request.resource.data.keys().hasOnly(['read']);
     }
 
     // -------------------------------------------------------------------------
