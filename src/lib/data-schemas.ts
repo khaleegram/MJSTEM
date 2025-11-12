@@ -61,6 +61,7 @@ export const SubmissionSchema = z.object({
   abstract: z.string().min(50, 'Abstract must be at least 50 characters long.'),
   keywords: z.string().min(3, 'Please provide at least one keyword.'),
   manuscriptUrl: z.string().url().min(1, 'Manuscript file is required.'),
+  originalManuscriptUrl: z.string().url().optional(),
   reviewers: z.array(AssignedReviewerSchema).optional(),
   reviewerIds: z.array(z.string()).optional(), // For querying
   originalSubmissionDate: z.date().optional().nullable(),

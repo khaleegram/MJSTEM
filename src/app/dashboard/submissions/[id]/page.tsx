@@ -214,11 +214,21 @@ const AuthorRevisionForm = ({ submission, onRevisionSubmit }: { submission: Subm
 
         const submissionRef = doc(db, 'submissions', submission.id);
         const newStatus = 'Under Initial Review';
-        const updateData = { 
-            manuscriptUrl: fileUrl,
-            status: newStatus
-        };
         
+        // Preserve the old manuscript URL
+        const updateData: {
+            manuscriptUrl: string;
+            status: string;
+            originalManuscriptUrl?: string;
+        } = {
+            manuscriptUrl: fileUrl,
+            status: newStatus,
+        };
+
+        if (!submission.originalManuscriptUrl) {
+            updateData.originalManuscriptUrl = submission.manuscriptUrl;
+        }
+
         updateDoc(submissionRef, updateData)
             .then(async () => {
                 await logSubmissionEvent({
@@ -360,6 +370,7 @@ export default function SubmissionDetailPage() {
                 abstract: data.abstract,
                 keywords: data.keywords,
                 manuscriptUrl: data.manuscriptUrl || '',
+                originalManuscriptUrl: data.originalManuscriptUrl || '',
                 reviewers: data.reviewers || [],
                 reviewerIds: data.reviewerIds || [],
             });
@@ -564,14 +575,30 @@ export default function SubmissionDetailPage() {
             </div>
           </CardContent>
           <CardFooter className="flex-wrap gap-2">
-            {submission.manuscriptUrl && (
+            {submission.originalManuscriptUrl && submission.manuscriptUrl && (
+                 <>
+                    <Button variant="outline" asChild>
+                        <Link href={submission.originalManuscriptUrl} target="_blank" rel="noopener noreferrer">
+                            <Download className="mr-2 h-4 w-4" />
+                            Download Original Manuscript
+                        </Link>
+                    </Button>
+                    <Button variant="outline" asChild>
+                        <Link href={submission.manuscriptUrl} target="_blank" rel="noopener noreferrer">
+                            <Download className="mr-2 h-4 w-4" />
+                            Download Revised Manuscript
+                        </Link>
+                    </Button>
+                 </>
+            )}
+             {(!submission.originalManuscriptUrl && submission.manuscriptUrl) && (
                 <Button variant="outline" asChild>
                     <Link href={submission.manuscriptUrl} target="_blank" rel="noopener noreferrer">
                         <Download className="mr-2 h-4 w-4" />
                         Download Manuscript
                     </Link>
                 </Button>
-            )}
+             )}
           </CardFooter>
         </Card>
 
@@ -680,4 +707,3 @@ export default function SubmissionDetailPage() {
     </div>
   );
 }
-
