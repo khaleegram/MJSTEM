@@ -2,7 +2,7 @@
 'use client';
 
 import { notFound, useParams } from 'next/navigation';
-import { doc, getDoc, updateDoc, arrayUnion, collection, getDocs, addDoc, serverTimestamp, query } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, arrayUnion, collection, getDocs, addDoc, serverTimestamp, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
   Card,
@@ -186,31 +186,24 @@ const ReviewSubmissionForm = ({ submission, onReviewSubmit }: { submission: Subm
 const AuthorRevisionForm = ({ submission, onRevisionSubmit }: { submission: Submission, onRevisionSubmit: () => void }) => {
     const { toast } = useToast();
     const [isSubmitting, setIsSubmitting] = React.useState(false);
-    const [file, setFile] = React.useState<File | null>(null);
-    const { startUpload, isUploading } = useUploadThing("documentUploader");
+    const [fileUrl, setFileUrl] = React.useState<string | null>(null);
     const { userProfile } = useAuth();
 
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!file) {
-            toast({ title: "No file selected", description: "Please upload your revised manuscript.", variant: "destructive" });
+        if (!fileUrl) {
+            toast({ title: "No file uploaded", description: "Please upload your revised manuscript.", variant: "destructive" });
             return;
         }
         setIsSubmitting(true);
 
         try {
-            const uploadRes = await startUpload([file]);
-            if (!uploadRes || !uploadRes[0]) {
-                throw new Error("File upload failed to return a result.");
-            }
-            const newManuscriptUrl = uploadRes[0].url;
-            
             const submissionRef = doc(db, 'submissions', submission.id);
-            const newStatus = 'Under Initial Review'; // Or a new 'Resubmitted' status if you add it
+            const newStatus = 'Under Initial Review';
             
             await updateDoc(submissionRef, { 
-                manuscriptUrl: newManuscriptUrl,
+                manuscriptUrl: fileUrl,
                 status: newStatus
             });
 
@@ -224,7 +217,12 @@ const AuthorRevisionForm = ({ submission, onRevisionSubmit }: { submission: Subm
             onRevisionSubmit();
         } catch (error: any) {
             console.error("Error submitting revision:", error);
-            toast({ title: "Submission Failed", description: error.message, variant: "destructive" });
+            const permissionError = new FirestorePermissionError({
+                path: doc(db, 'submissions', submission.id).path,
+                operation: 'update',
+                requestResourceData: { manuscriptUrl: fileUrl, status: 'Under Initial Review' }
+            });
+            errorEmitter.emit('permission-error', permissionError);
         } finally {
             setIsSubmitting(false);
         }
@@ -240,14 +238,13 @@ const AuthorRevisionForm = ({ submission, onRevisionSubmit }: { submission: Subm
                 <CardContent className="space-y-4">
                     <FileUploader 
                         endpoint="documentUploader" 
-                        onUploadComplete={() => {}} 
+                        onUploadComplete={(url) => setFileUrl(url)} 
                         onUploadError={(err) => toast({ title: "Upload Error", description: err.message, variant: "destructive"})}
-                        onFileSelect={setFile}
                     />
                 </CardContent>
                 <CardFooter>
-                    <Button type="submit" disabled={isSubmitting || isUploading}>
-                        {isUploading ? 'Uploading...' : isSubmitting ? 'Submitting...' : 'Submit Revision'}
+                    <Button type="submit" disabled={isSubmitting}>
+                        {isSubmitting ? 'Submitting...' : 'Submit Revision'}
                     </Button>
                 </CardFooter>
             </form>
@@ -311,7 +308,10 @@ export default function SubmissionDetailPage() {
   React.useEffect(() => {
     const fetchReviewers = async () => {
         try {
-            const q = query(collection(db, 'users'));
+            const q = query(
+                collection(db, 'users'), 
+                where('role', 'in', ['Reviewer', 'Editor', 'Admin', 'Managing Editor'])
+            );
             const querySnapshot = await getDocs(q);
             const users = querySnapshot.docs.map(doc => doc.data() as UserProfile);
             setAvailableReviewers(users);
@@ -484,7 +484,7 @@ export default function SubmissionDetailPage() {
     return notFound();
   }
 
-  const isEditor = userProfile?.role === 'Editor' || userProfile?.role === 'Admin';
+  const isEditor = userProfile?.role === 'Editor' || userProfile?.role === 'Admin' || userProfile?.role === 'Managing Editor';
   const isAuthor = userProfile?.uid === submission.author.id;
   const isReviewer = submission.reviewers?.some(r => r.id === user?.uid);
   const isDecisionMade = submission.status === 'Accepted' || submission.status === 'Rejected';

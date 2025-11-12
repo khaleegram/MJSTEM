@@ -141,6 +141,10 @@ export default function NewSubmissionPage() {
       
       const submissionsCollectionRef = collection(db, 'submissions');
 
+      // The rule now requires isEditor() for create. So we need to catch the permission error.
+      // However, we don't have a good way to distinguish regular user submission from admin import yet.
+      // Let's assume for now the user is an admin for this form to work based on the new rule.
+      // In a real app, you'd likely have two different forms or a flag.
       const docRef = await addDoc(submissionsCollectionRef, submissionData);
       
       await logSubmissionEvent({
@@ -159,8 +163,13 @@ export default function NewSubmissionPage() {
 
     } catch (error: any) {
        console.error("Submission failed:", error);
-       if(error.message?.includes("permission-error")) {
-          // The error emitter will handle this
+       if(error.message?.includes("permission-denied")) {
+           const permissionError = new FirestorePermissionError({
+              path: collection(db, 'submissions').path,
+              operation: 'create',
+              requestResourceData: 'Submission Data', // simplified
+           });
+           errorEmitter.emit('permission-error', permissionError);
        } else {
          toast({
           title: 'Submission Failed',

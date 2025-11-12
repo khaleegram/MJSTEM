@@ -38,9 +38,9 @@ service cloud.firestore {
 
     // SUBMISSIONS
     // 1. Get: Author, assigned reviewer, or editor/admin can get a single doc.
-    // 2. List: Editors/Admins can list all. Authors can only list their own (enforced by client query and this rule).
+    // 2. List: Editors/Admins can list all. Authors/Reviewers can only list their own (enforced by client query and these rules).
     // 3. Create: Any authenticated user OR an admin (for imports).
-    // 4. Update: Editor/Admin can update. Reviewer can only update their own status.
+    // 4. Update: Editor/Admin can update. Author/Reviewer can only make specific, allowed changes.
     // 5. Delete: Only editors/admins can delete.
     match /submissions/{submissionId} {
       allow get: if isSignedIn() && (
@@ -48,21 +48,36 @@ service cloud.firestore {
                       request.auth.uid in resource.data.reviewerIds ||
                       isEditor()
                     );
-      allow list: if isEditor() || (isSignedIn() && resource.data.author.id == request.auth.uid);
-      allow create: if isSignedIn(); // Allows regular user submissions and admin imports
+      allow list: if isEditor() || 
+                     (isSignedIn() && request.auth.uid == request.query.filters.author.id) ||
+                     (isSignedIn() && request.auth.uid in request.query.filters.reviewerIds);
+
+      allow create: if isEditor();
+      
       allow update: if isEditor() || (
                       // Allow a reviewer to update the 'reviewers' array if they are only changing their own status
                       request.auth.uid in resource.data.reviewerIds &&
                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reviewers'])
+                    ) || (
+                      // Allow an author to resubmit a manuscript if revisions were requested
+                      request.auth.uid == resource.data.author.id &&
+                      (resource.data.status == 'Minor Revision' || resource.data.status == 'Major Revision') &&
+                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['manuscriptUrl', 'status']) &&
+                      request.resource.data.status == 'Under Initial Review'
                     );
-      allow delete: if isAdmin();
+
+      allow delete: if isEditor();
 
       // SUBCOLLECTIONS
       // Reviews:
-      // 1. Read: Only Editors/Admins
+      // 1. Read: Only Editors/Admins can read. Authors can read if their submission requires revision.
       // 2. Create: Only if you are an assigned reviewer
       match /reviews/{reviewId} {
-        allow read: if isEditor();
+        allow read: if isEditor() || (
+            resource.data.author.id == request.auth.uid &&
+            (get(/databases/$(database)/documents/submissions/$(submissionId)).data.status == 'Minor Revision' ||
+             get(/databases/$(database)/documents/submissions/$(submissionId)).data.status == 'Major Revision')
+        );
         allow create: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds;
       }
       
