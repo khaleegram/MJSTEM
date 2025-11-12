@@ -49,7 +49,7 @@ service cloud.firestore {
                       isEditor()
                     );
       allow list: if isEditor() || 
-                     (isSignedIn() && request.auth.uid == request.query.filters.author.id) ||
+                     (isSignedIn() && request.query.filters.author.id == request.auth.uid) ||
                      (isSignedIn() && request.auth.uid in request.query.filters.reviewerIds);
 
       allow create: if isEditor();
