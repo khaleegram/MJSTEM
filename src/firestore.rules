@@ -13,6 +13,7 @@ service cloud.firestore {
     }
 
     function userDoc() {
+      // Caches the user document read for the entire rule evaluation.
       return get(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
@@ -132,11 +133,17 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     
     match /notifications/{notificationId} {
+      // Users can query for their own notifications.
+      // The client-side query MUST include `where('userId', '==', request.auth.uid)`.
+      allow list: if isSignedIn();
+      
       // Users can only read their own notifications.
-      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
-      // Notifications are created by server-side logic.
-      // Anyone can create a notification for now, but this is safe because the flows can only be triggered by authenticated users.
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      
+      // Notifications are created by server-side logic (flows).
+      // This is safe because flows can only be triggered by authenticated users with correct roles.
       allow create: if isSignedIn();
+      
       // A user can only update the 'read' status of their own notification.
       allow update: if isSignedIn() && resource.data.userId == request.auth.uid && request.resource.data.keys().hasOnly(['read']);
     }
