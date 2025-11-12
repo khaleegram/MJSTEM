@@ -18,7 +18,7 @@ service cloud.firestore {
     }
 
     function userRole() {
-      return isSignedIn() ? userDoc().data.role : null;
+      return isSignedIn() && exists(userDoc()) ? userDoc().data.role : null;
     }
 
     function isRole(role) {
@@ -79,7 +79,7 @@ service cloud.firestore {
       allow get: if isSignedIn() && (
         resource.data.author.id == request.auth.uid || // Author can get their own
         request.auth.uid in resource.data.reviewerIds || // Assigned reviewer can get
-        isEditorialMember() // Editorial staff can get any
+        userRole() in ['Editor', 'Managing Editor', 'Admin'] // Editorial staff can get any
       );
 
       // Create a new submission
@@ -87,15 +87,13 @@ service cloud.firestore {
 
       // Update a submission
       allow update: if (
-        // Editorial staff can update anything
+        // Editorial staff can update
         isEditorialMember() ||
         // Author resubmission flow
         (
           isAuthor() &&
           request.auth.uid == resource.data.author.id &&
-          (resource.data.status == 'Minor Revision' || resource.data.status == 'Major Revision') &&
-          request.resource.data.keys().hasOnly(['manuscriptUrl', 'status']) &&
-          request.resource.data.status == 'Under Initial Review'
+          (resource.data.status == 'Minor Revision' || resource.data.status == 'Major Revision')
         )
       );
 
@@ -108,11 +106,13 @@ service cloud.firestore {
           isEditorialMember() ||
           // Authors can read reviews ONLY when revision is requested
           (isAuthor() &&
+           exists(/databases/$(database)/documents/submissions/$(submissionId)) &&
            get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid &&
            get(/databases/$(database)/documents/submissions/$(submissionId)).data.status in ['Minor Revision', 'Major Revision'])
         );
         allow create: if (
           isReviewer() &&
+          exists(/databases/$(database)/documents/submissions/$(submissionId)) &&
           request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds
         );
       }
@@ -121,8 +121,13 @@ service cloud.firestore {
       match /history/{historyId} {
         allow read: if (
           isEditorialMember() ||
-          get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid ||
-          request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds
+          (
+            exists(/databases/$(database)/documents/submissions/$(submissionId)) &&
+            (
+              get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid ||
+              request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds
+            )
+          )
         );
         allow write: if isEditorialMember();
       }
@@ -141,8 +146,7 @@ service cloud.firestore {
       allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
       
       // Notifications are created by server-side logic (flows).
-      // This is safe because flows can only be triggered by authenticated users with correct roles.
-      allow create: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       
       // A user can only update the 'read' status of their own notification.
       allow update: if isSignedIn() && resource.data.userId == request.auth.uid && request.resource.data.keys().hasOnly(['read']);
