@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -147,7 +148,7 @@ const MemberForm = ({ member, onSave, onCancel, allUsers }: { member?: Editorial
             <FormItem><FormLabel>Name</FormLabel><FormControl><Input {...field} placeholder="e.g., Dr. Jane Doe" disabled={!isManual} /></FormControl><FormMessage /></FormItem>
             )} />
             <FormField control={form.control} name="qualifications" render={({ field }) => (
-            <FormItem><FormLabel>Qualifications</FormLabel><FormControl><Input {...field} placeholder="e.g., PhD" disabled={!isManual} /></FormControl><FormMessage /></FormItem>
+            <FormItem><FormLabel>Qualifications</FormLabel><FormControl><Input {...field} placeholder="e.g., PhD" /></FormControl><FormMessage /></FormItem>
             )} />
         </div>
         <div className="grid grid-cols-2 gap-4">
@@ -155,7 +156,7 @@ const MemberForm = ({ member, onSave, onCancel, allUsers }: { member?: Editorial
             <FormItem><FormLabel>Affiliation</FormLabel><FormControl><Input {...field} placeholder="e.g., University of Science" disabled={!isManual} /></FormControl><FormMessage /></FormItem>
             )} />
             <FormField control={form.control} name="country" render={({ field }) => (
-            <FormItem><FormLabel>Country</FormLabel><FormControl><Input {...field} placeholder="e.g., Nigeria" disabled={!isManual} /></FormControl><FormMessage /></FormItem>
+            <FormItem><FormLabel>Country</FormLabel><FormControl><Input {...field} placeholder="e.g., Nigeria" /></FormControl><FormMessage /></FormItem>
             )} />
         </div>
         <FormField control={form.control} name="role" render={({ field }) => (

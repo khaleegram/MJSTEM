@@ -257,7 +257,7 @@ export default function PublicationsPage() {
                   id: article.id, 
                   title: article.title, 
                   authorName: article.author.name,
-                  manuscriptUrl: article.manuscriptUrl, // This was the missing field
+                  manuscriptUrl: article.manuscriptUrl,
                 };
                 
                 const currentData = volumeDoc.data() as Volume;

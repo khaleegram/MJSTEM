@@ -111,7 +111,7 @@ const ReviewSubmissionForm = ({ submission, onReviewSubmit }: { submission: Subm
             await logSubmissionEvent({
                 submissionId: submission.id,
                 eventType: 'REVIEW_SUBMITTED',
-                context: { reviewerName: user?.displayName || 'A reviewer' }
+                context: { reviewerName: userProfile?.displayName || 'A reviewer' }
             });
             
             toast({ title: "Review Submitted", description: "Thank you for your contribution. The editor has been notified." });
@@ -212,7 +212,7 @@ const AuthorRevisionForm = ({ submission, onRevisionSubmit }: { submission: Subm
             await logSubmissionEvent({
                 submissionId: submission.id,
                 eventType: 'STATUS_CHANGED',
-                context: { actorName: userProfile?.displayName || 'Author', status: 'Revision Submitted' }
+                context: { actorName: userProfile?.displayName || 'Author', status: `Revision Submitted (${submission.status})` }
             });
 
             toast({ title: "Revision Submitted", description: "Your updated manuscript has been sent to the editor." });
@@ -401,7 +401,7 @@ export default function SubmissionDetailPage() {
   }
 
   const handleAssignReviewer = (reviewer: UserProfile) => {
-      if(!submission) return;
+      if(!submission || !userProfile) return;
 
       // Prevent assigning the same reviewer twice
       if (submission.reviewerIds?.includes(reviewer.uid)) {
@@ -437,13 +437,13 @@ export default function SubmissionDetailPage() {
             await logSubmissionEvent({
                 submissionId: submission.id,
                 eventType: 'REVIEWER_ASSIGNED',
-                context: { reviewerName: reviewer.displayName }
+                context: { reviewerName: reviewer.displayName, actorName: userProfile.displayName }
             });
-            if (updateData.status && userProfile) {
+            if (updateData.status) {
                  await logSubmissionEvent({
                     submissionId: submission.id,
                     eventType: 'STATUS_CHANGED',
-                    context: { actorName: userProfile.displayName, status: 'Under Peer Review' }
+                    context: { actorName: userProfile.displayName, status: updateData.status }
                 });
             }
             setRefetchTrigger(prev => prev + 1);
@@ -474,6 +474,7 @@ export default function SubmissionDetailPage() {
   }
   
   const getInitials = (name: string) => {
+    if (!name) return 'U';
     const names = name.split(' ');
     if (names.length > 1) return names[0][0] + names[names.length - 1][0];
     return name.substring(0, 2);
