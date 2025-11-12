@@ -67,7 +67,7 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
 
     match /submissions/{submissionId} {
-      allow list: if isSignedIn(); // Clients should filter on authorId or reviewerIds
+      allow list: if isSignedIn(); // Clients must filter on author.id or reviewerIds
 
       allow get: if isSignedIn() && (
         resource.data.author.id == request.auth.uid ||
@@ -79,11 +79,11 @@ service cloud.firestore {
 
       allow update: if (
         isEditorialMember() ||
+        // Rule for author resubmission
         (
           isAuthor() &&
           request.auth.uid == resource.data.author.id &&
-          (resource.data.status == 'Minor Revision' || resource.data.status == 'Major Revision') &&
-          request.resource.data.keys().hasOnly(['manuscriptUrl', 'status'])
+          (resource.data.status == 'Minor Revision' || resource.data.status == 'Major Revision')
         )
       );
 
@@ -91,6 +91,8 @@ service cloud.firestore {
 
       // --- REVIEWS SUBCOLLECTION ---
       match /reviews/{reviewId} {
+        allow list: if isEditorialMember();
+        
         allow read: if (
           isEditorialMember() ||
           (
@@ -110,6 +112,13 @@ service cloud.firestore {
 
       // --- HISTORY SUBCOLLECTION ---
       match /history/{historyId} {
+        allow list: if (
+            isEditorialMember() ||
+            (
+                exists(/databases/$(database)/documents/submissions/$(submissionId)) &&
+                get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid
+            )
+        );
         allow read: if (
           isEditorialMember() ||
           (
