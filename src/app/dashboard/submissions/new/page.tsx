@@ -25,15 +25,21 @@ import { Trash2, PlusCircle, Download } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/auth-context';
 import { useState, useEffect } from 'react';
-import { ContributorSchema, NewSubmissionSchema } from '@/lib/data-schemas';
+import { ContributorSchema } from '@/lib/data-schemas';
 import { Checkbox } from '@/components/ui/checkbox';
 import { FileUploader } from '@/components/file-uploader';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { logSubmissionEvent } from '@/ai/flows/log-submission-event';
 import Link from 'next/link';
-import { useUploadThing } from '@/lib/uploadthing';
 
+const NewSubmissionSchema = z.object({
+  title: z.string().min(10, 'Title must be at least 10 characters long.'),
+  abstract: z.string().min(50, 'Abstract must be at least 50 characters long.'),
+  keywords: z.string().min(3, 'Please provide at least one keyword.'),
+  manuscriptUrl: z.string().url('Manuscript file is required.'),
+  contributors: z.array(ContributorSchema).min(1, 'At least one contributor is required.'),
+});
 
 const formSchema = NewSubmissionSchema;
 
@@ -99,10 +105,12 @@ export default function NewSubmissionPage() {
   }
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
+    // The user associated with the submission must be an admin/editor
+    // This form is now only for importing submissions.
     if (!user || !user.displayName || !user.email) {
         toast({
             title: 'Authentication Error',
-            description: 'You must be logged in to submit a manuscript.',
+            description: 'You must be logged in as an editor or admin to import a manuscript.',
             variant: 'destructive',
         });
         return;
@@ -127,7 +135,7 @@ export default function NewSubmissionPage() {
 
     try {
       const submissionData = {
-          author: { id: user.uid, name: primaryContact.name, email: primaryContact.email },
+          author: { id: `imported_${Date.now()}`, name: primaryContact.name, email: primaryContact.email },
           status: 'Submitted' as const,
           submittedAt: serverTimestamp(),
           title: values.title,
@@ -141,29 +149,25 @@ export default function NewSubmissionPage() {
       
       const submissionsCollectionRef = collection(db, 'submissions');
 
-      // The rule now requires isEditor() for create. So we need to catch the permission error.
-      // However, we don't have a good way to distinguish regular user submission from admin import yet.
-      // Let's assume for now the user is an admin for this form to work based on the new rule.
-      // In a real app, you'd likely have two different forms or a flag.
       const docRef = await addDoc(submissionsCollectionRef, submissionData);
       
       await logSubmissionEvent({
           submissionId: docRef.id,
           eventType: 'SUBMISSION_CREATED',
-          context: { authorName: primaryContact.name },
+          context: { authorName: `(Imported) ${primaryContact.name}` },
       });
 
       toast({
-          title: 'Submission Successful!',
-          description: 'Your manuscript has been received.',
+          title: 'Import Successful!',
+          description: 'The manuscript has been imported.',
           variant: 'default',
           className: 'bg-green-500 text-white',
       });
-      router.push('/dashboard/author');
+      router.push('/dashboard/editor');
 
     } catch (error: any) {
        console.error("Submission failed:", error);
-       if(error.message?.includes("permission-denied")) {
+       if(error.message?.includes("permission-denied") || error.name === 'FirestorePermissionError') {
            const permissionError = new FirestorePermissionError({
               path: collection(db, 'submissions').path,
               operation: 'create',
@@ -265,9 +269,10 @@ export default function NewSubmissionPage() {
                                 <FormControl>
                                     <FileUploader
                                         endpoint="documentUploader"
-                                        value={field.value}
                                         onUploadComplete={(url) => {
-                                            field.onChange(url);
+                                            if (url) {
+                                                field.onChange(url);
+                                            }
                                         }}
                                         onUploadError={(error) => {
                                             toast({

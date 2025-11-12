@@ -9,12 +9,18 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function getUserData(uid) {
-      return get(/databases/$(database)/documents/users/$(uid)).data;
+    // Efficiently get the signed-in user's document once per evaluation.
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    // Get the user's role from the cached document.
+    function userRole() {
+      return userDoc().data.role;
     }
     
     function isRole(role) {
-      return isSignedIn() && getUserData(request.auth.uid).role == role;
+      return isSignedIn() && userRole() == role;
     }
     
     function isAdmin() {
@@ -38,9 +44,9 @@ service cloud.firestore {
 
     // SUBMISSIONS
     // 1. Get: Author, assigned reviewer, or editor/admin can get a single doc.
-    // 2. List: Editors/Admins can list all. Authors/Reviewers can only list their own (enforced by client query and these rules).
-    // 3. Create: Any authenticated user OR an admin (for imports).
-    // 4. Update: Editor/Admin can update. Author/Reviewer can only make specific, allowed changes.
+    // 2. List: relies on per-document checks. Client query must be correct.
+    // 3. Create: Any editor/admin (for imports).
+    // 4. Update: Editor/Admin can update. Author can resubmit under specific conditions.
     // 5. Delete: Only editors/admins can delete.
     match /submissions/{submissionId} {
       allow get: if isSignedIn() && (
@@ -49,20 +55,16 @@ service cloud.firestore {
                       isEditor()
                     );
       allow list: if isEditor() || 
-                     (isSignedIn() && request.query.filters.author.id == request.auth.uid) ||
-                     (isSignedIn() && request.auth.uid in request.query.filters.reviewerIds);
+                     (isSignedIn() && resource.data.author.id == request.auth.uid) ||
+                     (isSignedIn() && request.auth.uid in resource.data.reviewerIds);
 
       allow create: if isEditor();
       
       allow update: if isEditor() || (
-                      // Allow a reviewer to update the 'reviewers' array if they are only changing their own status
-                      request.auth.uid in resource.data.reviewerIds &&
-                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reviewers'])
-                    ) || (
                       // Allow an author to resubmit a manuscript if revisions were requested
                       request.auth.uid == resource.data.author.id &&
                       (resource.data.status == 'Minor Revision' || resource.data.status == 'Major Revision') &&
-                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['manuscriptUrl', 'status']) &&
+                      request.resource.data.keys().hasOnly(['manuscriptUrl', 'status']) &&
                       request.resource.data.status == 'Under Initial Review'
                     );
 
