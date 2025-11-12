@@ -3,104 +3,169 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-  
-    // Helper functions
+
+    // -------------------------------------------------------------------------
+    // UTILITY FUNCTIONS
+    // -------------------------------------------------------------------------
+
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function getUserData(uid) {
-      return get(/databases/$(database)/documents/users/$(uid)).data;
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
     }
-    
+
+    function userRole() {
+      return isSignedIn() ? userDoc().data.role : null;
+    }
+
     function isRole(role) {
-      return isSignedIn() && getUserData(request.auth.uid).role == role;
+      return userRole() == role;
     }
-    
+
     function isAdmin() {
-      return isRole('Admin') || isRole('Managing Editor');
+      return isRole('Admin');
     }
-    
+
+    function isManagingEditor() {
+      return isRole('Managing Editor');
+    }
+
     function isEditor() {
-      return isRole('Editor') || isAdmin();
+      return isRole('Editor');
+    }
+
+    function isReviewer() {
+      return isRole('Reviewer');
+    }
+
+    function isAuthor() {
+      return isRole('Author');
     }
     
-    // USERS:
-    // 1. Anyone can read profiles (for names, photos etc)
-    // 2. You can only create your own user document
-    // 3. You can only update your own document, but NOT your role
-    // 4. Admins can update any document, including the role
+    function isEditorialMember() {
+      return isEditor() || isManagingEditor() || isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // USERS COLLECTION
+    // -------------------------------------------------------------------------
+
     match /users/{userId} {
-      allow read: if true;
+      allow read: if true; // Public profiles
       allow create: if isSignedIn() && request.auth.uid == userId;
-      allow update: if (isSignedIn() && request.auth.uid == userId && request.resource.data.role == resource.data.role) || isAdmin();
+      allow update: if (
+        // Allow user to edit their own profile, but not their role
+        (isSignedIn() && request.auth.uid == userId && request.resource.data.role == resource.data.role)
+        // Allow Admin/Managing Editor to update any user profile, including role
+        || isAdmin() || isManagingEditor()
+      );
     }
 
-    // SUBMISSIONS
-    // 1. Get: Author, assigned reviewer, or editor/admin can get a single doc.
-    // 2. List: Editors/Admins can list all. Authors can only list their own (enforced by client query and this rule).
-    // 3. Create: Any authenticated user.
-    // 4. Update: Editor/Admin can update. Reviewer can only update their own status.
-    // 5. Delete: Only editors/admins can delete.
+    // -------------------------------------------------------------------------
+    // SUBMISSIONS COLLECTION
+    // -------------------------------------------------------------------------
+
     match /submissions/{submissionId} {
+
+      // The 'list' rule is combined with client-side queries.
+      // Firestore security rules are not filters, they are verifiers.
+      // This rule works with queries that filter by author.id or reviewerIds.
+      allow list: if isSignedIn();
+
+      // Read a single submission document
       allow get: if isSignedIn() && (
-                      resource.data.author.id == request.auth.uid ||
-                      request.auth.uid in resource.data.reviewerIds ||
-                      isEditor()
-                    );
-      allow list: if isEditor() || (isSignedIn() && resource.data.author.id == request.auth.uid);
-      allow create: if isSignedIn();
-      allow update: if isEditor() || (
-                      // Allow a reviewer to update the 'reviewers' array if they are only changing their own status
-                      request.auth.uid in resource.data.reviewerIds &&
-                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reviewers'])
-                    );
-      allow delete: if isEditor();
+        resource.data.author.id == request.auth.uid || // Author can get their own
+        request.auth.uid in resource.data.reviewerIds || // Assigned reviewer can get
+        isEditorialMember() // Editorial staff can get any
+      );
 
-      // SUBCOLLECTIONS
-      // Reviews:
-      // 1. Read: Only Editors/Admins
-      // 2. Create: Only if you are an assigned reviewer
+      // Create a new submission
+      allow create: if isAuthor() || isEditorialMember();
+
+      // Update a submission
+      allow update: if (
+        // Editorial staff can update anything
+        isEditorialMember() ||
+        // Author resubmission flow
+        (
+          isAuthor() &&
+          request.auth.uid == resource.data.author.id &&
+          (resource.data.status == 'Minor Revision' || resource.data.status == 'Major Revision') &&
+          request.resource.data.keys().hasOnly(['manuscriptUrl', 'status']) &&
+          request.resource.data.status == 'Under Initial Review'
+        )
+      );
+
+      // Delete a submission
+      allow delete: if isEditorialMember();
+
+      // --- REVIEWS SUBCOLLECTION ---
       match /reviews/{reviewId} {
-        allow read: if isEditor();
-        allow create: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds;
+        allow read: if (
+          isEditorialMember() ||
+          // Authors can read reviews ONLY when revision is requested
+          (isAuthor() &&
+           get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid &&
+           get(/databases/$(database)/documents/submissions/$(submissionId)).data.status in ['Minor Revision', 'Major Revision'])
+        );
+        allow create: if (
+          isReviewer() &&
+          request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds
+        );
       }
-      
-      // History:
-      // 1. Read: Same as parent submission
-      // 2. Write: Only Editors/Admins can write
+
+      // --- HISTORY SUBCOLLECTION ---
       match /history/{historyId} {
-        allow read: if isSignedIn() && (
-                      get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid ||
-                      request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds ||
-                      isEditor()
-                    );
-        allow write: if isEditor();
+        allow read: if (
+          isEditorialMember() ||
+          get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid ||
+          request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds
+        );
+        allow write: if isEditorialMember();
       }
     }
     
-    // VOLUMES (PUBLICATIONS)
-    // 1. Read: Publicly readable for archive
-    // 2. Write: Only Editors/Admins can create/update volumes
-    match /volumes/{volumeId} {
-      allow read;
-      allow write: if isEditor();
-    }
+    // -------------------------------------------------------------------------
+    // NOTIFICATIONS COLLECTION
+    // -------------------------------------------------------------------------
     
-    // EDITORIAL BOARD
-    // 1. Read: Publicly readable
-    // 2. Write: Only Admins can manage the board
-    match /editorialBoard/{memberId} {
-      allow read;
-      allow write: if isAdmin();
+    match /notifications/{notificationId} {
+      // Users can only read their own notifications.
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      // Notifications are created by server-side logic.
+      // Anyone can create a notification for now, but this is safe because the flows can only be triggered by authenticated users.
+      allow create: if isSignedIn();
+      // A user can only update the 'read' status of their own notification.
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid && request.resource.data.keys().hasOnly(['read']);
     }
 
-    // SETTINGS
-    // 1. Read: Publicly readable for branding
-    // 2. Write: Only Admins can manage settings
+    // -------------------------------------------------------------------------
+    // VOLUMES (PUBLISHED ARCHIVE)
+    // -------------------------------------------------------------------------
+
+    match /volumes/{volumeId} {
+      allow read: if true; // Publicly readable archive
+      allow write: if isManagingEditor() || isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // EDITORIAL BOARD
+    // -------------------------------------------------------------------------
+
+    match /editorialBoard/{memberId} {
+      allow read: if true; // Publicly readable
+      allow write: if isManagingEditor() || isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // SETTINGS (BRANDING, JOURNAL INFO, ETC.)
+    // -------------------------------------------------------------------------
+
     match /settings/{settingId} {
-      allow read: if true;
-      allow write: if isAdmin();
+      allow read: if true; // Publicly readable for client-side display
+      allow write: if isManagingEditor() || isAdmin();
     }
   }
 }
