@@ -141,8 +141,7 @@ service cloud.firestore {
       allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
       
       // Notifications are created by server-side logic (flows).
-      // This is safe because flows can only be triggered by authenticated users with correct roles.
-      allow create: if isSignedIn();
+      allow create: if true;
       
       // A user can only update the 'read' status of their own notification.
       allow update: if isSignedIn() && resource.data.userId == request.auth.uid && request.resource.data.keys().hasOnly(['read']);
