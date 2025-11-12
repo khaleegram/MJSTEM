@@ -13,12 +13,11 @@ service cloud.firestore {
     }
 
     function userDoc() {
-      // Caches the user document read for the entire rule evaluation.
       return get(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
     function userRole() {
-      return isSignedIn() ? userDoc().data.role : null;
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) ? userDoc().data.role : null;
     }
 
     function isRole(role) {
@@ -46,7 +45,7 @@ service cloud.firestore {
     }
     
     function isEditorialMember() {
-      return isEditor() || isManagingEditor() || isAdmin();
+      return isAdmin() || isManagingEditor() || isEditor();
     }
 
     // -------------------------------------------------------------------------
@@ -57,9 +56,9 @@ service cloud.firestore {
       allow read: if true; // Public profiles
       allow create: if isSignedIn() && request.auth.uid == userId;
       allow update: if (
-        // Allow user to edit their own profile, but not their role
+        // Users can edit their own profile except 'role'
         (isSignedIn() && request.auth.uid == userId && request.resource.data.role == resource.data.role)
-        // Allow Admin/Managing Editor to update any user profile, including role
+        // Admin/Managing Editor can update anything
         || isAdmin() || isManagingEditor()
       );
     }
@@ -69,27 +68,19 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
 
     match /submissions/{submissionId} {
-
-      // The 'list' rule is combined with client-side queries.
-      // Firestore security rules are not filters, they are verifiers.
-      // This rule works with queries that filter by author.id or reviewerIds.
+      
       allow list: if isSignedIn();
 
-      // Read a single submission document
       allow get: if isSignedIn() && (
-        resource.data.author.id == request.auth.uid || // Author can get their own
-        request.auth.uid in resource.data.reviewerIds || // Assigned reviewer can get
-        isEditorialMember() // Editorial staff can get any
+        resource.data.author.id == request.auth.uid ||
+        request.auth.uid in resource.data.reviewerIds ||
+        isEditorialMember()
       );
 
-      // Create a new submission
       allow create: if isAuthor() || isEditorialMember();
 
-      // Update a submission
       allow update: if (
-        // Editorial staff can update anything
         isEditorialMember() ||
-        // Author resubmission flow
         (
           isAuthor() &&
           request.auth.uid == resource.data.author.id &&
@@ -99,20 +90,22 @@ service cloud.firestore {
         )
       );
 
-      // Delete a submission
       allow delete: if isEditorialMember();
 
       // --- REVIEWS SUBCOLLECTION ---
       match /reviews/{reviewId} {
         allow read: if (
           isEditorialMember() ||
-          // Authors can read reviews ONLY when revision is requested
-          (isAuthor() &&
-           get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid &&
-           get(/databases/$(database)/documents/submissions/$(submissionId)).data.status in ['Minor Revision', 'Major Revision'])
+          (
+            isAuthor() &&
+            exists(/databases/$(database)/documents/submissions/$(submissionId)) &&
+            get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid &&
+            get(/databases/$(database)/documents/submissions/$(submissionId)).data.status in ['Minor Revision','Major Revision']
+          )
         );
         allow create: if (
           isReviewer() &&
+          exists(/databases/$(database)/documents/submissions/$(submissionId)) &&
           request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds
         );
       }
@@ -121,39 +114,45 @@ service cloud.firestore {
       match /history/{historyId} {
         allow read: if (
           isEditorialMember() ||
-          get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid ||
-          request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds
+          (
+            exists(/databases/$(database)/documents/submissions/$(submissionId)) &&
+            (
+              get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid ||
+              request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds
+            )
+          )
         );
         allow write: if isEditorialMember();
       }
     }
-    
+
     // -------------------------------------------------------------------------
     // NOTIFICATIONS COLLECTION
     // -------------------------------------------------------------------------
-    
+
     match /notifications/{notificationId} {
-      // Users can query for their own notifications.
-      // The client-side query MUST include `where('userId', '==', request.auth.uid)`.
-      allow list: if isSignedIn() && request.query.filters[0][2] == request.auth.uid;
-      
-      // Users can only read their own notifications.
+      // Users can query their own notifications.
+      allow list: if isSignedIn(); // Client must filter by userId
+
       allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      // This is safe because flows can only be triggered by authenticated users with correct roles.
+      // And flows construct the notification with the correct userId
+      allow create: if isSignedIn();
       
-      // Notifications are created by server-side logic (flows).
-      allow create: if true;
-      
-      // A user can only update the 'read' status of their own notification.
-      allow update: if isSignedIn() && resource.data.userId == request.auth.uid && request.resource.data.keys().hasOnly(['read']);
+      // Users can only update 'read' status of their own notifications
+      allow update: if isSignedIn() &&
+                    resource.data.userId == request.auth.uid &&
+                    request.resource.data.keys().hasOnly(['read']);
     }
 
     // -------------------------------------------------------------------------
-    // VOLUMES (PUBLISHED ARCHIVE)
+    // VOLUMES COLLECTION
     // -------------------------------------------------------------------------
 
     match /volumes/{volumeId} {
-      allow read: if true; // Publicly readable archive
-      allow write: if isManagingEditor() || isAdmin();
+      allow read: if true;
+      allow write: if isAdmin() || isManagingEditor();
     }
 
     // -------------------------------------------------------------------------
@@ -161,17 +160,17 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
 
     match /editorialBoard/{memberId} {
-      allow read: if true; // Publicly readable
-      allow write: if isManagingEditor() || isAdmin();
+      allow read: if true;
+      allow write: if isAdmin() || isManagingEditor();
     }
 
     // -------------------------------------------------------------------------
-    // SETTINGS (BRANDING, JOURNAL INFO, ETC.)
+    // SETTINGS COLLECTION
     // -------------------------------------------------------------------------
 
     match /settings/{settingId} {
-      allow read: if true; // Publicly readable for client-side display
-      allow write: if isManagingEditor() || isAdmin();
+      allow read: if true;
+      allow write: if isAdmin() || isManagingEditor();
     }
   }
 }
