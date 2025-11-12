@@ -39,7 +39,6 @@ const nextConfig: NextConfig = {
       }
     ],
   },
-  transpilePackages: ['effect'],
 };
 
 export default withPWA(nextConfig);
