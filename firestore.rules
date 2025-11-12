@@ -17,7 +17,7 @@ service cloud.firestore {
     }
 
     function userRole() {
-      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) ? userDoc().data.role : null;
+      return isSignedIn() && exists(userDoc()) ? userDoc().data.role : null;
     }
 
     function isRole(role) {
@@ -85,7 +85,6 @@ service cloud.firestore {
           isAuthor() &&
           request.auth.uid == resource.data.author.id &&
           (resource.data.status == 'Minor Revision' || resource.data.status == 'Major Revision') &&
-          request.resource.data.keys().hasOnly(['manuscriptUrl', 'status']) &&
           request.resource.data.status == 'Under Initial Review'
         )
       );
