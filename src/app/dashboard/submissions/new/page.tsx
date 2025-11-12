@@ -32,6 +32,7 @@ import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { logSubmissionEvent } from '@/ai/flows/log-submission-event';
 import Link from 'next/link';
+import { generateNotification } from '@/ai/flows/generate-notification';
 
 const NewSubmissionSchema = z.object({
   title: z.string().min(10, 'Title must be at least 10 characters long.'),
@@ -46,7 +47,7 @@ const formSchema = NewSubmissionSchema;
 export default function NewSubmissionPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [templateUrl, setTemplateUrl] = useState('');
   
@@ -86,13 +87,13 @@ export default function NewSubmissionPage() {
       append({
         name: user.displayName || '',
         email: user.email || '',
-        institution: '',
+        institution: userProfile?.specialization || '',
         orcid: '',
         role: 'Author',
         isPrimaryContact: true,
       });
     }
-  }, [user, fields.length, append]);
+  }, [user, userProfile, fields.length, append]);
 
 
   const handlePrimaryContactChange = (indexToSet: number) => {
@@ -105,12 +106,10 @@ export default function NewSubmissionPage() {
   }
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
-    // The user associated with the submission must be an admin/editor
-    // This form is now only for importing submissions.
     if (!user || !user.displayName || !user.email) {
         toast({
             title: 'Authentication Error',
-            description: 'You must be logged in as an editor or admin to import a manuscript.',
+            description: 'You must be logged in to submit a manuscript.',
             variant: 'destructive',
         });
         return;
@@ -135,7 +134,7 @@ export default function NewSubmissionPage() {
 
     try {
       const submissionData = {
-          author: { id: `imported_${Date.now()}`, name: primaryContact.name, email: primaryContact.email },
+          author: { id: user.uid, name: primaryContact.name, email: primaryContact.email },
           status: 'Submitted' as const,
           submittedAt: serverTimestamp(),
           title: values.title,
@@ -148,22 +147,30 @@ export default function NewSubmissionPage() {
       };
       
       const submissionsCollectionRef = collection(db, 'submissions');
-
       const docRef = await addDoc(submissionsCollectionRef, submissionData);
       
       await logSubmissionEvent({
           submissionId: docRef.id,
           eventType: 'SUBMISSION_CREATED',
-          context: { authorName: `(Imported) ${primaryContact.name}` },
+          context: { authorName: primaryContact.name },
+      });
+      
+      // Notify all admins and managing editors
+      // This is a simplification; in a larger app, you might notify specific handling editors.
+      await generateNotification({
+          userId: 'Admins', // A placeholder; your backend would resolve this to all admin/ME uids
+          submissionId: docRef.id,
+          eventType: 'NEW_SUBMISSION',
+          context: { submissionTitle: values.title, authorName: primaryContact.name },
       });
 
       toast({
-          title: 'Import Successful!',
-          description: 'The manuscript has been imported.',
+          title: 'Submission Successful!',
+          description: 'Your manuscript has been received.',
           variant: 'default',
           className: 'bg-green-500 text-white',
       });
-      router.push('/dashboard/editor');
+      router.push('/dashboard/author');
 
     } catch (error: any) {
        console.error("Submission failed:", error);

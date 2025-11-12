@@ -20,6 +20,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/auth-context';
 import { ThemeToggle } from './theme-toggle';
+import { NotificationsDropdown } from './notifications-dropdown';
 
 
 const authorNavItems = [
@@ -118,6 +119,7 @@ export function Header() {
       </div>
 
       <ThemeToggle />
+      <NotificationsDropdown />
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

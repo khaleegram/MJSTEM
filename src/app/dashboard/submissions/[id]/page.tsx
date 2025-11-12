@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { notFound, useParams } from 'next/navigation';
@@ -44,6 +43,7 @@ import { FirestorePermissionError } from '@/firebase/errors';
 import { logSubmissionEvent } from '@/ai/flows/log-submission-event';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { FileUploader } from '@/components/file-uploader';
+import { generateNotification } from '@/ai/flows/generate-notification';
 
 
 const getStatusVariant = (status: SubmissionStatus) => {
@@ -103,7 +103,7 @@ const ReviewSubmissionForm = ({ submission, onReviewSubmit }: { submission: Subm
             
             // 2. Update the reviewer's status in the submission's reviewers array
             const updatedReviewers = submission.reviewers?.map(r => 
-                r.id === user?.uid ? { ...r, status: 'Review Submitted' } : r
+                r.id === user?.uid ? { ...r, status: 'Review Submitted' as const } : r
             );
             await updateDoc(submissionRef, { reviewers: updatedReviewers });
 
@@ -367,43 +367,50 @@ export default function SubmissionDetailPage() {
   }, [fetchSubmission, refetchTrigger]);
 
 
-  const handleDecision = (status: SubmissionStatus) => {
+  const handleDecision = async (status: SubmissionStatus) => {
     if(!submission || !userProfile) return;
     setIsUpdating(true);
 
     const submissionRef = doc(db, 'submissions', submission.id);
     const updateData = { status };
 
-    updateDoc(submissionRef, updateData)
-      .then(async () => {
+    try {
+        await updateDoc(submissionRef, updateData);
+
         await logSubmissionEvent({
             submissionId: submission.id,
             eventType: 'STATUS_CHANGED',
             context: { actorName: userProfile.displayName, status }
         });
-        setRefetchTrigger(prev => prev + 1); // Trigger refetch
+
+        await generateNotification({
+            userId: submission.author.id,
+            submissionId: submission.id,
+            eventType: 'STATUS_CHANGED',
+            context: { status, submissionTitle: submission.title }
+        });
+
         toast({
             title: "Status Updated",
             description: `Submission marked as ${status}.`,
         });
-      })
-      .catch(serverError => {
+
+        setRefetchTrigger(prev => prev + 1); // Trigger refetch
+    } catch (serverError) {
         const permissionError = new FirestorePermissionError({
           path: submissionRef.path,
           operation: 'update',
           requestResourceData: updateData,
         });
         errorEmitter.emit('permission-error', permissionError);
-      })
-      .finally(() => {
+    } finally {
         setIsUpdating(false);
-      });
+    }
   }
 
-  const handleAssignReviewer = (reviewer: UserProfile) => {
+  const handleAssignReviewer = async (reviewer: UserProfile) => {
       if(!submission || !userProfile) return;
 
-      // Prevent assigning the same reviewer twice
       if (submission.reviewerIds?.includes(reviewer.uid)) {
           toast({
               title: "Already Assigned",
@@ -432,27 +439,43 @@ export default function SubmissionDetailPage() {
           updateData.status = 'Under Peer Review';
       }
 
-      updateDoc(submissionRef, updateData)
-        .then(async () => {
-            await logSubmissionEvent({
+      try {
+        await updateDoc(submissionRef, updateData);
+
+        await logSubmissionEvent({
+            submissionId: submission.id,
+            eventType: 'REVIEWER_ASSIGNED',
+            context: { reviewerName: reviewer.displayName, actorName: userProfile.displayName }
+        });
+        
+        await generateNotification({
+            userId: reviewer.uid,
+            submissionId: submission.id,
+            eventType: 'REVIEWER_ASSIGNED',
+            context: { submissionTitle: submission.title }
+        });
+
+        if (updateData.status) {
+             await logSubmissionEvent({
                 submissionId: submission.id,
-                eventType: 'REVIEWER_ASSIGNED',
-                context: { reviewerName: reviewer.displayName, actorName: userProfile.displayName }
+                eventType: 'STATUS_CHANGED',
+                context: { actorName: userProfile.displayName, status: updateData.status }
             });
-            if (updateData.status) {
-                 await logSubmissionEvent({
-                    submissionId: submission.id,
-                    eventType: 'STATUS_CHANGED',
-                    context: { actorName: userProfile.displayName, status: updateData.status }
-                });
-            }
-            setRefetchTrigger(prev => prev + 1);
-            toast({
-                title: "Reviewer Assigned",
-                description: `${reviewer.displayName} has been assigned.`,
+            await generateNotification({
+                userId: submission.author.id,
+                submissionId: submission.id,
+                eventType: 'STATUS_CHANGED',
+                context: { status: updateData.status, submissionTitle: submission.title }
             });
-        })
-        .catch(serverError => {
+        }
+        
+        toast({
+            title: "Reviewer Assigned",
+            description: `${reviewer.displayName} has been assigned.`,
+        });
+
+        setRefetchTrigger(prev => prev + 1);
+      } catch (serverError) {
             const permissionError = new FirestorePermissionError({
                 path: submissionRef.path,
                 operation: 'update',
@@ -463,10 +486,9 @@ export default function SubmissionDetailPage() {
                 }
             });
             errorEmitter.emit('permission-error', permissionError);
-        })
-        .finally(() => {
+      } finally {
              setIsUpdating(false);
-        });
+      }
   }
 
   const handleRevisionSubmit = () => {

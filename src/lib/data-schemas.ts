@@ -97,3 +97,13 @@ export const EditorialBoardMemberSchema = z.object({
   photoURL: z.string().url().optional(),
   order: z.number().optional(),
 });
+
+export const NotificationSchema = z.object({
+    id: z.string().optional(),
+    userId: z.string(),
+    message: z.string(),
+    link: z.string(),
+    timestamp: z.any(),
+    read: z.boolean(),
+    icon: z.string(),
+});
