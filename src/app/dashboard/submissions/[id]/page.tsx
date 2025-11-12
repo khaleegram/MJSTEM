@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { notFound, useParams } from 'next/navigation';
@@ -43,7 +44,7 @@ import { FirestorePermissionError } from '@/firebase/errors';
 import { logSubmissionEvent } from '@/ai/flows/log-submission-event';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { FileUploader } from '@/components/file-uploader';
-import { useUploadThing } from '@/lib/uploadthing';
+
 
 const getStatusVariant = (status: SubmissionStatus) => {
     switch (status) {
@@ -79,7 +80,7 @@ const ReviewSubmissionForm = ({ submission, onReviewSubmit }: { submission: Subm
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!recommendation) {
-            toast({ title: "Recommendation Required", description: "Please select a recommendation.", variant: "destructive" });
+            toast({ title: "Recommendation Required", description: "Please select a recommendation for the editor.", variant: "destructive" });
             return;
         }
         setIsSubmitting(true);
@@ -90,16 +91,17 @@ const ReviewSubmissionForm = ({ submission, onReviewSubmit }: { submission: Subm
             recommendation,
             commentsForEditor,
             commentsForAuthor,
-            submittedAt: new Date(),
+            submittedAt: serverTimestamp(),
         };
 
         const submissionRef = doc(db, 'submissions', submission.id);
         const reviewRef = collection(db, 'submissions', submission.id, 'reviews');
 
-        // 1. Add review to subcollection
-        addDoc(reviewRef, reviewData)
-        .then(async () => {
-             // 2. Update the reviewer's status in the submission's reviewers array
+        try {
+            // 1. Add review to subcollection
+            await addDoc(reviewRef, reviewData);
+            
+            // 2. Update the reviewer's status in the submission's reviewers array
             const updatedReviewers = submission.reviewers?.map(r => 
                 r.id === user?.uid ? { ...r, status: 'Review Submitted' } : r
             );
@@ -112,43 +114,43 @@ const ReviewSubmissionForm = ({ submission, onReviewSubmit }: { submission: Subm
                 context: { reviewerName: user?.displayName || 'A reviewer' }
             });
             
-            toast({ title: "Review Submitted", description: "Thank you for your contribution." });
+            toast({ title: "Review Submitted", description: "Thank you for your contribution. The editor has been notified." });
             onReviewSubmit(); // Trigger a refetch on the parent page
-        })
-        .catch(serverError => {
+        
+        } catch (serverError: any) {
              const permissionError = new FirestorePermissionError({
                 path: reviewRef.path,
                 operation: 'create',
                 requestResourceData: reviewData
             });
             errorEmitter.emit('permission-error', permissionError);
-        })
-        .finally(() => {
+        } finally {
             setIsSubmitting(false);
-        });
+        }
     }
 
     return (
         <Card>
             <CardHeader>
                 <CardTitle className="font-headline">Submit Your Review</CardTitle>
-                <CardDescription>Complete the fields below to provide your feedback.</CardDescription>
+                <CardDescription>Provide your expert recommendation to the editor and comments for the author.</CardDescription>
             </CardHeader>
             <form onSubmit={handleSubmit}>
                 <CardContent className="space-y-4">
                     <div className="space-y-2">
-                        <label className="text-sm font-medium">Recommendation</label>
+                        <label className="text-sm font-medium">Your Recommendation to the Editor</label>
                         <Select onValueChange={setRecommendation} value={recommendation} required>
                             <SelectTrigger>
-                                <SelectValue placeholder="Select a recommendation" />
+                                <SelectValue placeholder="Select a recommendation..." />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="Accept">Accept</SelectItem>
-                                <SelectItem value="Minor Revision">Minor Revision</SelectItem>
-                                <SelectItem value="Major Revision">Major Revision</SelectItem>
-                                <SelectItem value="Reject">Reject</SelectItem>
+                                <SelectItem value="Accept">Recommend Acceptance</SelectItem>
+                                <SelectItem value="Minor Revision">Recommend Minor Revision</SelectItem>
+                                <SelectItem value="Major Revision">Recommend Major Revision</SelectItem>
+                                <SelectItem value="Reject">Recommend Rejection</SelectItem>
                             </SelectContent>
                         </Select>
+                         <p className="text-xs text-muted-foreground">This is a confidential recommendation to the editor, who makes the final decision.</p>
                     </div>
                      <div className="space-y-2">
                         <label className="text-sm font-medium flex items-center gap-2">
@@ -175,7 +177,7 @@ const ReviewSubmissionForm = ({ submission, onReviewSubmit }: { submission: Subm
                 </CardContent>
                 <CardFooter>
                     <Button type="submit" disabled={isSubmitting}>
-                        {isSubmitting ? 'Submitting...' : 'Submit Review'}
+                        {isSubmitting ? 'Submitting...' : 'Submit Recommendation'}
                     </Button>
                 </CardFooter>
             </form>
@@ -243,7 +245,7 @@ const AuthorRevisionForm = ({ submission, onRevisionSubmit }: { submission: Subm
                     />
                 </CardContent>
                 <CardFooter>
-                    <Button type="submit" disabled={isSubmitting}>
+                    <Button type="submit" disabled={isSubmitting || !fileUrl}>
                         {isSubmitting ? 'Submitting...' : 'Submit Revision'}
                     </Button>
                 </CardFooter>
@@ -402,7 +404,7 @@ export default function SubmissionDetailPage() {
       if(!submission) return;
 
       // Prevent assigning the same reviewer twice
-      if (submission.reviewers?.some(r => r.id === reviewer.uid)) {
+      if (submission.reviewerIds?.includes(reviewer.uid)) {
           toast({
               title: "Already Assigned",
               description: `${reviewer.displayName} is already a reviewer for this manuscript.`,
@@ -415,12 +417,14 @@ export default function SubmissionDetailPage() {
 
       const submissionRef = doc(db, 'submissions', submission.id);
       
+      const newReviewer = {
+          id: reviewer.uid,
+          name: reviewer.displayName,
+          status: 'Pending' as const,
+      };
+
       const updateData: any = {
-          reviewers: arrayUnion({
-            id: reviewer.uid,
-            name: reviewer.displayName,
-            status: 'Pending',
-          }),
+          reviewers: arrayUnion(newReviewer),
           reviewerIds: arrayUnion(reviewer.uid),
       };
 
@@ -435,8 +439,7 @@ export default function SubmissionDetailPage() {
                 eventType: 'REVIEWER_ASSIGNED',
                 context: { reviewerName: reviewer.displayName }
             });
-            // If status was changed, log a status change too
-            if ((submission.status === 'Submitted' || submission.status === 'Under Initial Review') && userProfile) {
+            if (updateData.status && userProfile) {
                  await logSubmissionEvent({
                     submissionId: submission.id,
                     eventType: 'STATUS_CHANGED',
@@ -466,7 +469,7 @@ export default function SubmissionDetailPage() {
         });
   }
 
-  const handleReviewSubmit = () => {
+  const handleRevisionSubmit = () => {
     setRefetchTrigger(prev => prev + 1);
   }
   
@@ -486,7 +489,7 @@ export default function SubmissionDetailPage() {
 
   const isEditor = userProfile?.role === 'Editor' || userProfile?.role === 'Admin' || userProfile?.role === 'Managing Editor';
   const isAuthor = userProfile?.uid === submission.author.id;
-  const isReviewer = submission.reviewers?.some(r => r.id === user?.uid);
+  const isReviewer = submission.reviewerIds?.includes(user?.uid || '');
   const isDecisionMade = submission.status === 'Accepted' || submission.status === 'Rejected';
   const needsRevision = submission.status === 'Minor Revision' || submission.status === 'Major Revision';
 
@@ -536,10 +539,11 @@ export default function SubmissionDetailPage() {
           </CardFooter>
         </Card>
 
-        {/* Show reviews to both Editor and Author */}
+        {isReviewer && <ReviewSubmissionForm submission={submission} onReviewSubmit={handleRevisionSubmit} />}
+
         {(isEditor || (isAuthor && needsRevision)) && <SubmittedReviews submissionId={submission.id} showForAuthor={isAuthor && needsRevision} />}
 
-        {isAuthor && needsRevision && <AuthorRevisionForm submission={submission} onRevisionSubmit={handleReviewSubmit} />}
+        {isAuthor && needsRevision && <AuthorRevisionForm submission={submission} onRevisionSubmit={handleRevisionSubmit} />}
 
       </div>
 
@@ -548,7 +552,8 @@ export default function SubmissionDetailPage() {
         {isEditor && !isDecisionMade && (
         <Card>
           <CardHeader>
-            <CardTitle className="font-headline">Decision</CardTitle>
+            <CardTitle className="font-headline">Make Final Decision</CardTitle>
+            <CardDescription>This will override the current status and notify the author.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-2">
             <Button className="bg-green-600 hover:bg-green-700" onClick={() => handleDecision('Accepted')} disabled={isUpdating}>Accept</Button>
@@ -559,11 +564,9 @@ export default function SubmissionDetailPage() {
         </Card>
         )}
         
-        {isReviewer && <ReviewSubmissionForm submission={submission} onReviewSubmit={handleReviewSubmit} />}
-
         <Card>
           <CardHeader>
-            <CardTitle className="font-headline">Reviewers</CardTitle>
+            <CardTitle className="font-headline">Assigned Reviewers</CardTitle>
           </CardHeader>
           <CardContent>
              {submission.reviewers && submission.reviewers.length > 0 ? (
@@ -571,16 +574,18 @@ export default function SubmissionDetailPage() {
                     {submission.reviewers.map(reviewer => {
                         const reviewerProfile = availableReviewers.find(r => r.uid === reviewer.id);
                         return (
-                         <li key={reviewer.id} className="flex items-center gap-4">
-                            <Avatar>
-                                <AvatarImage src={reviewerProfile?.photoURL || ''} alt={reviewer.name} />
-                                <AvatarFallback>{getInitials(reviewer.name)}</AvatarFallback>
-                            </Avatar>
-                            <div>
-                                <p className="font-medium">{reviewer.name}</p>
-                                <p className="text-sm text-muted-foreground">{reviewer.status}</p>
+                         <li key={reviewer.id} className="flex items-center justify-between">
+                           <div className="flex items-center gap-4">
+                                <Avatar>
+                                    <AvatarImage src={reviewerProfile?.photoURL || ''} alt={reviewer.name} />
+                                    <AvatarFallback>{getInitials(reviewer.name)}</AvatarFallback>
+                                </Avatar>
+                                <div>
+                                    <p className="font-medium">{reviewer.name}</p>
+                                </div>
                             </div>
-                        </li>
+                             <Badge variant={reviewer.status === 'Review Submitted' ? 'success' : 'outline'}>{reviewer.status}</Badge>
+                         </li>
                     )})}
                 </ul>
             ) : (
@@ -600,7 +605,7 @@ export default function SubmissionDetailPage() {
                 <DialogHeader>
                   <DialogTitle>Assign Reviewer</DialogTitle>
                   <DialogDescription>
-                    Select a qualified reviewer for this manuscript.
+                    Select a qualified user to review this manuscript.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
@@ -617,7 +622,7 @@ export default function SubmissionDetailPage() {
                                 <p className="text-sm text-muted-foreground truncate max-w-48">{reviewer.specialization || 'No specialization listed'}</p>
                             </div>
                         </div>
-                        <Button variant="ghost" size="icon" onClick={() => handleAssignReviewer(reviewer)} disabled={isUpdating}>
+                        <Button variant="ghost" size="icon" onClick={() => handleAssignReviewer(reviewer)} disabled={isUpdating || submission.reviewerIds?.includes(reviewer.uid)}>
                           <PlusCircle className='h-5 w-5' />
                         </Button>
                       </li>
