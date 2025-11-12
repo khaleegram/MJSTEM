@@ -31,6 +31,14 @@ function generateNotificationDetails(input: NotificationInput): { message: strin
                 icon: 'Edit',
             };
         case 'REVIEW_SUBMITTED':
+             // Message for editors
+            if (input.userId === 'Admins') {
+                 return {
+                    message: `${reviewerName} has submitted their review for '${truncatedTitle}'.`,
+                    icon: 'MessageSquare',
+                };
+            }
+            // Message for author
             return {
                 message: `A new review was submitted for your manuscript '${truncatedTitle}'.`,
                 icon: 'MessageSquare',

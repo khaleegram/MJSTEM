@@ -16,7 +16,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { File, Calendar, User, Mail, PlusCircle, Download, BookCopy, Edit, Sparkles, UserCheck, MessageSquare, Shield, Upload } from 'lucide-react';
+import { File, Calendar, User, Mail, PlusCircle, Download, BookCopy, Edit, Sparkles, UserCheck, MessageSquare, Shield, Upload, Clock, CheckCircle2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { SubmissionStatus, Reviewer, Submission, UserProfile } from '@/types';
 import { cn } from '@/lib/utils';
@@ -113,6 +113,17 @@ const ReviewSubmissionForm = ({ submission, onReviewSubmit }: { submission: Subm
                 submissionId: submission.id,
                 eventType: 'REVIEW_SUBMITTED',
                 context: { reviewerName: userProfile?.displayName || 'A reviewer' }
+            });
+            
+             // 4. Notify editors
+            await generateNotification({
+                userId: 'Admins', // Special keyword for all Admins/Managing Editors
+                submissionId: submission.id,
+                eventType: 'REVIEW_SUBMITTED',
+                context: { 
+                    submissionTitle: submission.title,
+                    reviewerName: userProfile?.displayName || 'a reviewer'
+                }
             });
             
             toast({ title: "Review Submitted", description: "Thank you for your contribution. The editor has been notified." });
@@ -598,6 +609,7 @@ export default function SubmissionDetailPage() {
                 <ul className="space-y-4">
                     {submission.reviewers.map(reviewer => {
                         const reviewerProfile = availableReviewers.find(r => r.uid === reviewer.id);
+                        const isSubmitted = reviewer.status === 'Review Submitted';
                         return (
                          <li key={reviewer.id} className="flex items-center justify-between">
                            <div className="flex items-center gap-4">
@@ -607,9 +619,12 @@ export default function SubmissionDetailPage() {
                                 </Avatar>
                                 <div>
                                     <p className="font-medium">{reviewer.name}</p>
+                                    <div className={cn("flex items-center gap-1.5 text-xs", isSubmitted ? "text-green-600" : "text-muted-foreground")}>
+                                      {isSubmitted ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
+                                      <span>{reviewer.status}</span>
+                                    </div>
                                 </div>
                             </div>
-                             <Badge variant={reviewer.status === 'Review Submitted' ? 'success' : 'outline'}>{reviewer.status}</Badge>
                          </li>
                     )})}
                 </ul>
@@ -665,3 +680,4 @@ export default function SubmissionDetailPage() {
     </div>
   );
 }
+
