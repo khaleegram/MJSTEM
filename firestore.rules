@@ -71,7 +71,7 @@ service cloud.firestore {
 
       // The 'list' rule is combined with client-side queries.
       // Firestore security rules are not filters, they are verifiers.
-      // This rule works with queries that filter by authorId or reviewerIds.
+      // This rule works with queries that filter by author.id or reviewerIds.
       allow list: if isSignedIn();
 
       // Read a single submission document
