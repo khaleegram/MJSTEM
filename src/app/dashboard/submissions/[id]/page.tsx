@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { notFound, useParams } from 'next/navigation';
@@ -200,34 +201,35 @@ const AuthorRevisionForm = ({ submission, onRevisionSubmit }: { submission: Subm
         }
         setIsSubmitting(true);
 
-        try {
-            const submissionRef = doc(db, 'submissions', submission.id);
-            const newStatus = 'Under Initial Review';
-            
-            await updateDoc(submissionRef, { 
-                manuscriptUrl: fileUrl,
-                status: newStatus
-            });
+        const submissionRef = doc(db, 'submissions', submission.id);
+        const newStatus = 'Under Initial Review';
+        const updateData = { 
+            manuscriptUrl: fileUrl,
+            status: newStatus
+        };
+        
+        updateDoc(submissionRef, updateData)
+            .then(async () => {
+                await logSubmissionEvent({
+                    submissionId: submission.id,
+                    eventType: 'STATUS_CHANGED',
+                    context: { actorName: userProfile?.displayName || 'Author', status: `Revision Submitted (${submission.status})` }
+                });
 
-            await logSubmissionEvent({
-                submissionId: submission.id,
-                eventType: 'STATUS_CHANGED',
-                context: { actorName: userProfile?.displayName || 'Author', status: `Revision Submitted (${submission.status})` }
+                toast({ title: "Revision Submitted", description: "Your updated manuscript has been sent to the editor." });
+                onRevisionSubmit();
+            })
+            .catch((serverError) => {
+                const permissionError = new FirestorePermissionError({
+                    path: submissionRef.path,
+                    operation: 'update',
+                    requestResourceData: updateData
+                });
+                errorEmitter.emit('permission-error', permissionError);
+            })
+            .finally(() => {
+                setIsSubmitting(false);
             });
-
-            toast({ title: "Revision Submitted", description: "Your updated manuscript has been sent to the editor." });
-            onRevisionSubmit();
-        } catch (error: any) {
-            console.error("Error submitting revision:", error);
-            const permissionError = new FirestorePermissionError({
-                path: doc(db, 'submissions', submission.id).path,
-                operation: 'update',
-                requestResourceData: { manuscriptUrl: fileUrl, status: 'Under Initial Review' }
-            });
-            errorEmitter.emit('permission-error', permissionError);
-        } finally {
-            setIsSubmitting(false);
-        }
     }
     
     return (
