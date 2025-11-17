@@ -30,15 +30,21 @@ const HowItWorksCard = ({ icon, title, children }: { icon: React.ReactNode, titl
 export default async function HomePage() {
   const latestIssue = await getLatestIssue();
   let journalInfo: { coverLetterUrl?: string, submissionTemplateUrl?: string } = {};
+  let branding: { logoUrl?: string } = {};
 
   try {
-    const docRef = doc(db, 'settings', 'journalInfo');
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      journalInfo = docSnap.data();
+    const journalInfoRef = doc(db, 'settings', 'journalInfo');
+    const journalInfoSnap = await getDoc(journalInfoRef);
+    if (journalInfoSnap.exists()) {
+      journalInfo = journalInfoSnap.data();
+    }
+    const brandingRef = doc(db, 'settings', 'branding');
+    const brandingSnap = await getDoc(brandingRef);
+    if (brandingSnap.exists()) {
+      branding = brandingSnap.data();
     }
   } catch (e) {
-    console.error("Could not fetch journal info", e);
+    console.error("Could not fetch page data", e);
   }
 
   return (
@@ -208,7 +214,11 @@ export default async function HomePage() {
            <div className="grid grid-cols-2 md:grid-cols-5 gap-8">
                 <div className="col-span-2 md:col-span-1 flex items-start flex-col gap-2">
                     <Link href="/" className="flex items-center gap-2">
-                        <Icons.logo className="h-8 w-8 text-primary" />
+                        {branding.logoUrl ? (
+                            <Image src={branding.logoUrl} alt="Journal Logo" width={32} height={32} className="object-contain" />
+                        ) : (
+                            <Icons.logo className="h-8 w-8 text-primary" />
+                        )}
                         <h2 className="text-2xl font-bold font-headline text-foreground">
                             MJSTEM
                         </h2>

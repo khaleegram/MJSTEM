@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useForm } from 'react-hook-form';
@@ -5,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -20,8 +22,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { useToast } from '@/hooks/use-toast';
 import { Icons } from '@/components/icons';
 import { useAuth } from '@/contexts/auth-context';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Separator } from '@/components/ui/separator';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const formSchema = z.object({
   email: z.string().email('Please enter a valid email address.'),
@@ -34,6 +39,26 @@ export default function LoginPage() {
   const { login, signInWithGoogle } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [loadingLogo, setLoadingLogo] = useState(true);
+
+  useEffect(() => {
+    const fetchLogo = async () => {
+        setLoadingLogo(true);
+        try {
+            const docRef = doc(db, 'settings', 'branding');
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists() && docSnap.data().logoUrl) {
+                setLogoUrl(docSnap.data().logoUrl);
+            }
+        } catch (error) {
+            console.error("Could not fetch logo:", error);
+        } finally {
+            setLoadingLogo(false);
+        }
+    };
+    fetchLogo();
+  }, []);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -87,7 +112,13 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-secondary/50 p-4">
        <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
-            <Icons.logo className="h-10 w-10 text-primary mx-auto mb-2" />
+            {loadingLogo ? (
+                <Skeleton className="h-10 w-10 mx-auto mb-2" />
+            ) : logoUrl ? (
+                <Image src={logoUrl} alt="Journal Logo" width={40} height={40} className="object-contain mx-auto mb-2" />
+            ) : (
+                <Icons.logo className="h-10 w-10 text-primary mx-auto mb-2" />
+            )}
             <CardTitle className="font-headline text-2xl">Welcome Back</CardTitle>
             <CardDescription>
                 Enter your credentials to access your account.
