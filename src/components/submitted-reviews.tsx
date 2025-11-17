@@ -150,5 +150,3 @@ export const SubmittedReviews = ({ submissionId, showForAuthor = false }: { subm
         </Card>
     )
 };
-
-    
