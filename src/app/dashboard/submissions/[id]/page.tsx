@@ -627,7 +627,7 @@ export default function SubmissionDetailPage() {
         </Card>
         )}
         
-        {(isEditor || isReviewer) && (
+        {(isEditor || isReviewer) && !isAuthor && (
         <Card>
           <CardHeader>
             <CardTitle className="font-headline">Assigned Reviewers</CardTitle>
@@ -709,3 +709,4 @@ export default function SubmissionDetailPage() {
     </div>
   );
 }
+
