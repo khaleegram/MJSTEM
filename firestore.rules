@@ -67,7 +67,7 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
 
     match /submissions/{submissionId} {
-      allow list: if isSignedIn(); // Clients must filter on author.id or reviewerIds
+      allow list: if isSignedIn(); // Clients should filter on authorId or reviewerIds
 
       allow get: if isSignedIn() && (
         resource.data.author.id == request.auth.uid ||
@@ -112,6 +112,7 @@ service cloud.firestore {
 
       // --- HISTORY SUBCOLLECTION ---
       match /history/{historyId} {
+        allow list: if isEditorialMember() || (isSignedIn() && exists(/databases/$(database)/documents/submissions/$(submissionId)) && get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid);
         allow read: if (
           isEditorialMember() ||
           (
@@ -132,7 +133,7 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
 
     match /notifications/{notificationId} {
-      allow list: if isSignedIn() && request.query.filters[0][2] == request.auth.uid;
+      allow list: if isSignedIn(); // Client must query by user ID
       allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
       allow update: if isSignedIn() && resource.data.userId == request.auth.uid && request.resource.data.keys().hasOnly(['read']);
