@@ -627,6 +627,7 @@ export default function SubmissionDetailPage() {
         </Card>
         )}
         
+        {(isEditor || isReviewer) && (
         <Card>
           <CardHeader>
             <CardTitle className="font-headline">Assigned Reviewers</CardTitle>
@@ -701,6 +702,7 @@ export default function SubmissionDetailPage() {
           </CardFooter>
           )}
         </Card>
+        )}
 
         <SubmissionHistory submissionId={id} />
       </div>
