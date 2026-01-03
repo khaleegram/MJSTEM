@@ -300,18 +300,15 @@ export default function PublicationsPage() {
     // --- Firestore Logic ---
     try {
       await runTransaction(db, async (transaction) => {
-          let sourceItems = [...originalContainer.items];
+          const submissionDoc = await transaction.get(doc(db, 'submissions', active.id as string));
+          if (!submissionDoc.exists()) throw new Error("Submission not found");
+          
+          const articleSubmission = { id: submissionDoc.id, ...submissionDoc.data() } as Submission;
+
+          const sourceItems = [...originalContainer.items];
           let destinationItems = overContainer.items ? [...overContainer.items] : [];
           
-          let updatedVolumes = JSON.parse(JSON.stringify(volumes));
-
           const [movedItem] = sourceItems.splice(activeIndex, 1);
-          
-          // Ensure we get the full submission object to access pageCount
-          const articleSubmission = unassignedSubmissions.find(s => s.id === movedItem.id) || 
-                                   (await getDoc(doc(db, 'submissions', movedItem.id))).data() as Submission;
-
-          if (!articleSubmission) throw new Error("Could not find submission data for the article.");
 
           const newArticle: Article = {
             id: articleSubmission.id,
@@ -325,35 +322,31 @@ export default function PublicationsPage() {
           if (originalContainer.type === 'issue' && overContainer.type === 'issue' && originalContainer.issueId === overContainer.issueId) {
             // Reordering within the same issue
             destinationItems.splice(overIndex, 0, newArticle);
-
-             const volIdx = updatedVolumes.findIndex((v: Volume) => v.id === originalContainer.volumeId);
-             if (volIdx === -1) throw new Error("Volume not found for reorder");
-             const issueIdx = updatedVolumes[volIdx].issues.findIndex((i: Issue) => i.id === originalContainer.issueId);
-             if (issueIdx === -1) throw new Error("Issue not found for reorder");
-             
-             updatedVolumes[volIdx].issues[issueIdx].articles = destinationItems as Article[];
-             transaction.update(doc(db, 'volumes', originalContainer.volumeId), { issues: updatedVolumes[volIdx].issues });
-
-          } else if(overContainer.type === 'issue') {
-            // Moving from unassigned to an issue, or between issues
+             const volRef = doc(db, 'volumes', originalContainer.volumeId);
+             const volDoc = await transaction.get(volRef);
+             const currentVolData = volDoc.data() as Volume;
+             const updatedIssues = currentVolData.issues?.map(i => i.id === originalContainer.issueId ? { ...i, articles: destinationItems } : i);
+             transaction.update(volRef, { issues: updatedIssues });
+          } else {
+            // Moving between different containers
             destinationItems.splice(overIndex, 0, newArticle);
-            
-            // Update destination issue
-            const destVolIdx = updatedVolumes.findIndex((v: Volume) => v.id === overContainer!.volumeId);
-            if(destVolIdx === -1) throw new Error("Destination volume not found");
-            const destIssueIdx = updatedVolumes[destVolIdx].issues.findIndex((i: Issue) => i.id === overContainer!.issueId);
-            if(destIssueIdx === -1) throw new Error("Destination issue not found");
-            updatedVolumes[destVolIdx].issues[destIssueIdx].articles = destinationItems as Article[];
-            transaction.update(doc(db, 'volumes', overContainer.volumeId!), { issues: updatedVolumes[destVolIdx].issues });
 
-            // If moving from another issue, update source issue
-             if (originalContainer.type === 'issue') {
-                const sourceVolIdx = updatedVolumes.findIndex((v: Volume) => v.id === originalContainer.volumeId);
-                if(sourceVolIdx === -1) throw new Error("Source volume not found");
-                const sourceIssueIdx = updatedVolumes[sourceVolIdx].issues.findIndex((i: Issue) => i.id === originalContainer.issueId);
-                if(sourceIssueIdx === -1) throw new Error("Source issue not found");
-                updatedVolumes[sourceVolIdx].issues[sourceIssueIdx].articles = sourceItems as Article[];
-                transaction.update(doc(db, 'volumes', originalContainer.volumeId), { issues: updatedVolumes[sourceVolIdx].issues });
+            // Update source container if it's an issue
+            if (originalContainer.type === 'issue') {
+              const sourceVolRef = doc(db, 'volumes', originalContainer.volumeId);
+              const sourceVolDoc = await transaction.get(sourceVolRef);
+              const sourceVolData = sourceVolDoc.data() as Volume;
+              const updatedSourceIssues = sourceVolData.issues?.map(i => i.id === originalContainer.issueId ? { ...i, articles: sourceItems } : i);
+              transaction.update(sourceVolRef, { issues: updatedSourceIssues });
+            }
+
+            // Update destination container if it's an issue
+            if (overContainer.type === 'issue') {
+              const destVolRef = doc(db, 'volumes', overContainer.volumeId!);
+              const destVolDoc = await transaction.get(destVolRef);
+              const destVolData = destVolDoc.data() as Volume;
+              const updatedDestIssues = destVolData.issues?.map(i => i.id === overContainer!.issueId ? { ...i, articles: destinationItems } : i);
+              transaction.update(destVolRef, { issues: updatedDestIssues });
             }
           }
       });
@@ -362,7 +355,6 @@ export default function PublicationsPage() {
         console.error("DND transaction failed: ", e);
         toast({ title: "Update Failed", description: e.message || "Could not move the article.", variant: "destructive"});
     } finally {
-      // Refetch all data to ensure UI consistency after complex DND operations
       fetchPublicationsData();
     }
   };
@@ -469,5 +461,3 @@ export default function PublicationsPage() {
     </DndContext>
   );
 }
-
-    
