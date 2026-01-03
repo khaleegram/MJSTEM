@@ -117,8 +117,8 @@ const ManageVolumeDialog = ({ volume, onActionComplete }: { volume: Volume; onAc
     return (
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
-                <Button variant="ghost" size="sm">
-                    <Settings2 className="mr-2 h-4 w-4" /> Manage
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <Settings2 className="h-4 w-4" />
                 </Button>
             </DialogTrigger>
             <DialogContent>
@@ -495,12 +495,14 @@ export default function PublicationsPage() {
                 <Accordion type="single" collapsible defaultValue={volumes[0]?.id}>
                   {volumes.map((volume) => (
                     <AccordionItem value={volume.id} key={volume.id}>
-                      <AccordionTrigger className="text-lg font-headline hover:no-underline">
-                        <div className="flex justify-between items-center w-full pr-2">
-                            <div className="flex items-center gap-3"><Book /> {volume.title}</div>
-                            <ManageVolumeDialog volume={volume} onActionComplete={fetchPublicationsData} />
+                        <div className="flex items-center w-full group">
+                            <AccordionTrigger className="text-lg font-headline hover:no-underline flex-1">
+                                <div className="flex items-center gap-3"><Book /> {volume.title}</div>
+                            </AccordionTrigger>
+                            <div className="pl-4 pr-2">
+                                <ManageVolumeDialog volume={volume} onActionComplete={fetchPublicationsData} />
+                            </div>
                         </div>
-                      </AccordionTrigger>
                       <AccordionContent className="pl-6">
                         {volume.issues && volume.issues.length > 0 ? (
                           volume.issues.map((issue) => (
@@ -556,5 +558,3 @@ export default function PublicationsPage() {
     </DndContext>
   );
 }
-
-    
