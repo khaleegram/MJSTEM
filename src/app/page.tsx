@@ -47,7 +47,7 @@ export default async function HomePage() {
     }
     const indexingQuery = query(collection(db, 'indexingServices'), orderBy('order'));
     const indexingSnapshot = await getDocs(indexingQuery);
-    indexingServices = indexingSnapshot.docs.map(doc => doc.data() as IndexingService);
+    indexingServices = indexingSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as IndexingService);
   } catch (e) {
     console.error("Could not fetch page data", e);
   }
