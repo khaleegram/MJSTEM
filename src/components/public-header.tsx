@@ -66,8 +66,8 @@ export function PublicHeader() {
     }, []);
 
   return (
-    <header className="container mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between border-b">
-      <div className="flex items-center gap-2">
+    <header className="container mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between border-b gap-4">
+      <div className="flex items-center gap-3 flex-shrink-0">
         <Link href="/" className="flex items-center gap-3 font-semibold">
             {loadingLogo ? (
                 <Skeleton className="h-10 w-10" />
@@ -81,14 +81,18 @@ export function PublicHeader() {
             </h1>
         </Link>
       </div>
-      <nav className="hidden md:flex items-center gap-4 text-sm font-medium">
+
+      {/* Centered Navigation for Desktop */}
+      <nav className="hidden md:flex items-center justify-center flex-1 gap-4 text-sm font-medium">
         <NavLink href="/aims-scope">Aims & Scope</NavLink>
         <NavLink href="/editorial-board">Editorial Board</NavLink>
         <NavLink href="/author-guidelines">Author Guidelines</NavLink>
         <NavLink href="/archive">Browse Archives</NavLink>
         <NavDropdown />
       </nav>
-      <div className="flex items-center gap-2">
+
+      {/* Right-aligned Actions */}
+      <div className="flex items-center gap-2 flex-shrink-0">
         <ThemeToggle />
         <Button asChild variant="ghost" className="hidden sm:inline-flex">
           <Link href="/login">Login</Link>
@@ -141,5 +145,3 @@ export function PublicHeader() {
     </header>
   );
 }
-
-    
