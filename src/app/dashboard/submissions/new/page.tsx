@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useForm, useFieldArray, Controller } from 'react-hook-form';
+import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useRouter } from 'next/navigation';
@@ -24,15 +24,15 @@ import { useToast } from '@/hooks/use-toast';
 import { Trash2, PlusCircle, Download } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/auth-context';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ContributorSchema } from '@/lib/data-schemas';
-import { Checkbox } from '@/components/ui/checkbox';
 import { FileUploader } from '@/components/file-uploader';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { logSubmissionEvent } from '@/ai/flows/log-submission-event';
 import Link from 'next/link';
 import { generateNotification } from '@/ai/flows/generate-notification';
+import { PDFDocument } from 'pdf-lib';
 
 const NewSubmissionSchema = z.object({
   title: z.string().min(10, 'Title must be at least 10 characters long.'),
@@ -40,6 +40,7 @@ const NewSubmissionSchema = z.object({
   keywords: z.string().min(3, 'Please provide at least one keyword.'),
   manuscriptUrl: z.string().url('Manuscript file is required.'),
   contributors: z.array(ContributorSchema).min(1, 'At least one contributor is required.'),
+  pageCount: z.number().optional(),
 });
 
 const formSchema = NewSubmissionSchema;
@@ -74,6 +75,7 @@ export default function NewSubmissionPage() {
       keywords: '',
       manuscriptUrl: '',
       contributors: [],
+      pageCount: 0,
     },
   });
 
@@ -104,6 +106,26 @@ export default function NewSubmissionPage() {
         });
     });
   }
+
+  const handleFileUploadComplete = useCallback(async (url: string) => {
+    if (!url) return;
+    form.setValue('manuscriptUrl', url);
+
+    if (url.toLowerCase().endsWith('.pdf')) {
+      try {
+        const fileBytes = await fetch(url).then(res => res.arrayBuffer());
+        const pdfDoc = await PDFDocument.load(fileBytes);
+        form.setValue('pageCount', pdfDoc.getPageCount());
+      } catch (error) {
+        console.error("Failed to count PDF pages:", error);
+        toast({
+          title: "Could not count pages",
+          description: "Could not automatically count the pages in the PDF.",
+          variant: "destructive"
+        })
+      }
+    }
+  }, [form, toast]);
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     if (!user || !user.displayName || !user.email) {
@@ -144,6 +166,7 @@ export default function NewSubmissionPage() {
           contributors: values.contributors,
           reviewers: [],
           reviewerIds: [],
+          pageCount: values.pageCount || 0,
       };
       
       const submissionsCollectionRef = collection(db, 'submissions');
@@ -155,10 +178,8 @@ export default function NewSubmissionPage() {
           context: { authorName: primaryContact.name },
       });
       
-      // Notify all admins and managing editors
-      // This is a simplification; in a larger app, you might notify specific handling editors.
       await generateNotification({
-          userId: 'Admins', // A placeholder; your backend would resolve this to all admin/ME uids
+          userId: 'Admins',
           submissionId: docRef.id,
           eventType: 'NEW_SUBMISSION',
           context: { submissionTitle: values.title, authorName: primaryContact.name },
@@ -276,11 +297,7 @@ export default function NewSubmissionPage() {
                                 <FormControl>
                                     <FileUploader
                                         endpoint="documentUploader"
-                                        onUploadComplete={(url) => {
-                                            if (url) {
-                                                field.onChange(url);
-                                            }
-                                        }}
+                                        onUploadComplete={handleFileUploadComplete}
                                         onUploadError={(error) => {
                                             toast({
                                                 title: 'Upload Failed',
@@ -290,7 +307,7 @@ export default function NewSubmissionPage() {
                                         }}
                                     />
                                 </FormControl>
-                                <FormDescription>Please upload your manuscript in .docx format.</FormDescription>
+                                <FormDescription>Please upload your manuscript in .docx or .pdf format.</FormDescription>
                                 <FormMessage />
                             </FormItem>
                         )}

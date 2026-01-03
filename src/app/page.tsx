@@ -6,10 +6,11 @@ import { ArrowRight, Feather, Microscope, BookOpen, BookText, Download } from 'l
 import { PublicHeader } from '@/components/public-header';
 import { getLatestIssue } from '@/services/publication-service';
 import { Icons } from '@/components/icons';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs, orderBy, query } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import Image from 'next/image';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { IndexingService } from '@/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,6 +32,7 @@ export default async function HomePage() {
   const latestIssue = await getLatestIssue();
   let journalInfo: { coverLetterUrl?: string, submissionTemplateUrl?: string } = {};
   let branding: { logoUrl?: string } = {};
+  let indexingServices: IndexingService[] = [];
 
   try {
     const journalInfoRef = doc(db, 'settings', 'journalInfo');
@@ -43,6 +45,9 @@ export default async function HomePage() {
     if (brandingSnap.exists()) {
       branding = brandingSnap.data();
     }
+    const indexingQuery = query(collection(db, 'indexingServices'), orderBy('order'));
+    const indexingSnapshot = await getDocs(indexingQuery);
+    indexingServices = indexingSnapshot.docs.map(doc => doc.data() as IndexingService);
   } catch (e) {
     console.error("Could not fetch page data", e);
   }
@@ -112,18 +117,29 @@ export default async function HomePage() {
           </div>
         </section>
         
-        <section className="py-16 sm:py-24">
+        {indexingServices.length > 0 && (
+          <section className="py-12 bg-muted/50">
             <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="text-center max-w-3xl mx-auto">
-                     <h2 className="text-3xl md:text-4xl font-bold font-headline text-foreground">
-                        Advancing Knowledge Across Disciplines
-                    </h2>
-                    <p className="text-muted-foreground mt-4 text-lg">
-                        The Multidisciplinary Journal of Science, Technology, Education and Management (MJSTEM) is dedicated to the rapid dissemination of high-quality research. We provide a platform for scholars to exchange ideas that push the boundaries of their fields.
-                    </p>
-                </div>
+              <h3 className="text-center text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-6">Indexed In</h3>
+              <div className="flex justify-center items-center flex-wrap gap-x-8 gap-y-4">
+                {indexingServices.map((service) => (
+                  <TooltipProvider key={service.id}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="relative h-12 w-32">
+                           <Image src={service.logoUrl} alt={service.name} fill className="object-contain" />
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{service.name}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                ))}
+              </div>
             </div>
-        </section>
+          </section>
+        )}
 
         <section className="py-16 sm:py-24">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -185,7 +201,7 @@ export default async function HomePage() {
                      <li key={article.id} className="p-4 rounded-lg border bg-card hover:border-primary/50 hover:shadow-lg transition-all flex items-center justify-between gap-4">
                         <div>
                             <h3 className="font-headline font-semibold text-lg text-foreground">{article.title}</h3>
-                            <p className="text-sm text-muted-foreground mt-1">By {article.authorName}</p>
+                            <p className="text-sm text-muted-foreground mt-1">By {article.contributors?.map(c => c.name).join(', ') || article.authorName}</p>
                         </div>
                         <Button asChild variant="outline" size="sm" className="shrink-0">
                             <Link href={article.manuscriptUrl || '#'} target="_blank" rel="noopener noreferrer">

@@ -30,7 +30,6 @@ import { Button } from '@/components/ui/button';
 import {
   PlusCircle,
   Book,
-  BookCopy,
   GripVertical,
 } from 'lucide-react';
 import {
@@ -50,7 +49,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { Submission, Volume, Issue, Article } from '@/types';
+import { Submission, Volume, Issue, Article, Contributor } from '@/types';
 import {
   collection,
   query,
@@ -66,7 +65,6 @@ import {
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
-import { cn } from '@/lib/utils';
 import { DroppableIssue } from '@/components/droppable-issue';
 
 const AddIssueDialog = ({ volume, onIssueAdded }: { volume: Volume; onIssueAdded: () => void }) => {
@@ -280,40 +278,53 @@ export default function PublicationsPage() {
     if (!over || !active.id || active.id === over.id) return;
     
     const originalContainer = findContainer(active.id as string);
-    const overContainer = findContainer(over.id as string);
+    let overContainer = findContainer(over.id as string);
+     // Handle dropping on an issue container directly
+    if (over.data.current?.type === 'issue' && overContainer?.type !== 'issue') {
+        overContainer = { type: 'issue', volumeId: over.data.current.volumeId, issueId: over.data.current.issueId, items: [] };
+    }
+
 
     if (!originalContainer || !overContainer) return;
     
     const activeIndex = originalContainer.items.findIndex(item => item.id === active.id);
-    const overIndex = overContainer.items.findIndex(item => item.id === over.id) !== -1 
-        ? overContainer.items.findIndex(item => item.id === over.id) 
-        : overContainer.items.length;
+    let overIndex = -1;
+    if (overContainer.items) {
+      overIndex = overContainer.items.findIndex(item => item.id === over.id);
+    }
+    if (overIndex === -1) {
+      overIndex = overContainer.items?.length || 0;
+    }
 
 
     // --- Firestore Logic ---
     try {
       await runTransaction(db, async (transaction) => {
           let sourceItems = [...originalContainer.items];
-          let destinationItems = [...overContainer.items];
+          let destinationItems = overContainer.items ? [...overContainer.items] : [];
           
-          let updatedVolumes = [...volumes];
+          let updatedVolumes = JSON.parse(JSON.stringify(volumes));
 
           const [movedItem] = sourceItems.splice(activeIndex, 1);
           
+          const articleSubmission = (originalContainer.type === 'unassigned' ? movedItem : unassignedSubmissions.find(s => s.id === movedItem.id) || movedItem) as Submission;
+
           const newArticle: Article = {
-            id: (movedItem as Submission).id,
-            title: (movedItem as Submission).title,
-            authorName: (movedItem as Submission).author.name,
-            manuscriptUrl: (movedItem as Submission).manuscriptUrl,
+            id: articleSubmission.id,
+            title: articleSubmission.title,
+            authorName: articleSubmission.author.name, // This might need adjustment if we show all authors
+            contributors: articleSubmission.contributors,
+            manuscriptUrl: articleSubmission.manuscriptUrl,
+            pageCount: articleSubmission.pageCount,
           };
 
           if (originalContainer.type === 'issue' && overContainer.type === 'issue' && originalContainer.issueId === overContainer.issueId) {
             // Reordering within the same issue
             destinationItems.splice(overIndex, 0, newArticle);
 
-             const volIdx = updatedVolumes.findIndex(v => v.id === originalContainer.volumeId);
+             const volIdx = updatedVolumes.findIndex((v: Volume) => v.id === originalContainer.volumeId);
              if (volIdx === -1) throw new Error("Volume not found for reorder");
-             const issueIdx = updatedVolumes[volIdx].issues.findIndex(i => i.id === originalContainer.issueId);
+             const issueIdx = updatedVolumes[volIdx].issues.findIndex((i: Issue) => i.id === originalContainer.issueId);
              if (issueIdx === -1) throw new Error("Issue not found for reorder");
              
              updatedVolumes[volIdx].issues[issueIdx].articles = destinationItems as Article[];
@@ -324,18 +335,18 @@ export default function PublicationsPage() {
             destinationItems.splice(overIndex, 0, newArticle);
             
             // Update destination issue
-            const destVolIdx = updatedVolumes.findIndex(v => v.id === overContainer.volumeId);
+            const destVolIdx = updatedVolumes.findIndex((v: Volume) => v.id === overContainer!.volumeId);
             if(destVolIdx === -1) throw new Error("Destination volume not found");
-            const destIssueIdx = updatedVolumes[destVolIdx].issues.findIndex(i => i.id === overContainer.issueId);
+            const destIssueIdx = updatedVolumes[destVolIdx].issues.findIndex((i: Issue) => i.id === overContainer!.issueId);
             if(destIssueIdx === -1) throw new Error("Destination issue not found");
             updatedVolumes[destVolIdx].issues[destIssueIdx].articles = destinationItems as Article[];
-            transaction.update(doc(db, 'volumes', overContainer.volumeId), { issues: updatedVolumes[destVolIdx].issues });
+            transaction.update(doc(db, 'volumes', overContainer.volumeId!), { issues: updatedVolumes[destVolIdx].issues });
 
             // If moving from another issue, update source issue
              if (originalContainer.type === 'issue') {
-                const sourceVolIdx = updatedVolumes.findIndex(v => v.id === originalContainer.volumeId);
+                const sourceVolIdx = updatedVolumes.findIndex((v: Volume) => v.id === originalContainer.volumeId);
                 if(sourceVolIdx === -1) throw new Error("Source volume not found");
-                const sourceIssueIdx = updatedVolumes[sourceVolIdx].issues.findIndex(i => i.id === originalContainer.issueId);
+                const sourceIssueIdx = updatedVolumes[sourceVolIdx].issues.findIndex((i: Issue) => i.id === originalContainer.issueId);
                 if(sourceIssueIdx === -1) throw new Error("Source issue not found");
                 updatedVolumes[sourceVolIdx].issues[sourceIssueIdx].articles = sourceItems as Article[];
                 transaction.update(doc(db, 'volumes', originalContainer.volumeId), { issues: updatedVolumes[sourceVolIdx].issues });

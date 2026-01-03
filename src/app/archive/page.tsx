@@ -13,8 +13,7 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Book, BookCopy, FileText, ArrowRight } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Book, BookCopy, FileText } from 'lucide-react';
 import Link from 'next/link';
 
 export default function ArchivePage() {
@@ -36,8 +35,9 @@ export default function ArchivePage() {
             articles: issue.articles?.map((article: any) => ({
               id: article.id,
               title: article.title,
-              authorName: article.authorName,
+              contributors: article.contributors || [{ name: article.authorName }], // Fallback for old data
               manuscriptUrl: article.manuscriptUrl || '',
+              pageCount: article.pageCount || null,
             } as Article)) || [],
           })) || [],
         }));
@@ -92,15 +92,17 @@ export default function ArchivePage() {
                                                             <FileText className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
                                                             <div>
                                                                 <h4 className="font-semibold text-foreground">{article.title}</h4>
-                                                                <p className="text-sm text-muted-foreground">By {article.authorName}</p>
+                                                                <p className="text-sm text-muted-foreground">
+                                                                  By {article.contributors?.map(c => c.name).join(', ') || article.authorName}
+                                                                </p>
                                                             </div>
                                                         </div>
-                                                        <Button asChild variant="outline" size="sm" disabled={!article.manuscriptUrl}>
-                                                            <Link href={article.manuscriptUrl || '#'} target='_blank' rel='noopener noreferrer'>
-                                                                Read Article
-                                                                <ArrowRight className="w-4 h-4 ml-2" />
+                                                        <div className='text-right'>
+                                                             <Link href={article.manuscriptUrl || '#'} target='_blank' rel='noopener noreferrer' className='text-sm text-primary hover:underline'>
+                                                                PDF
                                                             </Link>
-                                                        </Button>
+                                                            {article.pageCount && <p className="text-sm text-muted-foreground">{article.pageCount} Pages</p>}
+                                                        </div>
                                                     </li>
                                                 ))
                                             ) : (

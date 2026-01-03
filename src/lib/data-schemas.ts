@@ -21,6 +21,7 @@ export const NewSubmissionSchema = z.object({
   keywords: z.string().min(3, 'Please provide at least one keyword.'),
   manuscriptUrl: z.string().url('Manuscript file is required.'),
   contributors: z.array(ContributorSchema).min(1, 'At least one contributor is required.'),
+  pageCount: z.number().optional(),
 });
 
 
@@ -65,6 +66,7 @@ export const SubmissionSchema = z.object({
   reviewers: z.array(AssignedReviewerSchema).optional(),
   reviewerIds: z.array(z.string()).optional(), // For querying
   originalSubmissionDate: z.date().optional().nullable(),
+  pageCount: z.number().optional(),
 });
 
 export const ArticleSchema = z.object({
@@ -72,6 +74,8 @@ export const ArticleSchema = z.object({
   title: z.string(),
   authorName: z.string(),
   manuscriptUrl: z.string().url(),
+  contributors: z.array(ContributorSchema).optional(),
+  pageCount: z.number().optional(),
 });
 
 export const IssueSchema = z.object({
@@ -107,4 +111,11 @@ export const NotificationSchema = z.object({
     timestamp: z.any(),
     read: z.boolean(),
     icon: z.string(),
+});
+
+export const IndexingServiceSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().min(1, "Service name is required."),
+  logoUrl: z.string().url("A valid logo URL is required."),
+  order: z.number().optional(),
 });

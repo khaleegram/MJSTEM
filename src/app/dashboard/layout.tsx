@@ -24,8 +24,8 @@ const isPathAllowed = (role: string, path: string): boolean => {
         return true;
     }
 
-    // Admins can access the import page
-    if ((role === 'Admin' || role === 'Managing Editor') && path.startsWith('/dashboard/settings/import')) {
+    // Admins can access the import page and indexing page
+    if ((role === 'Admin' || role === 'Managing Editor') && (path.startsWith('/dashboard/settings/import') || path.startsWith('/dashboard/settings/indexing'))) {
         return true;
     }
     

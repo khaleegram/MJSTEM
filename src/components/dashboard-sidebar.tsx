@@ -17,6 +17,7 @@ import {
   Palette,
   Info,
   Upload,
+  Database,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Icons } from './icons';
@@ -52,6 +53,7 @@ const settingsSubNavItems = [
     { href: '/dashboard/settings/branding', icon: Palette, label: 'Branding' },
     { href: '/dashboard/settings/journal-info', icon: Info, label: 'Journal Info' },
     { href: '/dashboard/settings/import', icon: Upload, label: 'Import Submissions' },
+    { href: '/dashboard/settings/indexing', icon: Database, label: 'Indexing' },
 ]
 
 export function DashboardSidebar() {

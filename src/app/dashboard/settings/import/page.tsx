@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useForm, useFieldArray } from 'react-hook-form';
@@ -22,7 +23,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Trash2, PlusCircle, Calendar as CalendarIcon } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/auth-context';
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { SubmissionStatus } from '@/types';
 import { ContributorSchema } from '@/lib/data-schemas';
 import { FileUploader } from '@/components/file-uploader';
@@ -34,7 +35,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
-
+import { PDFDocument } from 'pdf-lib';
 
 const statusOptions: SubmissionStatus[] = [
     'Submitted', 'Under Initial Review', 'Under Peer Review', 
@@ -53,6 +54,7 @@ const importSchema = z.object({
   })).optional(),
   status: z.enum(statusOptions),
   originalSubmissionDate: z.date().optional(),
+  pageCount: z.number().optional(),
 });
 
 export default function ImportSubmissionPage() {
@@ -70,6 +72,7 @@ export default function ImportSubmissionPage() {
       contributors: [{ name: '', email: '', institution: '', isPrimaryContact: true, role: 'Author' }],
       manuscriptUrl: '',
       status: 'Submitted',
+      pageCount: 0,
     },
   });
 
@@ -86,6 +89,27 @@ export default function ImportSubmissionPage() {
         });
     });
   }
+
+  const handleFileUploadComplete = useCallback(async (url: string) => {
+    if (!url) return;
+    form.setValue('manuscriptUrl', url);
+
+    if (url.toLowerCase().endsWith('.pdf')) {
+      try {
+        const fileBytes = await fetch(url).then(res => res.arrayBuffer());
+        const pdfDoc = await PDFDocument.load(fileBytes);
+        form.setValue('pageCount', pdfDoc.getPageCount());
+      } catch (error) {
+        console.error("Failed to count PDF pages:", error);
+        toast({
+          title: "Could not count pages",
+          description: "Could not automatically count the pages in the PDF.",
+          variant: "destructive"
+        })
+      }
+    }
+  }, [form, toast]);
+
 
   async function onSubmit(values: z.infer<typeof importSchema>) {
     if (!user) {
@@ -113,6 +137,7 @@ export default function ImportSubmissionPage() {
         reviewers: [],
         reviewerIds: [],
         originalSubmissionDate: values.originalSubmissionDate || null,
+        pageCount: values.pageCount || 0,
     };
     
     const submissionsCollectionRef = collection(db, 'submissions');
@@ -170,7 +195,7 @@ export default function ImportSubmissionPage() {
                         <FormItem><FormLabel>Keywords</FormLabel><FormControl><Input placeholder="e.g., Quantum Physics, AI, Climate Change" {...field} disabled={isSubmitting}/></FormControl><FormDescription>Separate keywords with commas.</FormDescription><FormMessage /></FormItem>
                     )}/>
                     <FormField control={form.control} name="manuscriptUrl" render={({ field }) => (
-                        <FormItem><FormLabel>Manuscript File</FormLabel><FormControl><FileUploader endpoint="documentUploader" onUploadComplete={(url) => field.onChange(url)} onUploadError={(error) => toast({title: 'Upload Failed', description: error.message, variant: 'destructive'})}/></FormControl><FormDescription>Upload the .docx or .pdf file.</FormDescription><FormMessage /></FormItem>
+                        <FormItem><FormLabel>Manuscript File</FormLabel><FormControl><FileUploader endpoint="documentUploader" onUploadComplete={handleFileUploadComplete} onUploadError={(error) => toast({title: 'Upload Failed', description: error.message, variant: 'destructive'})}/></FormControl><FormDescription>Upload the .docx or .pdf file.</FormDescription><FormMessage /></FormItem>
                     )}/>
                 </CardContent>
             </Card>

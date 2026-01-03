@@ -2,7 +2,7 @@
 'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Award, Palette, Info, Upload } from 'lucide-react';
+import { Award, Palette, Info, Upload, Database } from 'lucide-react';
 import Link from 'next/link';
 
 export default function SettingsPage() {
@@ -71,6 +71,21 @@ export default function SettingsPage() {
                     <CardContent>
                         <CardDescription>
                            Manually import existing submissions from before the system was live.
+                        </CardDescription>
+                    </CardContent>
+                </Card>
+            </Link>
+            <Link href="/dashboard/settings/indexing">
+                <Card className="hover:bg-muted/50 hover:border-primary/50 transition-colors">
+                    <CardHeader>
+                        <CardTitle className="font-headline flex items-center gap-3">
+                            <Database className="h-6 w-6 text-primary" />
+                            Indexing Services
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <CardDescription>
+                           Manage the list of indexing services displayed on the homepage.
                         </CardDescription>
                     </CardContent>
                 </Card>
