@@ -31,6 +31,8 @@ import {
   PlusCircle,
   Book,
   GripVertical,
+  Settings2,
+  Trash2,
 } from 'lucide-react';
 import {
   Dialog,
@@ -61,11 +63,99 @@ import {
   updateDoc,
   arrayUnion,
   runTransaction,
+  deleteDoc,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DroppableIssue } from '@/components/droppable-issue';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+
+
+const ManageVolumeDialog = ({ volume, onActionComplete }: { volume: Volume; onActionComplete: () => void }) => {
+    const [newTitle, setNewTitle] = useState(volume.title);
+    const [isSaving, setIsSaving] = useState(false);
+    const [isOpen, setIsOpen] = useState(false);
+    const { toast } = useToast();
+
+    const handleUpdateTitle = async () => {
+        if (!newTitle.trim()) {
+            toast({ title: 'Title cannot be empty', variant: 'destructive' });
+            return;
+        }
+        setIsSaving(true);
+        try {
+            const volumeRef = doc(db, 'volumes', volume.id);
+            await updateDoc(volumeRef, { title: newTitle });
+            toast({ title: 'Volume Updated', description: 'The volume title has been saved.' });
+            onActionComplete();
+            setIsOpen(false);
+        } catch (error) {
+            console.error('Error updating volume title:', error);
+            toast({ title: 'Error', description: 'Could not update volume title.', variant: 'destructive' });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleDeleteVolume = async () => {
+        setIsSaving(true);
+        try {
+            await deleteDoc(doc(db, 'volumes', volume.id));
+            toast({ title: 'Volume Deleted', description: `"${volume.title}" has been permanently removed.` });
+            onActionComplete();
+            setIsOpen(false);
+        } catch (error) {
+            console.error('Error deleting volume:', error);
+            toast({ title: 'Error', description: 'Could not delete the volume.', variant: 'destructive' });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+
+    return (
+        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+            <DialogTrigger asChild>
+                <Button variant="ghost" size="sm">
+                    <Settings2 className="mr-2 h-4 w-4" /> Manage
+                </Button>
+            </DialogTrigger>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Manage Volume</DialogTitle>
+                    <DialogDescription>Edit the title or delete this volume.</DialogDescription>
+                </DialogHeader>
+                 <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="volume-title" className="text-right">Title</Label>
+                        <Input id="volume-title" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} className="col-span-3" />
+                    </div>
+                </div>
+                <DialogFooter className="justify-between">
+                     <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                           <Button variant="destructive"><Trash2 className="mr-2 h-4 w-4" /> Delete Volume</Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                This will permanently delete the volume <strong>{volume.title}</strong> and all issues and articles within it. This action cannot be undone.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleDeleteVolume}>Delete</AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                    <Button onClick={handleUpdateTitle} disabled={isSaving}>{isSaving ? 'Saving...' : 'Save Title'}</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    )
+}
 
 const AddIssueDialog = ({ volume, onIssueAdded }: { volume: Volume; onIssueAdded: () => void }) => {
   const [issueTitle, setIssueTitle] = useState('');
@@ -321,11 +411,11 @@ export default function PublicationsPage() {
 
           if (originalContainer.type === 'issue' && overContainer.type === 'issue' && originalContainer.issueId === overContainer.issueId) {
             // Reordering within the same issue
-            destinationItems.splice(overIndex, 0, newArticle);
+            const reorderedItems = arrayMove(originalContainer.items, activeIndex, overIndex);
              const volRef = doc(db, 'volumes', originalContainer.volumeId);
              const volDoc = await transaction.get(volRef);
              const currentVolData = volDoc.data() as Volume;
-             const updatedIssues = currentVolData.issues?.map(i => i.id === originalContainer.issueId ? { ...i, articles: destinationItems } : i);
+             const updatedIssues = currentVolData.issues?.map(i => i.id === originalContainer.issueId ? { ...i, articles: reorderedItems } : i);
              transaction.update(volRef, { issues: updatedIssues });
           } else {
             // Moving between different containers
@@ -405,7 +495,12 @@ export default function PublicationsPage() {
                 <Accordion type="single" collapsible defaultValue={volumes[0]?.id}>
                   {volumes.map((volume) => (
                     <AccordionItem value={volume.id} key={volume.id}>
-                      <AccordionTrigger className="text-lg font-headline"><div className="flex items-center gap-3"><Book /> {volume.title}</div></AccordionTrigger>
+                      <AccordionTrigger className="text-lg font-headline hover:no-underline">
+                        <div className="flex justify-between items-center w-full pr-2">
+                            <div className="flex items-center gap-3"><Book /> {volume.title}</div>
+                            <ManageVolumeDialog volume={volume} onActionComplete={fetchPublicationsData} />
+                        </div>
+                      </AccordionTrigger>
                       <AccordionContent className="pl-6">
                         {volume.issues && volume.issues.length > 0 ? (
                           volume.issues.map((issue) => (
@@ -461,3 +556,5 @@ export default function PublicationsPage() {
     </DndContext>
   );
 }
+
+    
