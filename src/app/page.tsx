@@ -198,27 +198,26 @@ export default async function HomePage() {
               <div className="max-w-4xl mx-auto">
                 <ul className="space-y-4">
                   {latestIssue.articles?.map((article) => (
-                     <li key={article.id} className="p-4 rounded-lg border bg-card hover:border-primary/50 hover:shadow-lg transition-all flex items-start sm:items-center justify-between gap-4 flex-col sm:flex-row">
+                     <li key={article.id} className="p-4 rounded-lg border bg-card hover:border-primary/50 hover:shadow-lg transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                         <div className="flex-1">
                             <h3 className="font-headline font-semibold text-lg text-foreground">{article.title}</h3>
-                            <div className="text-sm text-muted-foreground mt-1 flex items-center flex-wrap gap-x-3 gap-y-1">
-                                <span>By {article.contributors?.map(c => c.name).join(', ') || article.authorName}</span>
-                                {article.pageCount && (
-                                    <>
-                                        <span className="text-xs">&#8226;</span>
-                                        <div className="flex items-center gap-1">
-                                            <FileTextIcon className="w-3 h-3" />
-                                            <span>{article.pageCount} pages</span>
-                                        </div>
-                                    </>
-                                )}
-                            </div>
+                             <p className="text-sm text-muted-foreground mt-1">
+                                By {article.contributors?.map(c => c.name).join(', ') || article.authorName}
+                            </p>
                         </div>
-                        <Button asChild variant="outline" size="sm" className="shrink-0 self-end sm:self-center">
-                            <Link href={article.manuscriptUrl || '#'} target="_blank" rel="noopener noreferrer">
-                                <BookText className="w-4 h-4 mr-2" /> Read
-                            </Link>
-                        </Button>
+                        <div className="flex items-center gap-4 self-end sm:self-center">
+                            {article.pageCount && (
+                                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                                    <FileTextIcon className="w-4 h-4" />
+                                    <span>{article.pageCount} pages</span>
+                                </div>
+                            )}
+                            <Button asChild variant="outline" size="sm" className="shrink-0">
+                                <Link href={article.manuscriptUrl || '#'} target="_blank" rel="noopener noreferrer">
+                                    <BookText className="w-4 h-4 mr-2" /> Read
+                                </Link>
+                            </Button>
+                        </div>
                     </li>
                   ))}
                 </ul>
