@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
@@ -93,7 +94,7 @@ const ManageVolumeDialog = ({ volume, onActionComplete }: { volume: Volume; onAc
             setIsOpen(false);
         } catch (error) {
             console.error('Error updating volume title:', error);
-            toast({ title: 'Error', description: 'Could not update volume title.', variant: 'destructive' });
+            toast({ title: 'Error', description: 'Could not update volume title.', variant = 'destructive' });
         } finally {
             setIsSaving(false);
         }
@@ -429,7 +430,7 @@ export default function PublicationsPage() {
     // --- Firestore Logic ---
     try {
       await runTransaction(db, async (transaction) => {
-        let movedItem;
+        let movedItem: Article | Submission;
         if (originalContainer.type === 'unassigned') {
             const submissionDoc = await transaction.get(doc(db, 'submissions', active.id as string));
             if (!submissionDoc.exists()) throw new Error("Submission not found");
@@ -462,13 +463,15 @@ export default function PublicationsPage() {
              transaction.update(volRef, { issues: updatedIssues });
           } else {
             // MOVE BETWEEN DIFFERENT CONTAINERS (unassigned -> issue, issue -> different issue)
+            const submissionBeingMoved = unassignedSubmissions.find(s => s.id === active.id) || movedItem;
+            
             const newArticle: Article = {
-                id: movedItem.id,
-                title: movedItem.title,
-                authorName: (movedItem as Submission).author.name, // Use assertion if needed
-                contributors: (movedItem as Submission).contributors,
-                manuscriptUrl: movedItem.manuscriptUrl,
-                pageCount: movedItem.pageCount || null,
+                id: submissionBeingMoved.id,
+                title: submissionBeingMoved.title,
+                authorName: (submissionBeingMoved as Submission).author.name,
+                contributors: (submissionBeingMoved as Submission).contributors,
+                manuscriptUrl: submissionBeingMoved.manuscriptUrl,
+                pageCount: (submissionBeingMoved as Submission).pageCount || null,
             };
 
             destinationItems.splice(overIndex, 0, newArticle);
@@ -584,3 +587,5 @@ export default function PublicationsPage() {
     </DndContext>
   );
 }
+
+    
