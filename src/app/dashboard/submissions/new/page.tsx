@@ -154,64 +154,53 @@ export default function NewSubmissionPage() {
 
     setIsSubmitting(true);
 
-    try {
-      const submissionData = {
-          author: { id: user.uid, name: primaryContact.name, email: primaryContact.email },
-          status: 'Submitted' as const,
-          submittedAt: serverTimestamp(),
-          title: values.title,
-          abstract: values.abstract,
-          keywords: values.keywords,
-          manuscriptUrl: values.manuscriptUrl,
-          contributors: values.contributors,
-          reviewers: [],
-          reviewerIds: [],
-          pageCount: values.pageCount || 0,
-      };
-      
-      const submissionsCollectionRef = collection(db, 'submissions');
-      const docRef = await addDoc(submissionsCollectionRef, submissionData);
-      
-      await logSubmissionEvent({
-          submissionId: docRef.id,
-          eventType: 'SUBMISSION_CREATED',
-          context: { authorName: primaryContact.name },
-      });
-      
-      await generateNotification({
-          userId: 'Admins',
-          submissionId: docRef.id,
-          eventType: 'NEW_SUBMISSION',
-          context: { submissionTitle: values.title, authorName: primaryContact.name },
-      });
+    const submissionData = {
+        author: { id: user.uid, name: primaryContact.name, email: primaryContact.email },
+        status: 'Submitted' as const,
+        submittedAt: serverTimestamp(),
+        title: values.title,
+        abstract: values.abstract,
+        keywords: values.keywords,
+        manuscriptUrl: values.manuscriptUrl,
+        contributors: values.contributors,
+        reviewers: [],
+        reviewerIds: [],
+        pageCount: values.pageCount || 0,
+    };
+    
+    const submissionsCollectionRef = collection(db, 'submissions');
+    
+    addDoc(submissionsCollectionRef, submissionData).then(async (docRef) => {
+        await logSubmissionEvent({
+            submissionId: docRef.id,
+            eventType: 'SUBMISSION_CREATED',
+            context: { authorName: primaryContact.name },
+        });
+        
+        await generateNotification({
+            userId: 'Admins',
+            submissionId: docRef.id,
+            eventType: 'NEW_SUBMISSION',
+            context: { submissionTitle: values.title, authorName: primaryContact.name },
+        });
 
-      toast({
-          title: 'Submission Successful!',
-          description: 'Your manuscript has been received.',
-          variant: 'default',
-          className: 'bg-green-500 text-white',
-      });
-      router.push('/dashboard/author');
-
-    } catch (error: any) {
-       console.error("Submission failed:", error);
-       if(error.message?.includes("permission-denied") || error.name === 'FirestorePermissionError') {
-           const permissionError = new FirestorePermissionError({
-              path: collection(db, 'submissions').path,
-              operation: 'create',
-              requestResourceData: 'Submission Data', // simplified
-           });
-           errorEmitter.emit('permission-error', permissionError);
-       } else {
-         toast({
-          title: 'Submission Failed',
-          description: error.message || 'Could not submit your manuscript.',
-          variant: 'destructive',
-         });
-       }
-    } finally {
+        toast({
+            title: 'Submission Successful!',
+            description: 'Your manuscript has been received.',
+            variant: 'default',
+            className: 'bg-green-500 text-white',
+        });
+        router.push('/dashboard/author');
+    }).catch((serverError) => {
+        const permissionError = new FirestorePermissionError({
+            path: submissionsCollectionRef.path,
+            operation: 'create',
+            requestResourceData: submissionData,
+        });
+        errorEmitter.emit('permission-error', permissionError);
+    }).finally(() => {
         setIsSubmitting(false);
-    }
+    });
   }
 
   return (
