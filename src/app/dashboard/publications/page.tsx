@@ -330,7 +330,7 @@ export default function PublicationsPage() {
                       <AccordionContent className="pl-6">
                         {volume.issues && volume.issues.length > 0 ? (
                           volume.issues.map((issue) => (
-                             <DroppableIssue key={issue.id} issue={issue} volumeId={volume.id} />
+                             <DroppableIssue key={issue.id} issue={issue} volumeId={volume.id} onActionComplete={fetchPublicationsData} />
                           ))
                         ) : (
                           <div className="text-center text-muted-foreground py-6"><p>No issues in this volume yet.</p></div>

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useForm, useFieldArray } from 'react-hook-form';
@@ -43,11 +42,15 @@ const statusOptions: SubmissionStatus[] = [
 ];
 
 const importSchema = z.object({
-  title: z.string().min(10, 'Title must be at least 10 characters long.'),
-  abstract: z.string().min(50, 'Abstract must be at least 50 characters long.'),
-  keywords: z.string().min(3, 'Please provide at least one keyword.'),
-  manuscriptUrl: z.string().url('Manuscript file is required.'),
-  contributors: z.array(ContributorSchema).min(1, 'At least one contributor is required.'),
+  title: z.string().optional(),
+  abstract: z.string().optional(),
+  keywords: z.string().optional(),
+  manuscriptUrl: z.string().url().optional().or(z.literal('')),
+  contributors: z.array(ContributorSchema.extend({
+      name: z.string().optional(),
+      email: z.string().optional(),
+      institution: z.string().optional(),
+  })).optional(),
   status: z.enum(statusOptions),
   originalSubmissionDate: z.date().optional(),
 });
@@ -90,24 +93,23 @@ export default function ImportSubmissionPage() {
         return;
     }
     
-    const primaryContact = values.contributors.find(c => c.isPrimaryContact);
-    if (!primaryContact) {
-        toast({ title: "Primary contact missing", description: "One author must be designated as the primary contact.", variant: 'destructive'});
-        return;
-    }
-
+    const primaryContact = values.contributors?.find(c => c.isPrimaryContact);
+    
     setIsSubmitting(true);
 
     const submissionData = {
-        // Use a placeholder or a generic ID for imported authors, as they might not be system users
-        author: { id: `imported_${Date.now()}`, name: primaryContact.name, email: primaryContact.email },
+        author: { 
+            id: `imported_${Date.now()}`, 
+            name: primaryContact?.name || 'Imported Author', 
+            email: primaryContact?.email || 'imported@example.com' 
+        },
         status: values.status,
         submittedAt: values.originalSubmissionDate ? Timestamp.fromDate(values.originalSubmissionDate) : serverTimestamp(),
-        title: values.title,
-        abstract: values.abstract,
-        keywords: values.keywords,
-        manuscriptUrl: values.manuscriptUrl,
-        contributors: values.contributors,
+        title: values.title || 'Untitled Import',
+        abstract: values.abstract || '',
+        keywords: values.keywords || '',
+        manuscriptUrl: values.manuscriptUrl || '',
+        contributors: values.contributors || [],
         reviewers: [],
         reviewerIds: [],
         originalSubmissionDate: values.originalSubmissionDate || null,
@@ -121,7 +123,7 @@ export default function ImportSubmissionPage() {
         await logSubmissionEvent({
             submissionId: docRef.id,
             eventType: 'SUBMISSION_CREATED',
-            context: { authorName: `(Imported) ${primaryContact.name}` },
+            context: { authorName: `(Imported) ${primaryContact?.name || 'Author'}` },
         });
 
         toast({
@@ -148,7 +150,7 @@ export default function ImportSubmissionPage() {
     <div className="max-w-4xl mx-auto">
         <div className="mb-8">
           <h1 className="text-3xl font-bold font-headline">Import Existing Submissions</h1>
-          <p className="text-muted-foreground">Manually add papers that were submitted outside of this system.</p>
+          <p className="text-muted-foreground">Manually add papers that were submitted outside of this system. All fields are optional.</p>
         </div>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
