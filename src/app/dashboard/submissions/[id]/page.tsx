@@ -323,14 +323,14 @@ const DetailPageSkeleton = () => (
 const PageCountManager = ({ submission, onUpdate }: { submission: Submission, onUpdate: () => void }) => {
     const { userProfile } = useAuth();
     const isEditor = userProfile?.role === 'Editor' || userProfile?.role === 'Admin' || userProfile?.role === 'Managing Editor';
-    const [pageCount, setPageCount] = React.useState<number | undefined>(submission.pageCount);
+    const [pageCount, setPageCount] = React.useState<number | undefined | null>(submission.pageCount);
     const [isEditing, setIsEditing] = React.useState(false);
     const [isSaving, setIsSaving] = React.useState(false);
     const [isAnalyzing, setIsAnalyzing] = React.useState(false);
     const { toast } = useToast();
 
     const handleSave = async () => {
-        if (pageCount === undefined || pageCount < 0) {
+        if (pageCount === undefined || pageCount === null || pageCount < 0) {
             toast({ title: "Invalid page count", variant: "destructive" });
             return;
         }
@@ -428,7 +428,7 @@ const PageCountManager = ({ submission, onUpdate }: { submission: Submission, on
     return (
         <div className="flex items-center gap-2">
             <p className="text-sm font-medium">
-                {pageCount !== undefined ? `${pageCount} pages` : 'Page count not set'}
+                {pageCount !== undefined && pageCount !== null ? `${pageCount} pages` : 'Page count not set'}
             </p>
             <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsEditing(true)}>
                 <Edit className="h-4 w-4" />
@@ -493,6 +493,7 @@ export default function SubmissionDetailPage() {
                 reviewers: data.reviewers || [],
                 reviewerIds: data.reviewerIds || [],
                 pageCount: data.pageCount,
+                contributors: data.contributors || [],
             });
         } else {
             notFound();
@@ -835,5 +836,4 @@ export default function SubmissionDetailPage() {
   );
 }
 
-
-
+    

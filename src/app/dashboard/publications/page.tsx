@@ -307,15 +307,19 @@ export default function PublicationsPage() {
 
           const [movedItem] = sourceItems.splice(activeIndex, 1);
           
-          const articleSubmission = (originalContainer.type === 'unassigned' ? movedItem : unassignedSubmissions.find(s => s.id === movedItem.id) || movedItem) as Submission;
+          // Ensure we get the full submission object to access pageCount
+          const articleSubmission = unassignedSubmissions.find(s => s.id === movedItem.id) || 
+                                   (await getDoc(doc(db, 'submissions', movedItem.id))).data() as Submission;
+
+          if (!articleSubmission) throw new Error("Could not find submission data for the article.");
 
           const newArticle: Article = {
             id: articleSubmission.id,
             title: articleSubmission.title,
-            authorName: articleSubmission.author.name, // This might need adjustment if we show all authors
+            authorName: articleSubmission.author.name,
             contributors: articleSubmission.contributors,
             manuscriptUrl: articleSubmission.manuscriptUrl,
-            pageCount: articleSubmission.pageCount,
+            pageCount: articleSubmission.pageCount || null,
           };
 
           if (originalContainer.type === 'issue' && overContainer.type === 'issue' && originalContainer.issueId === overContainer.issueId) {
@@ -465,3 +469,5 @@ export default function PublicationsPage() {
     </DndContext>
   );
 }
+
+    
