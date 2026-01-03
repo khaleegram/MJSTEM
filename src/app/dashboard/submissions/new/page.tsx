@@ -359,13 +359,12 @@ export default function NewSubmissionPage() {
                                     render={({ field }) => (
                                         <FormItem className="flex items-center space-x-2 space-y-0">
                                             <FormControl>
-                                                <Checkbox
+                                                 <input
+                                                    type="radio"
+                                                    name="primaryContactRadio"
                                                     checked={field.value}
-                                                    onCheckedChange={(checked) => {
-                                                        if (checked) {
-                                                            handlePrimaryContactChange(index);
-                                                        }
-                                                    }}
+                                                    onChange={() => handlePrimaryContactChange(index)}
+                                                    className="form-radio h-4 w-4 text-primary transition duration-150 ease-in-out"
                                                     disabled={isSubmitting}
                                                 />
                                             </FormControl>

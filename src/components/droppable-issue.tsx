@@ -1,10 +1,11 @@
+
 'use client';
 
 import { useDroppable } from '@dnd-kit/core';
 import { Card } from '@/components/ui/card';
-import { BookCopy, Edit, Trash2 } from 'lucide-react';
+import { BookCopy, Edit, Trash2, GripVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Issue, Volume } from '@/types';
+import { Issue, Volume, Article } from '@/types';
 import { Button } from './ui/button';
 import {
   Dialog,
@@ -23,6 +24,30 @@ import { doc, runTransaction } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/auth-context';
+import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+
+const SortableArticle = ({ article, issueId }: { article: Article, issueId: string }) => {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ 
+        id: article.id,
+        data: {
+            type: 'article',
+            issueId: issueId,
+        }
+     });
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        zIndex: isDragging ? 10 : 'auto',
+    };
+    return (
+        <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="p-2 text-xs bg-card border rounded-md flex items-center gap-2">
+            <GripVertical className="h-4 w-4 text-muted-foreground" />
+            <span className="truncate">{article.title}</span>
+        </div>
+    )
+}
 
 const EditIssueDialog = ({ issue, volumeId, onActionComplete }: { issue: Issue, volumeId: string, onActionComplete: () => void }) => {
     const [newTitle, setNewTitle] = useState(issue.title);
@@ -126,11 +151,12 @@ const EditIssueDialog = ({ issue, volumeId, onActionComplete }: { issue: Issue, 
 export const DroppableIssue = ({ issue, volumeId, onActionComplete }: { issue: Issue, volumeId: string, onActionComplete: () => void }) => {
     const { isOver, setNodeRef } = useDroppable({
         id: `issue-${issue.id}`,
-        data: { issueId: issue.id, volumeId: volumeId },
+        data: { issueId: issue.id, volumeId: volumeId, type: 'issue' },
     });
     const { userProfile } = useAuth();
     const isAdmin = userProfile?.role === 'Admin' || userProfile?.role === 'Managing Editor';
 
+    const articleIds = issue.articles?.map(a => a.id) || [];
 
     return (
         <div ref={setNodeRef} className={cn("border-l pl-6 py-4 transition-colors", isOver && "bg-primary/10")}>
@@ -141,16 +167,16 @@ export const DroppableIssue = ({ issue, volumeId, onActionComplete }: { issue: I
                 </h4>
                 {isAdmin && <EditIssueDialog issue={issue} volumeId={volumeId} onActionComplete={onActionComplete} />}
             </div>
-            <div className="mt-2 space-y-2 text-sm text-muted-foreground">
-                {issue.articles && issue.articles.length > 0 ? (
-                    issue.articles.map((article) => (
-                        <Card key={article.id} className="p-2 text-xs">
-                           - {article.title}
-                        </Card>
-                    ))
-                ) : (
-                    <p className="text-xs italic">Drop articles here</p>
-                )}
+             <div className="mt-2 space-y-2 text-sm text-muted-foreground">
+                <SortableContext items={articleIds} strategy={verticalListSortingStrategy} id={`issue-${issue.id}`}>
+                    {issue.articles && issue.articles.length > 0 ? (
+                        issue.articles.map((article) => (
+                           <SortableArticle key={article.id} article={article} issueId={issue.id} />
+                        ))
+                    ) : (
+                        <div className="text-xs italic py-4 text-center border-dashed border rounded-md">Drop articles here</div>
+                    )}
+                </SortableContext>
             </div>
         </div>
     )

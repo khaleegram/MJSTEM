@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
@@ -8,8 +9,11 @@ import {
   useSensor,
   useSensors,
   DragEndEvent,
+  DragOverEvent,
+  DragStartEvent,
 } from '@dnd-kit/core';
 import {
+  arrayMove,
   SortableContext,
   useSortable,
   verticalListSortingStrategy,
@@ -157,7 +161,7 @@ export default function PublicationsPage() {
   const { toast } = useToast();
   const [newVolumeTitle, setNewVolumeTitle] = useState(`Volume ${volumes.length + 1}, ${new Date().getFullYear()}`);
   const sensors = useSensors(useSensor(PointerSensor));
-  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
 
   const fetchPublicationsData = async () => {
     setLoading(true);
@@ -230,59 +234,121 @@ export default function PublicationsPage() {
     }
   };
 
+  function findContainer(id: string | null) {
+      if (!id) return null;
+      if (id === 'unassigned') {
+        return { type: 'unassigned', items: unassignedSubmissions };
+      }
+      for (const volume of volumes) {
+        for (const issue of volume.issues || []) {
+          if (`issue-${issue.id}` === id) {
+            return { type: 'issue', volumeId: volume.id, issueId: issue.id, items: issue.articles };
+          }
+          if (issue.articles?.some(a => a.id === id)) {
+            return { type: 'issue', volumeId: volume.id, issueId: issue.id, items: issue.articles };
+          }
+        }
+      }
+      return null;
+  }
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
+  }
+
+  const handleDragOver = (event: DragOverEvent) => {
+      const { active, over } = event;
+      const overId = over?.id;
+
+      if (!overId) return;
+
+      const activeContainerData = findContainer(active.id as string);
+      const overContainerData = findContainer(overId as string);
+
+      if (!activeContainerData || !overContainerData || activeContainerData === overContainerData) {
+          return;
+      }
+      
+      // This is a simplified handler that visually moves items but doesn't commit changes.
+      // The real logic is in handleDragEnd.
+  }
+
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
-    setActiveDragId(null);
-    if (!over || !active) return;
+    setActiveId(null);
+
+    if (!over || !active.id || active.id === over.id) return;
     
-    const articleId = active.id as string;
-    const droppableId = over.id as string;
+    const originalContainer = findContainer(active.id as string);
+    const overContainer = findContainer(over.id as string);
 
-    if (!droppableId.startsWith('issue-')) return;
+    if (!originalContainer || !overContainer) return;
     
-    const issueId = over.data.current?.issueId;
-    const volumeId = over.data.current?.volumeId;
+    const activeIndex = originalContainer.items.findIndex(item => item.id === active.id);
+    const overIndex = overContainer.items.findIndex(item => item.id === over.id) !== -1 
+        ? overContainer.items.findIndex(item => item.id === over.id) 
+        : overContainer.items.length;
 
-    if (articleId && issueId && volumeId) {
-        const article = unassignedSubmissions.find(s => s.id === articleId);
-        if (!article) return;
 
-        try {
-            await runTransaction(db, async (transaction) => {
-                const volumeRef = doc(db, 'volumes', volumeId);
-                const volumeDoc = await transaction.get(volumeRef);
-                if (!volumeDoc.exists()) throw "Volume not found!";
+    // --- Firestore Logic ---
+    try {
+      await runTransaction(db, async (transaction) => {
+          let sourceItems = [...originalContainer.items];
+          let destinationItems = [...overContainer.items];
+          
+          let updatedVolumes = [...volumes];
 
-                const newArticle: Article = { 
-                  id: article.id, 
-                  title: article.title, 
-                  authorName: article.author.name,
-                  manuscriptUrl: article.manuscriptUrl,
-                };
-                
-                const currentData = volumeDoc.data() as Volume;
-                const updatedIssues = currentData.issues?.map(issue => {
-                    if (issue.id === issueId) {
-                        // Prevent adding duplicates
-                        if (issue.articles?.some(a => a.id === newArticle.id)) {
-                            return issue;
-                        }
-                        return { ...issue, articles: [...(issue.articles || []), newArticle] };
-                    }
-                    return issue;
-                });
+          const [movedItem] = sourceItems.splice(activeIndex, 1);
+          
+          const newArticle: Article = {
+            id: (movedItem as Submission).id,
+            title: (movedItem as Submission).title,
+            authorName: (movedItem as Submission).author.name,
+            manuscriptUrl: (movedItem as Submission).manuscriptUrl,
+          };
 
-                transaction.update(volumeRef, { issues: updatedIssues });
-            });
+          if (originalContainer.type === 'issue' && overContainer.type === 'issue' && originalContainer.issueId === overContainer.issueId) {
+            // Reordering within the same issue
+            destinationItems.splice(overIndex, 0, newArticle);
+
+             const volIdx = updatedVolumes.findIndex(v => v.id === originalContainer.volumeId);
+             if (volIdx === -1) throw new Error("Volume not found for reorder");
+             const issueIdx = updatedVolumes[volIdx].issues.findIndex(i => i.id === originalContainer.issueId);
+             if (issueIdx === -1) throw new Error("Issue not found for reorder");
+             
+             updatedVolumes[volIdx].issues[issueIdx].articles = destinationItems as Article[];
+             transaction.update(doc(db, 'volumes', originalContainer.volumeId), { issues: updatedVolumes[volIdx].issues });
+
+          } else if(overContainer.type === 'issue') {
+            // Moving from unassigned to an issue, or between issues
+            destinationItems.splice(overIndex, 0, newArticle);
             
-            toast({ title: "Article Added", description: `Added "${article.title}" to issue.` });
-            // Refetch all data to ensure UI consistency
-            fetchPublicationsData();
+            // Update destination issue
+            const destVolIdx = updatedVolumes.findIndex(v => v.id === overContainer.volumeId);
+            if(destVolIdx === -1) throw new Error("Destination volume not found");
+            const destIssueIdx = updatedVolumes[destVolIdx].issues.findIndex(i => i.id === overContainer.issueId);
+            if(destIssueIdx === -1) throw new Error("Destination issue not found");
+            updatedVolumes[destVolIdx].issues[destIssueIdx].articles = destinationItems as Article[];
+            transaction.update(doc(db, 'volumes', overContainer.volumeId), { issues: updatedVolumes[destVolIdx].issues });
 
-        } catch (error) {
-            console.error("Failed to add article to issue: ", error);
-            toast({ title: "Update Failed", description: "Could not add article to the issue.", variant: "destructive" });
-        }
+            // If moving from another issue, update source issue
+             if (originalContainer.type === 'issue') {
+                const sourceVolIdx = updatedVolumes.findIndex(v => v.id === originalContainer.volumeId);
+                if(sourceVolIdx === -1) throw new Error("Source volume not found");
+                const sourceIssueIdx = updatedVolumes[sourceVolIdx].issues.findIndex(i => i.id === originalContainer.issueId);
+                if(sourceIssueIdx === -1) throw new Error("Source issue not found");
+                updatedVolumes[sourceVolIdx].issues[sourceIssueIdx].articles = sourceItems as Article[];
+                transaction.update(doc(db, 'volumes', originalContainer.volumeId), { issues: updatedVolumes[sourceVolIdx].issues });
+            }
+          }
+      });
+      toast({ title: "Publication Updated", description: "Article position has been saved." });
+    } catch (e: any) {
+        console.error("DND transaction failed: ", e);
+        toast({ title: "Update Failed", description: e.message || "Could not move the article.", variant: "destructive"});
+    } finally {
+      // Refetch all data to ensure UI consistency after complex DND operations
+      fetchPublicationsData();
     }
   };
 
@@ -290,7 +356,13 @@ export default function PublicationsPage() {
   const unassignedIds = useMemo(() => unassignedSubmissions.map(s => s.id), [unassignedSubmissions]);
 
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={(e) => setActiveDragId(e.active.id as string)} onDragEnd={handleDragEnd}>
+    <DndContext 
+      sensors={sensors} 
+      collisionDetection={closestCenter} 
+      onDragStart={handleDragStart} 
+      onDragEnd={handleDragEnd}
+      onDragOver={handleDragOver}
+    >
       <div className="grid gap-8 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-8">
           <Card>
@@ -352,7 +424,7 @@ export default function PublicationsPage() {
               <CardDescription>Drag accepted articles into an issue.</CardDescription>
             </CardHeader>
             <CardContent className="flex-1 overflow-y-auto space-y-4">
-                <SortableContext items={unassignedIds} strategy={verticalListSortingStrategy}>
+                <SortableContext items={unassignedIds} strategy={verticalListSortingStrategy} id="unassigned">
                     {loading ? (
                         Array.from({ length: 4 }).map((_, i) => (
                         <Card key={i} className="p-4">
