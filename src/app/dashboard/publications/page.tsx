@@ -94,7 +94,7 @@ const ManageVolumeDialog = ({ volume, onActionComplete }: { volume: Volume; onAc
             setIsOpen(false);
         } catch (error) {
             console.error('Error updating volume title:', error);
-            toast({ title: 'Error', description: 'Could not update volume title.', variant = 'destructive' });
+            toast({ title: 'Error', description: 'Could not update volume title.', variant: 'destructive' });
         } finally {
             setIsSaving(false);
         }
@@ -587,5 +587,3 @@ export default function PublicationsPage() {
     </DndContext>
   );
 }
-
-    
