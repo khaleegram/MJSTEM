@@ -15,7 +15,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { File, Calendar, User, Mail, PlusCircle, Download, BookCopy, Edit, Sparkles, UserCheck, MessageSquare, Shield, Upload, Clock, CheckCircle2, FileSearch } from 'lucide-react';
+import { File, Calendar, User, Mail, PlusCircle, Download, BookCopy, Edit, Sparkles, UserCheck, MessageSquare, Shield, Upload, Clock, CheckCircle2, FileSearch, Info } from 'lucide-react';
 import { format } from 'date-fns';
 import { SubmissionStatus, Reviewer, Submission, UserProfile, Volume } from '@/types';
 import { cn } from '@/lib/utils';
@@ -46,6 +46,31 @@ import { FileUploader } from '@/components/file-uploader';
 import { generateNotification } from '@/ai/flows/generate-notification';
 import { Input } from '@/components/ui/input';
 import { PDFDocument } from 'pdf-lib';
+
+async function getNextSubmissionId(): Promise<string> {
+    const counterRef = doc(db, 'settings', 'submissionCounter');
+    const year = new Date().getFullYear().toString().slice(-2); // e.g., 24
+
+    const newCount = await runTransaction(db, async (transaction) => {
+        const counterDoc = await transaction.get(counterRef);
+        if (!counterDoc.exists() || !counterDoc.data().counts || !counterDoc.data().counts[year]) {
+            // Initialize for the year
+            const initialCounts = counterDoc.exists() ? counterDoc.data().counts || {} : {};
+            initialCounts[year] = 1;
+            transaction.set(counterRef, { counts: initialCounts }, { merge: true });
+            return 1;
+        } else {
+            const currentCount = counterDoc.data().counts[year];
+            const newCount = currentCount + 1;
+            const newCounts = { ...counterDoc.data().counts, [year]: newCount };
+            transaction.update(counterRef, { counts: newCounts });
+            return newCount;
+        }
+    });
+
+    const paddedCount = newCount.toString().padStart(3, '0');
+    return `MJSTEM-S-${year}-${paddedCount}`;
+}
 
 
 const getStatusVariant = (status: SubmissionStatus) => {
@@ -636,6 +661,48 @@ export default function SubmissionDetailPage() {
       }
   }
 
+  const handleAssignId = async () => {
+    if (!submission) return;
+    setIsUpdating(true);
+    try {
+        const newId = await getNextSubmissionId();
+        const submissionRef = doc(db, 'submissions', submission.id);
+        
+        await runTransaction(db, async (transaction) => {
+            // Update submission doc
+            transaction.update(submissionRef, { uniqueId: newId });
+
+            // Update volume doc if it exists
+            const volumesQuery = query(collection(db, 'volumes'));
+            const volumesSnapshot = await getDocs(volumesQuery);
+            for (const volDoc of volumesSnapshot.docs) {
+                const volume = volDoc.data() as Volume;
+                let volumeUpdated = false;
+                const updatedIssues = volume.issues?.map(issue => {
+                    const articleIndex = issue.articles?.findIndex(a => a.id === submission.id);
+                    if (articleIndex !== -1 && issue.articles) {
+                        issue.articles[articleIndex].uniqueId = newId;
+                        volumeUpdated = true;
+                    }
+                    return issue;
+                });
+                if (volumeUpdated) {
+                    transaction.update(doc(db, 'volumes', volDoc.id), { issues: updatedIssues });
+                    break;
+                }
+            }
+        });
+
+        toast({ title: "Unique ID Assigned", description: `Assigned ID: ${newId}` });
+        setRefetchTrigger(prev => prev + 1);
+    } catch (e) {
+        console.error("Error assigning unique ID:", e);
+        toast({ title: "Error", description: "Could not assign a unique ID.", variant: "destructive" });
+    } finally {
+        setIsUpdating(false);
+    }
+  };
+
   const handleRevisionSubmit = () => {
     setRefetchTrigger(prev => prev + 1);
   }
@@ -743,6 +810,20 @@ export default function SubmissionDetailPage() {
 
       <div className="space-y-8 lg:col-span-1">
         
+        {isEditor && !submission.uniqueId && submission.status === 'Accepted' && (
+            <Card>
+                <CardHeader>
+                    <CardTitle className="font-headline text-lg flex items-center gap-2"><Info /> Missing Info</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <p className="text-sm text-muted-foreground mb-4">This published article is missing a unique publication ID.</p>
+                    <Button onClick={handleAssignId} disabled={isUpdating}>
+                        {isUpdating ? 'Assigning...' : 'Assign Publication ID'}
+                    </Button>
+                </CardContent>
+            </Card>
+        )}
+
         {isEditor && !isDecisionMade && (
         <Card>
           <CardHeader>
@@ -840,3 +921,5 @@ export default function SubmissionDetailPage() {
     </div>
   );
 }
+
+    
