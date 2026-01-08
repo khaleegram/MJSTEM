@@ -431,12 +431,17 @@ export default function PublicationsPage() {
     try {
       await runTransaction(db, async (transaction) => {
         let movedItem: Article | Submission;
+        let submissionBeingMoved: Submission;
+
         if (originalContainer.type === 'unassigned') {
             const submissionDoc = await transaction.get(doc(db, 'submissions', active.id as string));
             if (!submissionDoc.exists()) throw new Error("Submission not found");
-            movedItem = { id: submissionDoc.id, ...submissionDoc.data() } as Submission;
+            submissionBeingMoved = { id: submissionDoc.id, ...submissionDoc.data() } as Submission;
         } else {
-            movedItem = originalContainer.items[activeIndex];
+            // If moving from an issue, we need to fetch the full submission to get all data.
+            const submissionDoc = await transaction.get(doc(db, 'submissions', active.id as string));
+            if (!submissionDoc.exists()) throw new Error("Submission not found");
+            submissionBeingMoved = { id: submissionDoc.id, ...submissionDoc.data() } as Submission;
         }
         
           const sourceItems = [...originalContainer.items];
@@ -463,15 +468,15 @@ export default function PublicationsPage() {
              transaction.update(volRef, { issues: updatedIssues });
           } else {
             // MOVE BETWEEN DIFFERENT CONTAINERS (unassigned -> issue, issue -> different issue)
-            const submissionBeingMoved = unassignedSubmissions.find(s => s.id === active.id) || movedItem;
             
             const newArticle: Article = {
                 id: submissionBeingMoved.id,
                 title: submissionBeingMoved.title,
-                authorName: (submissionBeingMoved as Submission).author.name,
-                contributors: (submissionBeingMoved as Submission).contributors,
+                authorName: submissionBeingMoved.author.name,
+                contributors: submissionBeingMoved.contributors,
                 manuscriptUrl: submissionBeingMoved.manuscriptUrl,
-                pageCount: (submissionBeingMoved as Submission).pageCount || null,
+                pageCount: submissionBeingMoved.pageCount || null,
+                uniqueId: submissionBeingMoved.uniqueId,
             };
 
             destinationItems.splice(overIndex, 0, newArticle);

@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { notFound, useParams } from 'next/navigation';
@@ -55,11 +54,17 @@ const getStatusVariant = (status: SubmissionStatus) => {
         return 'success';
       case 'Rejected':
         return 'destructive';
-      case 'Minor Revision':
+      case 'Awaiting Revision: Similarity Issues':
       case 'Major Revision':
-        return 'secondary';
+      case 'Minor Revision':
+        return 'warning';
       case 'Under Peer Review':
       case 'Under Initial Review':
+      case 'Under Review-R1':
+      case 'Under Review-R2':
+        return 'info';
+      case 'With Editor':
+      case 'Submitted':
         return 'default';
       default:
         return 'outline';
@@ -213,18 +218,23 @@ const AuthorRevisionForm = ({ submission, onRevisionSubmit }: { submission: Subm
             return;
         }
         setIsSubmitting(true);
+        
+        const currentRevision = submission.revision || 0;
+        const newRevision = currentRevision + 1;
 
         const submissionRef = doc(db, 'submissions', submission.id);
-        const newStatus = 'Under Initial Review';
+        const newStatus: SubmissionStatus = newRevision >= 2 ? 'Under Review-R2' : 'Under Review-R1';
         
         // Preserve the old manuscript URL
         const updateData: {
             manuscriptUrl: string;
-            status: string;
+            status: SubmissionStatus;
             originalManuscriptUrl?: string;
+            revision: number;
         } = {
             manuscriptUrl: fileUrl,
             status: newStatus,
+            revision: newRevision
         };
 
         if (!submission.originalManuscriptUrl) {
@@ -482,19 +492,9 @@ export default function SubmissionDetailPage() {
             const data = docSnap.data();
             setSubmission({
                 id: docSnap.id,
-                title: data.title,
-                author: data.author,
-                status: data.status,
+                ...data,
                 submittedAt: data.submittedAt ? data.submittedAt.toDate() : new Date(),
-                abstract: data.abstract,
-                keywords: data.keywords,
-                manuscriptUrl: data.manuscriptUrl || '',
-                originalManuscriptUrl: data.originalManuscriptUrl || '',
-                reviewers: data.reviewers || [],
-                reviewerIds: data.reviewerIds || [],
-                pageCount: data.pageCount,
-                contributors: data.contributors || [],
-            });
+            } as Submission);
         } else {
             notFound();
         }
@@ -580,7 +580,7 @@ export default function SubmissionDetailPage() {
           reviewerIds: arrayUnion(reviewer.uid),
       };
 
-      if (submission.status === 'Submitted' || submission.status === 'Under Initial Review') {
+      if (submission.status === 'Submitted' || submission.status === 'Under Initial Review' || submission.status === 'With Editor') {
           updateData.status = 'Under Peer Review';
       }
 
@@ -659,7 +659,7 @@ export default function SubmissionDetailPage() {
   const isAuthor = userProfile?.uid === submission.author.id;
   const isReviewer = submission.reviewerIds?.includes(user?.uid || '');
   const isDecisionMade = submission.status === 'Accepted' || submission.status === 'Rejected';
-  const needsRevision = submission.status === 'Minor Revision' || submission.status === 'Major Revision';
+  const needsRevision = submission.status === 'Minor Revision' || submission.status === 'Major Revision' || submission.status === 'Awaiting Revision: Similarity Issues';
 
 
   return (
@@ -667,9 +667,14 @@ export default function SubmissionDetailPage() {
       <div className="lg:col-span-2 space-y-8">
         <Card>
           <CardHeader>
-            <Badge variant={getStatusVariant(submission.status)} className={cn("w-fit mb-2", submission.status.startsWith('Under') && 'bg-blue-500')}>
-                {submission.status}
-            </Badge>
+            <div className="flex items-center justify-between">
+              <Badge variant={getStatusVariant(submission.status)} className={cn("w-fit mb-2")}>
+                  {submission.status}
+              </Badge>
+              {submission.uniqueId && (
+                <p className="text-sm font-mono text-muted-foreground">{submission.uniqueId}</p>
+              )}
+            </div>
             <CardTitle className="font-headline text-3xl">{submission.title}</CardTitle>
             <div className="text-sm text-muted-foreground flex items-center flex-wrap gap-x-4 gap-y-2 pt-2">
                 <div className="flex items-center gap-2">
@@ -835,5 +840,3 @@ export default function SubmissionDetailPage() {
     </div>
   );
 }
-
-    

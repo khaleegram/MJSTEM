@@ -42,6 +42,7 @@ export const AssignedReviewerSchema = z.object({
 
 export const SubmissionSchema = z.object({
   id: z.string().optional(),
+  uniqueId: z.string().optional(),
   title: z.string().min(10, 'Title must be at least 10 characters long.'),
   author: z.object({
     id: z.string(),
@@ -52,10 +53,14 @@ export const SubmissionSchema = z.object({
   submittedAt: z.date(),
   status: z.enum([
     'Submitted',
+    'With Editor',
     'Under Initial Review',
     'Under Peer Review',
+    'Under Review-R1',
+    'Under Review-R2',
     'Minor Revision',
     'Major Revision',
+    'Awaiting Revision: Similarity Issues',
     'Accepted',
     'Rejected',
   ]),
@@ -67,6 +72,7 @@ export const SubmissionSchema = z.object({
   reviewerIds: z.array(z.string()).optional(), // For querying
   originalSubmissionDate: z.date().optional().nullable(),
   pageCount: z.number().optional(),
+  revision: z.number().default(0),
 });
 
 export const ArticleSchema = z.object({
@@ -76,6 +82,7 @@ export const ArticleSchema = z.object({
   manuscriptUrl: z.string().url(),
   contributors: z.array(ContributorSchema).optional(),
   pageCount: z.number().optional(),
+  uniqueId: z.string().optional(),
 });
 
 export const IssueSchema = z.object({

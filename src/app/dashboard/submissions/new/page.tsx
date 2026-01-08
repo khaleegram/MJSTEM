@@ -5,7 +5,7 @@ import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useRouter } from 'next/navigation';
-import { collection, addDoc, serverTimestamp, getDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, getDoc, doc, runTransaction } from 'firebase/firestore';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -33,6 +33,7 @@ import { logSubmissionEvent } from '@/ai/flows/log-submission-event';
 import Link from 'next/link';
 import { generateNotification } from '@/ai/flows/generate-notification';
 import { PDFDocument } from 'pdf-lib';
+import { sendConfirmationEmail } from '@/ai/flows/send-confirmation-email';
 
 const NewSubmissionSchema = z.object({
   title: z.string().min(10, 'Title must be at least 10 characters long.'),
@@ -44,6 +45,31 @@ const NewSubmissionSchema = z.object({
 });
 
 const formSchema = NewSubmissionSchema;
+
+async function getNextSubmissionId(): Promise<string> {
+    const counterRef = doc(db, 'settings', 'submissionCounter');
+    const year = new Date().getFullYear().toString().slice(-2); // e.g., 24
+
+    const newCount = await runTransaction(db, async (transaction) => {
+        const counterDoc = await transaction.get(counterRef);
+        if (!counterDoc.exists() || !counterDoc.data().counts || !counterDoc.data().counts[year]) {
+            // Initialize for the year
+            const initialCounts = counterDoc.exists() ? counterDoc.data().counts || {} : {};
+            initialCounts[year] = 1;
+            transaction.set(counterRef, { counts: initialCounts }, { merge: true });
+            return 1;
+        } else {
+            const currentCount = counterDoc.data().counts[year];
+            const newCount = currentCount + 1;
+            const newCounts = { ...counterDoc.data().counts, [year]: newCount };
+            transaction.update(counterRef, { counts: newCounts });
+            return newCount;
+        }
+    });
+
+    const paddedCount = newCount.toString().padStart(3, '0');
+    return `MJSTEM-S-${year}-${paddedCount}`;
+}
 
 export default function NewSubmissionPage() {
   const router = useRouter();
@@ -153,6 +179,8 @@ export default function NewSubmissionPage() {
     }
 
     setIsSubmitting(true);
+    
+    const uniqueId = await getNextSubmissionId();
 
     const submissionData = {
         author: { id: user.uid, name: primaryContact.name, email: primaryContact.email },
@@ -166,6 +194,8 @@ export default function NewSubmissionPage() {
         reviewers: [],
         reviewerIds: [],
         pageCount: values.pageCount || 0,
+        uniqueId: uniqueId,
+        revision: 0,
     };
     
     const submissionsCollectionRef = collection(db, 'submissions');
@@ -182,6 +212,14 @@ export default function NewSubmissionPage() {
             submissionId: docRef.id,
             eventType: 'NEW_SUBMISSION',
             context: { submissionTitle: values.title, authorName: primaryContact.name },
+        });
+
+        // Send confirmation email
+        await sendConfirmationEmail({
+            authorEmail: primaryContact.email!,
+            authorName: primaryContact.name!,
+            manuscriptTitle: values.title,
+            uniqueId: uniqueId,
         });
 
         toast({

@@ -49,11 +49,17 @@ const getStatusVariant = (status: SubmissionStatus) => {
       return 'success';
     case 'Rejected':
       return 'destructive';
-    case 'Minor Revision':
+    case 'Awaiting Revision: Similarity Issues':
     case 'Major Revision':
-      return 'secondary';
+    case 'Minor Revision':
+      return 'warning';
     case 'Under Peer Review':
     case 'Under Initial Review':
+    case 'Under Review-R1':
+    case 'Under Review-R2':
+      return 'info';
+    case 'With Editor':
+    case 'Submitted':
       return 'default';
     default:
       return 'outline';
@@ -76,13 +82,8 @@ export default function AllSubmissionsPage() {
                 const data = doc.data();
                 return {
                     id: doc.id,
-                    title: data.title || 'Untitled',
-                    author: data.author || { name: 'Unknown Author' },
-                    status: data.status || 'Submitted',
+                    ...data,
                     submittedAt: data.submittedAt ? data.submittedAt.toDate() : new Date(),
-                    abstract: data.abstract || '',
-                    keywords: data.keywords || '',
-                    manuscriptUrl: data.manuscriptUrl || '',
                 } as Submission;
             });
             setSubmissions(subs);
@@ -255,7 +256,7 @@ export default function AllSubmissionsPage() {
                         {format(submission.submittedAt, 'PPP')}
                     </TableCell>
                     <TableCell>
-                        <Badge variant={getStatusVariant(submission.status)} className={cn(submission.status.startsWith('Under') && 'bg-blue-500')}>
+                        <Badge variant={getStatusVariant(submission.status)} className={cn("whitespace-nowrap")}>
                         {submission.status}
                         </Badge>
                     </TableCell>

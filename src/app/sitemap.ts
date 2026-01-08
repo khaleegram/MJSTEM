@@ -1,7 +1,8 @@
+
 import { MetadataRoute } from 'next';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Volume } from '@/types';
+import { Submission } from '@/types';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = 'https://mjstem.org'; // IMPORTANT: Replace with your actual domain
@@ -21,26 +22,25 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     lastModified: new Date(),
   }));
 
-  // Dynamic pages (e.g., published volumes/articles)
-  // This is a simplified example. You might want to get individual articles too.
-  const dynamicRoutes: MetadataRoute.Sitemap = [];
+  // Dynamic pages for published articles
+  const articleRoutes: MetadataRoute.Sitemap = [];
   try {
-    const volsQuery = query(collection(db, 'volumes'), orderBy('year', 'desc'));
-    const volsSnapshot = await getDocs(volsQuery);
-    volsSnapshot.forEach((doc) => {
-        const volume = doc.data() as Volume;
-        // You could add a lastModified field to your volumes, otherwise use current date
-        dynamicRoutes.push({
-            url: `${baseUrl}/archive`, // All volumes are on the archive page
-            lastModified: new Date(),
-            changeFrequency: 'weekly',
+    const articlesQuery = query(collection(db, 'submissions'), where('status', '==', 'Accepted'));
+    const articlesSnapshot = await getDocs(articlesQuery);
+    articlesSnapshot.forEach((doc) => {
+        const submission = { id: doc.id, ...doc.data() } as Submission;
+        articleRoutes.push({
+            url: `${baseUrl}/article/${submission.id}`, 
+            // Use submission date as lastModified, or add a publishedDate field later
+            lastModified: submission.submittedAt,
+            changeFrequency: 'yearly',
             priority: 0.8
         })
     });
   } catch (e) {
-    console.error("Could not fetch dynamic routes for sitemap", e);
+    console.error("Could not fetch dynamic article routes for sitemap", e);
   }
   
 
-  return [...staticRoutes, ...dynamicRoutes];
+  return [...staticRoutes, ...articleRoutes];
 }
