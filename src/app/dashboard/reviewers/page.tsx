@@ -57,6 +57,7 @@ export default function ReviewersPage() {
         const permissionError = new FirestorePermissionError({
           path: usersCollection.path,
           operation: 'list',
+          requestResourceData: { info: "Could not fetch user list for reviewer directory." }
         });
         errorEmitter.emit('permission-error', permissionError);
       } finally {
