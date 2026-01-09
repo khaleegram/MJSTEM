@@ -180,8 +180,15 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
 
     match /settings/{settingId} {
-      allow read: if true;
-      allow write: if isManagingEditor() || isAdmin();
+        allow read: if true;
+        
+        // Allow server-side actions to update the counter
+        match /submissionCounter {
+            allow read, write: if isSignedIn();
+        }
+
+        // Restrict other settings to admins/editors
+        allow write: if (isManagingEditor() || isAdmin()) && settingId != 'submissionCounter';
     }
   }
 }
