@@ -256,7 +256,9 @@ const AuthorRevisionForm = ({ submission, onRevisionSubmit }: { submission: Subm
 
         if (url.toLowerCase().endsWith('.pdf')) {
           try {
-            const fileBytes = await fetch(url).then(res => res.arrayBuffer());
+            const response = await fetch(`https://cors-anywhere.herokuapp.com/${url}`);
+            if (!response.ok) throw new Error(`Failed to fetch PDF with status: ${response.status}`);
+            const fileBytes = await response.arrayBuffer();
             const pdfDoc = await PDFDocument.load(fileBytes);
             setPageCount(pdfDoc.getPageCount());
           } catch (error) {
