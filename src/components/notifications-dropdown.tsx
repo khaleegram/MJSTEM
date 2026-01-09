@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Button } from './ui/button';
 import { useAuth } from '@/contexts/auth-context';
-import { collection, query, where, onSnapshot, orderBy, updateDoc, doc, limit } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, updateDoc, doc, limit, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Notification } from '@/types';
 import { useRouter } from 'next/navigation';
@@ -63,17 +63,38 @@ export const NotificationsDropdown = () => {
   const handleNotificationClick = async (notification: Notification) => {
     if (!notification.read) {
       const notifRef = doc(db, 'notifications', notification.id);
-      await updateDoc(notifRef, { read: true });
+      const updateData = { read: true };
+      
+      updateDoc(notifRef, updateData).catch(serverError => {
+        const permissionError = new FirestorePermissionError({
+            path: notifRef.path,
+            operation: 'update',
+            requestResourceData: updateData
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      });
     }
     router.push(notification.link);
   };
   
   const handleMarkAllRead = async () => {
     const unreadNotifs = notifications.filter(n => !n.read);
-    for (const notif of unreadNotifs) {
+    if (unreadNotifs.length === 0) return;
+
+    const batch = writeBatch(db);
+    unreadNotifs.forEach(notif => {
       const notifRef = doc(db, 'notifications', notif.id);
-      await updateDoc(notifRef, { read: true });
-    }
+      batch.update(notifRef, { read: true });
+    });
+
+    batch.commit().catch(serverError => {
+        const permissionError = new FirestorePermissionError({
+            path: 'notifications',
+            operation: 'write',
+            requestResourceData: { info: `Batch update to mark ${unreadNotifs.length} notifications as read.` }
+        });
+        errorEmitter.emit('permission-error', permissionError);
+    });
   }
 
   return (
@@ -108,7 +129,7 @@ export const NotificationsDropdown = () => {
               onClick={() => handleNotificationClick(notif)}
             >
               <p className="text-sm whitespace-normal">{notif.message}</p>
-              <p className="text-xs text-muted-foreground">{formatDistanceToNow(notif.timestamp.toDate(), { addSuffix: true })}</p>
+              <p className="text-xs text-muted-foreground">{notif.timestamp ? formatDistanceToNow(notif.timestamp.toDate(), { addSuffix: true }) : ''}</p>
             </DropdownMenuItem>
           ))
         ) : (
