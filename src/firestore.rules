@@ -1,12 +1,10 @@
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // -------------------------------------------------------------------------
+    // ---------------------------
     // UTILITY FUNCTIONS
-    // -------------------------------------------------------------------------
-
+    // ---------------------------
     function isSignedIn() {
       return request.auth != null;
     }
@@ -48,18 +46,17 @@ service cloud.firestore {
     function isEditorialMember() {
       return isEditor() || isManagingEditor() || isAdmin();
     }
-    
+
     function isServer() {
-        return request.auth == null;
+      return request.auth == null;
     }
 
-    // -------------------------------------------------------------------------
+    // ---------------------------
     // USERS COLLECTION
-    // -------------------------------------------------------------------------
-
+    // ---------------------------
     match /users/{userId} {
-      allow list: if isEditorialMember();
-      allow read: if request.auth.uid == userId || isEditorialMember();
+      allow list: if isEditorialMember() || isAdmin();
+      allow read: if request.auth.uid == userId || isEditorialMember() || isAdmin();
       allow create: if isSignedIn() && request.auth.uid == userId;
       allow update: if (
         (isSignedIn() && request.auth.uid == userId && request.resource.data.role == resource.data.role &&
@@ -68,137 +65,130 @@ service cloud.firestore {
       );
     }
 
-    // -------------------------------------------------------------------------
+    // ---------------------------
     // SUBMISSIONS COLLECTION
-    // -------------------------------------------------------------------------
-
+    // ---------------------------
     match /submissions/{submissionId} {
-      allow list: if isEditorialMember() || (isAuthor() && request.query.where.author.id == request.auth.uid);
 
-      allow get: if isSignedIn() && (
-        resource.data.author.id == request.auth.uid ||
-        (resource.data.reviewerIds != null && request.auth.uid in resource.data.reviewerIds) ||
-        isEditorialMember()
-      );
-      
-      // Allow creation by any authenticated user, as long as they are the author of the doc
+      // Listing: Admin/Editorial sees all, Author sees own, Reviewer sees assigned
+      allow list: if isEditorialMember() || isAdmin() || 
+                  (isAuthor()) || (isReviewer());
+
+      // Get single submission
+      allow get: if isSignedIn() &&
+                  (
+                    resource.data.author.id == request.auth.uid ||                       // Author sees own
+                    (resource.data.reviewerIds != null && request.auth.uid in resource.data.reviewerIds) || // Reviewer sees assigned
+                    isEditorialMember() || isAdmin()                                     // Admin/Editorial sees all
+                  );
+
+      // Create submission
       allow create: if isSignedIn() && request.resource.data.author.id == request.auth.uid;
 
-      allow update: if (
-        isEditorialMember() ||
-        (
-          isAuthor() &&
-          request.auth.uid == resource.data.author.id &&
-          (resource.data.status == 'Minor Revision' || resource.data.status == 'Major Revision' || resource.data.status == 'Awaiting Revision: Similarity Issues') &&
-          request.resource.data.diff(resource.data).changedKeys().hasOnly(['manuscriptUrl', 'status', 'revision', 'originalManuscriptUrl'])
-        )
-      );
+      // Update submission
+      allow update: if isEditorialMember() || isAdmin() ||
+                    (
+                      isAuthor() &&
+                      request.auth.uid == resource.data.author.id &&
+                      resource.data.status in ['Minor Revision','Major Revision','Awaiting Revision: Similarity Issues'] &&
+                      request.resource.data.diff(resource.data).changedKeys().hasOnly(['manuscriptUrl','status','revision','originalManuscriptUrl'])
+                    );
 
-      allow delete: if isEditorialMember();
-      
-      match /submissions/{authorId} {
-        allow list: if isAuthor() && authorId == request.auth.uid;
-      }
+      // Delete submission
+      allow delete: if isEditorialMember() || isAdmin();
 
-      // --- REVIEWS SUBCOLLECTION ---
+      // ---------------------------
+      // REVIEWS SUBCOLLECTION
+      // ---------------------------
       match /reviews/{reviewId} {
-        allow list: if isEditorialMember();
-        
-        allow read: if (
-          isEditorialMember() ||
-          (
-            isAuthor() &&
-            exists(/databases/$(database)/documents/submissions/$(submissionId)) &&
-            get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid &&
-            get(/databases/$(database)/documents/submissions/$(submissionId)).data.status in ['Minor Revision', 'Major Revision', 'Awaiting Revision: Similarity Issues']
-          )
-        );
+        // Only Admin/Editorial can list all reviews
+        allow list: if isEditorialMember() || isAdmin();
 
-        allow create: if (
-          isReviewer() &&
-          exists(/databases/$(database)/documents/submissions/$(submissionId)) &&
-          request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds
-        );
+        // Read review
+        allow read: if isEditorialMember() || isAdmin() ||
+                    (
+                      isReviewer() &&
+                      request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds
+                    ) ||
+                    (
+                      isAuthor() &&
+                      request.auth.uid == get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id
+                    ); // Author can see review metadata
+
+        // Create review
+        allow create: if isReviewer() &&
+                      request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds;
+
         allow update, delete: if false;
       }
 
-      // --- HISTORY SUBCOLLECTION ---
+      // ---------------------------
+      // HISTORY SUBCOLLECTION
+      // ---------------------------
       match /history/{historyId} {
-        allow list: if (
-            isEditorialMember() ||
-            (
-                exists(/databases/$(database)/documents/submissions/$(submissionId)) &&
-                get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid
-            )
-        );
-        allow read: if (
-          isEditorialMember() ||
-          (
-            exists(/databases/$(database)/documents/submissions/$(submissionId)) &&
-            (
-              get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid ||
-              request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds
-            )
-          )
-        );
+        allow list: if isEditorialMember() || isAdmin() ||
+                     (isAuthor() && request.auth.uid == get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id);
 
-        // Allow creation by server actions (unauthenticated) or editorial members
-        allow create: if isServer() || isEditorialMember(); 
+        allow read: if isEditorialMember() || isAdmin() ||
+                    (
+                      isAuthor() && request.auth.uid == get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id
+                    ) ||
+                    (
+                      isReviewer() &&
+                      request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds
+                    );
+
+        allow create: if isServer() || isEditorialMember() || isAdmin(); 
         allow update, delete: if false;
       }
     }
 
-    // -------------------------------------------------------------------------
+    // ---------------------------
     // NOTIFICATIONS COLLECTION
-    // -------------------------------------------------------------------------
-
+    // ---------------------------
     match /notifications/{notificationId} {
       allow list: if isSignedIn();
       allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
-      // Allow creation by server actions (unauthenticated) or editorial members
-      allow create: if isServer() || isEditorialMember();
+      allow create: if isServer() || isEditorialMember() || isAdmin();
       allow update: if isSignedIn() && resource.data.userId == request.auth.uid && request.resource.data.keys().hasOnly(['read']);
     }
 
-    // -------------------------------------------------------------------------
+    // ---------------------------
     // VOLUMES COLLECTION
-    // -------------------------------------------------------------------------
-
+    // ---------------------------
     match /volumes/{volumeId} {
       allow read: if true;
       allow write: if isManagingEditor() || isAdmin();
     }
 
-    // -------------------------------------------------------------------------
+    // ---------------------------
     // EDITORIAL BOARD COLLECTION
-    // -------------------------------------------------------------------------
-
+    // ---------------------------
     match /editorialBoard/{memberId} {
       allow read: if true;
       allow write: if isManagingEditor() || isAdmin();
     }
 
-    // -------------------------------------------------------------------------
+    // ---------------------------
     // INDEXING SERVICES COLLECTION
-    // -------------------------------------------------------------------------
+    // ---------------------------
     match /indexingServices/{serviceId} {
       allow read: if true;
       allow write: if isManagingEditor() || isAdmin();
     }
 
-    // -------------------------------------------------------------------------
+    // ---------------------------
     // SETTINGS COLLECTION
-    // -------------------------------------------------------------------------
+    // ---------------------------
     match /settings/submissionCounter {
       allow read: if true;
-      // Allow server-side actions (unauthenticated) to increment the counter
       allow write: if isServer(); 
     }
 
     match /settings/{settingId} {
       allow read: if true;
-      // Restrict other settings writes to admins/editors.
       allow write: if (isManagingEditor() || isAdmin()) && settingId != 'submissionCounter';
     }
+
   }
 }

@@ -6,7 +6,7 @@ import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, isValid } from 'date-fns';
 import { BookCopy, Edit, UserCheck, MessageSquare, FileEdit, Icon } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -49,7 +49,7 @@ export const SubmissionHistory = ({ submissionId }: { submissionId: string }) =>
                     timestamp: data.timestamp?.toDate(),
                     ...data
                 } as HistoryEvent;
-            }).filter(event => event.timestamp); // Filter out events without a timestamp
+            }).filter(event => event.timestamp && isValid(event.timestamp)); // Filter out events with invalid or missing timestamps
             setHistory(fetchedHistory);
             setLoading(false);
         }, (error) => {
