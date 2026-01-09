@@ -41,6 +41,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { useToast } from '@/hooks/use-toast';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 
 const getStatusVariant = (status: SubmissionStatus) => {
@@ -75,8 +77,9 @@ export default function AllSubmissionsPage() {
 
     const fetchSubmissions = async () => {
         setLoading(true);
+        const submissionsCollectionRef = collection(db, 'submissions');
         try {
-            const q = query(collection(db, 'submissions'), orderBy('submittedAt', 'desc'));
+            const q = query(submissionsCollectionRef, orderBy('submittedAt', 'desc'));
             const querySnapshot = await getDocs(q);
             const subs: Submission[] = querySnapshot.docs.map(doc => {
                 const data = doc.data();
@@ -88,7 +91,11 @@ export default function AllSubmissionsPage() {
             });
             setSubmissions(subs);
         } catch (error) {
-            console.error("Error fetching submissions: ", error);
+            const permissionError = new FirestorePermissionError({
+                path: submissionsCollectionRef.path,
+                operation: 'list',
+            });
+            errorEmitter.emit('permission-error', permissionError);
         } finally {
             setLoading(false);
         }
