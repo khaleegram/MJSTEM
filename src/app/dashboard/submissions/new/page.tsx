@@ -236,8 +236,11 @@ export default function NewSubmissionPage() {
             requestResourceData: submissionData,
         });
         errorEmitter.emit('permission-error', permissionError);
+        setIsSubmitting(false); // Make sure to re-enable button on error
     }).finally(() => {
-        setIsSubmitting(false);
+        // This will run after .then() or .catch()
+        // But since we navigate away on success, we only need to handle the error case here.
+        // The setIsSubmitting(false) is moved into the catch block to be more specific.
     });
   }
 
