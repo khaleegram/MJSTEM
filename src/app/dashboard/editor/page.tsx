@@ -22,6 +22,8 @@ import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SubmissionsChart } from '@/components/submissions-chart';
+import { FirestorePermissionError } from '@/firebase/errors';
+import { errorEmitter } from '@/firebase/error-emitter';
 
 export default function EditorPage() {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
@@ -31,8 +33,10 @@ export default function EditorPage() {
   useEffect(() => {
     const fetchSubmissions = async () => {
         setLoading(true);
+        const submissionsCollection = collection(db, 'submissions');
+        const q = query(submissionsCollection, orderBy('submittedAt', 'desc'));
+        
         try {
-            const q = query(collection(db, 'submissions'), orderBy('submittedAt', 'desc'));
             const querySnapshot = await getDocs(q);
             const subs: Submission[] = querySnapshot.docs.map(doc => {
                 const data = doc.data();
@@ -48,20 +52,19 @@ export default function EditorPage() {
                 };
             });
             setSubmissions(subs);
-        } catch (error) {
-            console.error("Error fetching submissions: ", error);
-             toast({
-                title: "Error",
-                description: "Could not fetch submissions.",
-                variant: "destructive"
+        } catch (serverError) {
+             const permissionError = new FirestorePermissionError({
+                path: submissionsCollection.path,
+                operation: 'list',
             });
+            errorEmitter.emit('permission-error', permissionError);
         } finally {
             setLoading(false);
         }
     };
 
     fetchSubmissions();
-  }, [toast]);
+  }, []);
   
   const stats = useMemo(() => {
     return submissions.reduce((acc, s) => {
