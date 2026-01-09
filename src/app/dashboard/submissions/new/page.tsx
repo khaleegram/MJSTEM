@@ -116,14 +116,17 @@ export default function NewSubmissionPage() {
 
     if (url.toLowerCase().endsWith('.pdf')) {
       try {
-        const fileBytes = await fetch(url).then(res => res.arrayBuffer());
+        // Using a CORS proxy to fetch the file if direct fetch fails
+        const response = await fetch(`https://cors-anywhere.herokuapp.com/${url}`);
+        if (!response.ok) throw new Error(`Failed to fetch PDF with status: ${response.status}`);
+        const fileBytes = await response.arrayBuffer();
         const pdfDoc = await PDFDocument.load(fileBytes);
         form.setValue('pageCount', pdfDoc.getPageCount());
       } catch (error) {
         console.error("Failed to count PDF pages:", error);
         toast({
           title: "Could not count pages",
-          description: "Could not automatically count the pages in the PDF.",
+          description: "Could not automatically count the pages in the PDF. This is optional.",
           variant: "destructive"
         })
       }

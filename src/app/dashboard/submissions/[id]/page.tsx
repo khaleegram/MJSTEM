@@ -246,8 +246,29 @@ const AuthorRevisionForm = ({ submission, onRevisionSubmit }: { submission: Subm
     const { toast } = useToast();
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const [fileUrl, setFileUrl] = React.useState<string | null>(null);
+    const [pageCount, setPageCount] = React.useState<number>(0);
     const { userProfile } = useAuth();
 
+
+    const handleFileUploadComplete = React.useCallback(async (url: string) => {
+        if (!url) return;
+        setFileUrl(url);
+
+        if (url.toLowerCase().endsWith('.pdf')) {
+          try {
+            const fileBytes = await fetch(url).then(res => res.arrayBuffer());
+            const pdfDoc = await PDFDocument.load(fileBytes);
+            setPageCount(pdfDoc.getPageCount());
+          } catch (error) {
+            console.error("Failed to count PDF pages:", error);
+            toast({
+              title: "Could not count pages",
+              description: "The file might be corrupted or not a valid PDF.",
+              variant: "destructive"
+            })
+          }
+        }
+      }, [toast]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -266,7 +287,8 @@ const AuthorRevisionForm = ({ submission, onRevisionSubmit }: { submission: Subm
         const updateData: any = {
             manuscriptUrl: fileUrl,
             status: newStatus,
-            revision: newRevision
+            revision: newRevision,
+            pageCount: pageCount,
         };
 
         if (!submission.originalManuscriptUrl) {
@@ -317,7 +339,7 @@ const AuthorRevisionForm = ({ submission, onRevisionSubmit }: { submission: Subm
                 <CardContent className="space-y-4">
                     <FileUploader 
                         endpoint="documentUploader" 
-                        onUploadComplete={(url) => setFileUrl(url)} 
+                        onUploadComplete={handleFileUploadComplete} 
                         onUploadError={(err) => toast({ title: "Upload Error", description: err.message, variant: "destructive"})}
                     />
                 </CardContent>
@@ -941,7 +963,7 @@ export default function SubmissionDetailPage() {
 
         {isReviewer && <ReviewSubmissionForm submission={submission} onReviewSubmit={handleRevisionSubmit} />}
         
-        {(isEditor || isAuthor) && <SubmittedReviews submissionId={submission.id} showForAuthor={isAuthor} />}
+        {(isEditor || (isAuthor && (submission.status === "Minor Revision" || submission.status === "Major Revision")))) && <SubmittedReviews submissionId={submission.id} showForAuthor={isAuthor} />}
 
         {isAuthor && needsRevision && <AuthorRevisionForm submission={submission} onRevisionSubmit={handleRevisionSubmit} />}
 
