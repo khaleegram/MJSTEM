@@ -1,17 +1,11 @@
 
 'use server';
 /**
- * @fileOverview A flow for sending a submission confirmation email.
- * This is decoupled from the submission creation process.
+ * @fileOverview A flow for sending a submission confirmation email using AWS SES.
  */
 
 import { z } from 'zod';
-import { google } from 'googleapis';
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { Submission } from '@/types';
-import { logSubmissionEvent } from './log-submission-event';
-import { generateNotification } from './generate-notification';
+import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 
 const SendConfirmationEmailSchema = z.object({
   authorEmail: z.string().email(),
@@ -21,79 +15,74 @@ const SendConfirmationEmailSchema = z.object({
 });
 export type SendConfirmationEmailInput = z.infer<typeof SendConfirmationEmailSchema>;
 
-async function getGmailClient() {
-  const auth = new google.auth.GoogleAuth({
-    scopes: ['https://www.googleapis.com/auth/gmail.send'],
-    credentials: {
-      client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-      private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+function getSESClient() {
+    const { AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY } = process.env;
+
+    if (!AWS_REGION || !AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY) {
+        throw new Error("AWS credentials or region are not configured in environment variables.");
     }
-  });
 
-  const authClient = await auth.getClient();
-  google.options({ auth: authClient });
-  
-  // Impersonate a user if GOOGLE_IMPERSONATED_USER_EMAIL is set
-  if (process.env.GOOGLE_IMPERSONATED_USER_EMAIL) {
-      const serviceAccountAuth = authClient as any;
-      const impersonatedAuth = new google.auth.GoogleAuth({
-          auth: serviceAccountAuth,
-          clientOptions: {
-              subject: process.env.GOOGLE_IMPERSONATED_USER_EMAIL,
-          },
-      });
-      return google.gmail({ version: 'v1', auth: impersonatedAuth.auth });
-  }
-
-  return google.gmail({ version: 'v1', auth: authClient });
+    return new SESv2Client({
+        region: AWS_REGION,
+        credentials: {
+            accessKeyId: AWS_ACCESS_KEY_ID,
+            secretAccessKey: AWS_SECRET_ACCESS_KEY,
+        },
+    });
 }
 
-
 export async function sendConfirmationEmail(input: SendConfirmationEmailInput): Promise<void> {
-  // This flow now ONLY sends the email. The document creation is handled on the client.
-  try {
-    const gmail = await getGmailClient();
+    const { SES_FROM_ADDRESS } = process.env;
 
-    const subject = `Submission Confirmation - ${input.uniqueId}`;
-    const utf8Subject = `=?utf-8?B?${Buffer.from(subject).toString('base64')}?=`;
-    const messageParts = [
-      `From: MJSTEM Editorial Office <${process.env.GOOGLE_IMPERSONATED_USER_EMAIL || process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL}>`,
-      `To: ${input.authorName} <${input.authorEmail}>`,
-      'Content-Type: text/html; charset=utf-8',
-      'MIME-Version: 1.0',
-      `Subject: ${utf8Subject}`,
-      '',
-      `Dear ${input.authorName},`,
-      `<br><br>`,
-      `Thank you for submitting your manuscript, "${input.manuscriptTitle}", to MJSTEM.`,
-      `Your submission ID is: <strong>${input.uniqueId}</strong>. Please include this ID in any future correspondence regarding this submission.`,
-      `<br><br>`,
-      `Your manuscript will now undergo an initial editorial check to ensure it meets our scope and formatting guidelines. You will be notified once this check is complete and the manuscript is sent for peer review.`,
-      `<br><br>`,
-      `Sincerely,`,
-      `<br>`,
-      `The MJSTEM Editorial Team`,
-    ];
-    const message = messageParts.join('\n');
+    if (!SES_FROM_ADDRESS) {
+        console.error('Failed to send confirmation email: SES_FROM_ADDRESS is not set.');
+        // Do not throw an error to the client, as the submission itself was successful.
+        return;
+    }
 
-    const encodedMessage = Buffer.from(message)
-      .toString('base64')
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=+$/, '');
-      
-    await gmail.users.messages.send({
-      userId: 'me',
-      requestBody: {
-        raw: encodedMessage,
-      },
-    });
+    try {
+        const sesClient = getSESClient();
 
-    console.log('Confirmation email sent successfully to', input.authorEmail);
+        const subject = `Submission Confirmation - ${input.uniqueId}`;
+        const body = `Dear ${input.authorName},
+<br><br>
+Thank you for submitting your manuscript, "${input.manuscriptTitle}", to MJSTEM.
+Your submission ID is: <strong>${input.uniqueId}</strong>. Please include this ID in any future correspondence regarding this submission.
+<br><br>
+Your manuscript will now undergo an initial editorial check to ensure it meets our scope and formatting guidelines. You will be notified once this check is complete and the manuscript is sent for peer review.
+<br><br>
+Sincerely,
+<br>
+The MJSTEM Editorial Team`;
 
-  } catch (error) {
-    console.error('Failed to send confirmation email:', error);
-    // We don't want to throw an error here to the client, as the submission itself was successful.
-    // In a production system, you'd add this to a retry queue.
-  }
+        const command = new SendEmailCommand({
+            FromEmailAddress: SES_FROM_ADDRESS,
+            Destination: {
+                ToAddresses: [input.authorEmail],
+            },
+            Content: {
+                Simple: {
+                    Subject: {
+                        Data: subject,
+                        Charset: 'UTF-8',
+                    },
+                    Body: {
+                        Html: {
+                            Data: body,
+                            Charset: 'UTF-8',
+                        },
+                    },
+                },
+            },
+        });
+
+        await sesClient.send(command);
+
+        console.log('Confirmation email sent successfully to', input.authorEmail, 'via AWS SES.');
+
+    } catch (error) {
+        console.error('Failed to send confirmation email via AWS SES:', error);
+        // In a production system, you'd add this to a retry queue.
+        // We still don't want to throw an error to the client.
+    }
 }
