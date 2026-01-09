@@ -488,8 +488,6 @@ export default function SubmissionDetailPage() {
   const isReviewer = submission?.reviewerIds?.includes(user?.uid || '');
 
   React.useEffect(() => {
-    // Only editors need the full list of available reviewers to assign them.
-    // Authors and reviewers do not need this list.
     const fetchReviewers = async () => {
         if (!isEditor) return;
         try {
@@ -511,11 +509,10 @@ export default function SubmissionDetailPage() {
         }
     }
     fetchReviewers();
-  }, [toast, isEditor]);
+  }, [isEditor]);
 
   const fetchSubmission = React.useCallback(async () => {
     if (!id) return;
-    // Don't set loading to true here on refetch, only initial load
     try {
         const docRef = doc(db, 'submissions', id);
         const docSnap = await getDoc(docRef);
@@ -852,7 +849,7 @@ export default function SubmissionDetailPage() {
              {submission.reviewers && submission.reviewers.length > 0 ? (
                 <ul className="space-y-4">
                     {submission.reviewers.map((reviewer, index) => {
-                        const reviewerProfile = isEditor ? availableReviewers.find(r => r.uid === reviewer.id) : null;
+                        const reviewerProfile = availableReviewers.find(r => r.uid === reviewer.id);
                         const isSubmitted = reviewer.status === 'Review Submitted';
                         
                         return (
@@ -933,4 +930,3 @@ export default function SubmissionDetailPage() {
   );
 }
 
-    
