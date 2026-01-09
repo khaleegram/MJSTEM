@@ -119,4 +119,3 @@ export async function sendConfirmationEmail(input: SendConfirmationEmailInput): 
     // In a production system, you'd add this to a retry queue.
   }
 }
-
