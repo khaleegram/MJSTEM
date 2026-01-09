@@ -484,10 +484,14 @@ export default function SubmissionDetailPage() {
   const [refetchTrigger, setRefetchTrigger] = React.useState(0);
 
   const isEditor = userProfile?.role === 'Editor' || userProfile?.role === 'Admin' || userProfile?.role === 'Managing Editor';
+  const isAuthor = userProfile?.uid === submission?.author.id;
+  const isReviewer = submission?.reviewerIds?.includes(user?.uid || '');
 
   React.useEffect(() => {
+    // Only editors need the full list of available reviewers to assign them.
+    // Authors and reviewers do not need this list.
     const fetchReviewers = async () => {
-        if (!isEditor) return; // Only fetch reviewers if the user is an editor
+        if (!isEditor) return;
         try {
             const q = query(
                 collection(db, 'users'), 
@@ -725,8 +729,6 @@ export default function SubmissionDetailPage() {
     return notFound();
   }
 
-  const isAuthor = userProfile?.uid === submission.author.id;
-  const isReviewer = submission.reviewerIds?.includes(user?.uid || '');
   const isDecisionMade = submission.status === 'Accepted' || submission.status === 'Rejected';
   const needsRevision = submission.status === 'Minor Revision' || submission.status === 'Major Revision' || submission.status === 'Awaiting Revision: Similarity Issues';
 
@@ -841,7 +843,7 @@ export default function SubmissionDetailPage() {
         </Card>
         )}
         
-        {(isEditor || isReviewer) && !isAuthor && (
+        
         <Card>
           <CardHeader>
             <CardTitle className="font-headline">Assigned Reviewers</CardTitle>
@@ -849,18 +851,25 @@ export default function SubmissionDetailPage() {
           <CardContent>
              {submission.reviewers && submission.reviewers.length > 0 ? (
                 <ul className="space-y-4">
-                    {submission.reviewers.map(reviewer => {
-                        const reviewerProfile = availableReviewers.find(r => r.uid === reviewer.id);
+                    {submission.reviewers.map((reviewer, index) => {
+                        const reviewerProfile = isEditor ? availableReviewers.find(r => r.uid === reviewer.id) : null;
                         const isSubmitted = reviewer.status === 'Review Submitted';
+                        
                         return (
                          <li key={reviewer.id} className="flex items-center justify-between">
                            <div className="flex items-center gap-4">
-                                <Avatar>
-                                    <AvatarImage src={reviewerProfile?.photoURL || ''} alt={reviewer.name} />
-                                    <AvatarFallback>{getInitials(reviewer.name)}</AvatarFallback>
-                                </Avatar>
+                                {isEditor && reviewerProfile ? (
+                                    <Avatar>
+                                        <AvatarImage src={reviewerProfile?.photoURL || ''} alt={reviewer.name} />
+                                        <AvatarFallback>{getInitials(reviewer.name)}</AvatarFallback>
+                                    </Avatar>
+                                ) : (
+                                    <Avatar>
+                                       <AvatarFallback>R{index + 1}</AvatarFallback>
+                                    </Avatar>
+                                )}
                                 <div>
-                                    <p className="font-medium">{reviewer.name}</p>
+                                    <p className="font-medium">{isEditor ? reviewer.name : `Reviewer ${index + 1}`}</p>
                                     <div className={cn("flex items-center gap-1.5 text-xs", isSubmitted ? "text-green-600" : "text-muted-foreground")}>
                                       {isSubmitted ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
                                       <span>{reviewer.status}</span>
@@ -916,10 +925,12 @@ export default function SubmissionDetailPage() {
           </CardFooter>
           )}
         </Card>
-        )}
+        
 
         <SubmissionHistory submissionId={id} />
       </div>
     </div>
   );
 }
+
+    
