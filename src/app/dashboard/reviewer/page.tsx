@@ -21,8 +21,6 @@ import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestor
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Submission } from '@/types';
-import { FirestorePermissionError } from '@/firebase/errors';
-import { errorEmitter } from '@/firebase/error-emitter';
 
 
 export default function ReviewerPage() {
@@ -60,12 +58,13 @@ export default function ReviewerPage() {
             });
             setAssignedSubmissions(myAssignments);
             setLoading(false);
-        }, (serverError) => {
-            const permissionError = new FirestorePermissionError({
-                path: 'submissions',
-                operation: 'list',
+        }, (error) => {
+            console.error('FirebaseError:', error.message);
+            toast({
+                title: 'Could not load assignments',
+                description: 'You may not have permission to view these resources.',
+                variant: 'destructive',
             });
-            errorEmitter.emit('permission-error', permissionError);
             setLoading(false);
         });
 

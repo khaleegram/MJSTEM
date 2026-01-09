@@ -133,7 +133,7 @@ service cloud.firestore {
           )
         );
 
-        allow create: if isSignedIn(); // Logged by trusted server-side flow
+        allow create: if isEditorialMember(); // Logged by trusted server-side flow
         allow update, delete: if false;
       }
     }
@@ -143,7 +143,7 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
 
     match /notifications/{notificationId} {
-      allow list: if isSignedIn() && request.query.where.get('userId', null) == request.auth.uid;
+      allow list: if isSignedIn();
       allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow create: if isSignedIn(); // Created by trusted server-side flow
       allow update: if isSignedIn() && resource.data.userId == request.auth.uid && request.resource.data.keys().hasOnly(['read']);

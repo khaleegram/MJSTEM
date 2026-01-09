@@ -22,8 +22,6 @@ import { db } from '@/lib/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { FirestorePermissionError } from '@/firebase/errors';
-import { errorEmitter } from '@/firebase/error-emitter';
 
 
 const getStatusVariant = (status: SubmissionStatus) => {
@@ -96,12 +94,8 @@ export default function AuthorPage() {
             });
             setSubmissions(subs);
             setLoading(false);
-        }, (serverError) => {
-            const permissionError = new FirestorePermissionError({
-                path: 'submissions',
-                operation: 'list',
-            });
-            errorEmitter.emit('permission-error', permissionError);
+        }, (error) => {
+            console.error('FirebaseError:', error.message);
             setLoading(false);
         });
 
