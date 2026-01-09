@@ -73,9 +73,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setLoading(true);
       if (user) {
-        setUser(user);
-        const profile = await ensureUserDocument(user);
-        setUserProfile(profile);
+        // Only fully set user if they are verified
+        if (user.emailVerified) {
+          setUser(user);
+          const profile = await ensureUserDocument(user);
+          setUserProfile(profile);
+        } else {
+          // Keep firebase user object for potential re-verification, but clear app-level profile
+          setUser(user); 
+          setUserProfile(null);
+        }
       } else {
         setUser(null);
         setUserProfile(null);
@@ -87,6 +94,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const login = async (email: string, pass: string) => {
     const userCredential = await signInWithEmailAndPassword(auth, email, pass);
+    if (!userCredential.user.emailVerified) {
+      // Don't fully log in the user in our app state, just return the user object
+      // so the UI can prompt for verification.
+      throw new Error("Please check your inbox and verify your email address to log in.");
+    }
+    // Auth state listener will handle setting user and profile
     return userCredential.user;
   };
 
@@ -97,7 +110,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if(user) {
         await updateProfile(user, { displayName });
         await sendEmailVerification(user);
-        // The onAuthStateChanged listener will handle creating the user document
+        // The onAuthStateChanged listener will handle creating the user document once verified
+        // We log them out to force them to verify.
+        await signOut(auth);
     }
     return userCredential;
   };
