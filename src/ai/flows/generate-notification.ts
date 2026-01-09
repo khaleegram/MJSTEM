@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { UserRole }from '@/types';
+import { sendPushNotification } from './send-push-notification';
 
 const NotificationInputSchema = z.object({
   userId: z.string().describe("The UID of the user who should receive the notification, or a role group like 'Admins'."),
@@ -97,12 +98,30 @@ async function createNotification(userId: string, submissionId: string, message:
 export async function generateNotification(input: NotificationInput): Promise<void> {
   const { message, icon } = generateNotificationDetails(input);
   
+  let targetUids: string[] = [];
+
   if (input.userId === 'Admins') {
       const adminUids = await getUidsForRoles(['Admin', 'Managing Editor']);
+      targetUids = adminUids;
       for (const uid of adminUids) {
           await createNotification(uid, input.submissionId, message, icon);
       }
   } else {
+    targetUids = [input.userId];
     await createNotification(input.userId, input.submissionId, message, icon);
+  }
+
+  // After creating the in-app notification, send the push notification.
+  // This is a "fire-and-forget" operation. We don't want to block the main thread
+  // or show an error to the user if the push fails.
+  if (targetUids.length > 0) {
+    sendPushNotification({
+        userIds: targetUids,
+        title: 'MJSTEM Update',
+        body: message,
+        link: `/dashboard/submissions/${input.submissionId}`,
+    }).catch(error => {
+        console.error("[Push Notification] Failed to send push notification:", error);
+    });
   }
 }
