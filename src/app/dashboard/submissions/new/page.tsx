@@ -5,7 +5,7 @@ import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useRouter } from 'next/navigation';
-import { collection, addDoc, serverTimestamp, getDoc, doc, runTransaction } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, getDoc, doc } from 'firebase/firestore';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -34,6 +34,7 @@ import Link from 'next/link';
 import { generateNotification } from '@/ai/flows/generate-notification';
 import { PDFDocument } from 'pdf-lib';
 import { sendConfirmationEmail } from '@/ai/flows/send-confirmation-email';
+import { getNextSubmissionIdAction } from './actions';
 
 const NewSubmissionSchema = z.object({
   title: z.string().min(10, 'Title must be at least 10 characters long.'),
@@ -45,31 +46,6 @@ const NewSubmissionSchema = z.object({
 });
 
 const formSchema = NewSubmissionSchema;
-
-async function getNextSubmissionId(): Promise<string> {
-    const counterRef = doc(db, 'settings', 'submissionCounter');
-    const year = new Date().getFullYear().toString().slice(-2); // e.g., 24
-
-    const newCount = await runTransaction(db, async (transaction) => {
-        const counterDoc = await transaction.get(counterRef);
-        if (!counterDoc.exists() || !counterDoc.data().counts || !counterDoc.data().counts[year]) {
-            // Initialize for the year
-            const initialCounts = counterDoc.exists() ? counterDoc.data().counts || {} : {};
-            initialCounts[year] = 1;
-            transaction.set(counterRef, { counts: initialCounts }, { merge: true });
-            return 1;
-        } else {
-            const currentCount = counterDoc.data().counts[year];
-            const newCount = currentCount + 1;
-            const newCounts = { ...counterDoc.data().counts, [year]: newCount };
-            transaction.update(counterRef, { counts: newCounts });
-            return newCount;
-        }
-    });
-
-    const paddedCount = newCount.toString().padStart(3, '0');
-    return `MJSTEM-S-${year}-${paddedCount}`;
-}
 
 export default function NewSubmissionPage() {
   const router = useRouter();
@@ -180,27 +156,29 @@ export default function NewSubmissionPage() {
 
     setIsSubmitting(true);
     
-    const uniqueId = await getNextSubmissionId();
+    try {
+        const uniqueId = await getNextSubmissionIdAction();
 
-    const submissionData = {
-        author: { id: user.uid, name: primaryContact.name, email: primaryContact.email },
-        status: 'Submitted' as const,
-        submittedAt: serverTimestamp(),
-        title: values.title,
-        abstract: values.abstract,
-        keywords: values.keywords,
-        manuscriptUrl: values.manuscriptUrl,
-        contributors: values.contributors,
-        reviewers: [],
-        reviewerIds: [],
-        pageCount: values.pageCount || 0,
-        uniqueId: uniqueId,
-        revision: 0,
-    };
-    
-    const submissionsCollectionRef = collection(db, 'submissions');
-    
-    addDoc(submissionsCollectionRef, submissionData).then(async (docRef) => {
+        const submissionData = {
+            author: { id: user.uid, name: primaryContact.name, email: primaryContact.email },
+            status: 'Submitted' as const,
+            submittedAt: serverTimestamp(),
+            title: values.title,
+            abstract: values.abstract,
+            keywords: values.keywords,
+            manuscriptUrl: values.manuscriptUrl,
+            contributors: values.contributors,
+            reviewers: [],
+            reviewerIds: [],
+            pageCount: values.pageCount || 0,
+            uniqueId: uniqueId,
+            revision: 0,
+        };
+        
+        const submissionsCollectionRef = collection(db, 'submissions');
+        
+        const docRef = await addDoc(submissionsCollectionRef, submissionData);
+
         await logSubmissionEvent({
             submissionId: docRef.id,
             eventType: 'SUBMISSION_CREATED',
@@ -229,19 +207,17 @@ export default function NewSubmissionPage() {
             className: 'bg-green-500 text-white',
         });
         router.push('/dashboard/author');
-    }).catch((serverError) => {
+
+    } catch (serverError) {
+        console.error('Submission Error:', serverError);
         const permissionError = new FirestorePermissionError({
-            path: submissionsCollectionRef.path,
+            path: 'submissions or settings/submissionCounter',
             operation: 'create',
-            requestResourceData: submissionData,
+            requestResourceData: {info: "Failed to create submission or get new ID."}
         });
         errorEmitter.emit('permission-error', permissionError);
-        setIsSubmitting(false); // Make sure to re-enable button on error
-    }).finally(() => {
-        // This will run after .then() or .catch()
-        // But since we navigate away on success, we only need to handle the error case here.
-        // The setIsSubmitting(false) is moved into the catch block to be more specific.
-    });
+        setIsSubmitting(false);
+    }
   }
 
   return (
