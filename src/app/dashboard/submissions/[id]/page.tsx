@@ -963,7 +963,7 @@ export default function SubmissionDetailPage() {
 
         {isReviewer && <ReviewSubmissionForm submission={submission} onReviewSubmit={handleRevisionSubmit} />}
         
-        {(isEditor || (isAuthor && (submission.status === "Minor Revision" || submission.status === "Major Revision")))) && <SubmittedReviews submissionId={submission.id} showForAuthor={isAuthor} />}
+        {(isEditor || (isAuthor && (needsRevision))) && <SubmittedReviews submissionId={submission.id} showForAuthor={isAuthor} />}
 
         {isAuthor && needsRevision && <AuthorRevisionForm submission={submission} onRevisionSubmit={handleRevisionSubmit} />}
 
