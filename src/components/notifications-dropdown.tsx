@@ -19,6 +19,8 @@ import { Notification } from '@/types';
 import { useRouter } from 'next/navigation';
 import { formatDistanceToNow } from 'date-fns';
 import { Skeleton } from './ui/skeleton';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 export const NotificationsDropdown = () => {
   const { user } = useAuth();
@@ -33,8 +35,9 @@ export const NotificationsDropdown = () => {
         return;
     };
 
+    const notificationsCollectionRef = collection(db, 'notifications');
     const q = query(
-      collection(db, 'notifications'),
+      notificationsCollectionRef,
       where('userId', '==', user.uid),
       orderBy('timestamp', 'desc'),
       limit(10)
@@ -45,8 +48,12 @@ export const NotificationsDropdown = () => {
       setNotifications(notifs);
       setUnreadCount(notifs.filter(n => !n.read).length);
       setLoading(false);
-    }, (error) => {
-        console.error("Error fetching notifications:", error.message);
+    }, (serverError) => {
+        const permissionError = new FirestorePermissionError({
+            path: 'notifications',
+            operation: 'list',
+        });
+        errorEmitter.emit('permission-error', permissionError);
         setLoading(false);
     });
 
