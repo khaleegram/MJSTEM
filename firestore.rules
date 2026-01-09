@@ -73,7 +73,7 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
 
     match /submissions/{submissionId} {
-      allow list: if isEditorialMember() || (isAuthor() && request.query.where['author.id'] == request.auth.uid);
+      allow list: if isEditorialMember();
 
       allow get: if isSignedIn() && (
         resource.data.author.id == request.auth.uid ||
@@ -81,8 +81,8 @@ service cloud.firestore {
         isEditorialMember()
       );
       
-      // Allow creation by authenticated users (authors)
-      allow create: if isSignedIn();
+      // Allow creation by any authenticated user, as long as they are the author of the doc
+      allow create: if isSignedIn() && request.resource.data.author.id == request.auth.uid;
 
       allow update: if (
         isEditorialMember() ||
@@ -95,6 +95,10 @@ service cloud.firestore {
       );
 
       allow delete: if isEditorialMember();
+      
+      match /submissions/{authorId} {
+        allow list: if isAuthor() && authorId == request.auth.uid;
+      }
 
       // --- REVIEWS SUBCOLLECTION ---
       match /reviews/{reviewId} {
@@ -149,7 +153,7 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
 
     match /notifications/{notificationId} {
-      allow list: if isSignedIn() && request.query.where['userId'] == request.auth.uid;
+      allow list: if isSignedIn();
       allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
       // Allow creation by server actions (unauthenticated) or editorial members
       allow create: if isServer() || isEditorialMember();

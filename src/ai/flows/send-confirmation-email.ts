@@ -7,6 +7,11 @@
 
 import { z } from 'zod';
 import { google } from 'googleapis';
+import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { Submission } from '@/types';
+import { logSubmissionEvent } from './log-submission-event';
+import { generateNotification } from './generate-notification';
 
 const SendConfirmationEmailSchema = z.object({
   authorEmail: z.string().email(),
