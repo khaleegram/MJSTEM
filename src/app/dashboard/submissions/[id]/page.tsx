@@ -483,9 +483,11 @@ export default function SubmissionDetailPage() {
   const { user, userProfile } = useAuth();
   const [refetchTrigger, setRefetchTrigger] = React.useState(0);
 
+  const isEditor = userProfile?.role === 'Editor' || userProfile?.role === 'Admin' || userProfile?.role === 'Managing Editor';
 
   React.useEffect(() => {
     const fetchReviewers = async () => {
+        if (!isEditor) return; // Only fetch reviewers if the user is an editor
         try {
             const q = query(
                 collection(db, 'users'), 
@@ -496,15 +498,16 @@ export default function SubmissionDetailPage() {
             setAvailableReviewers(users);
         } catch (error) {
             console.error("Error fetching reviewers:", error);
-            toast({
-                title: "Error",
-                description: "Could not fetch list of reviewers.",
-                variant: "destructive",
-            })
+            const permissionError = new FirestorePermissionError({
+                path: 'users',
+                operation: 'list',
+                requestResourceData: { info: "Could not fetch list of available reviewers." }
+            });
+            errorEmitter.emit('permission-error', permissionError);
         }
     }
     fetchReviewers();
-  }, [toast]);
+  }, [toast, isEditor]);
 
   const fetchSubmission = React.useCallback(async () => {
     if (!id) return;
@@ -722,7 +725,6 @@ export default function SubmissionDetailPage() {
     return notFound();
   }
 
-  const isEditor = userProfile?.role === 'Editor' || userProfile?.role === 'Admin' || userProfile?.role === 'Managing Editor';
   const isAuthor = userProfile?.uid === submission.author.id;
   const isReviewer = submission.reviewerIds?.includes(user?.uid || '');
   const isDecisionMade = submission.status === 'Accepted' || submission.status === 'Rejected';
@@ -921,5 +923,3 @@ export default function SubmissionDetailPage() {
     </div>
   );
 }
-
-    
