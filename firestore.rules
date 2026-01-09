@@ -1,3 +1,4 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -84,23 +85,17 @@ service cloud.firestore {
         request.resource.data.author.id == request.auth.uid;
 
       allow update: if isEditorialMember() || isAdmin() || (
-        isAuthor() &&
-        request.auth.uid == resource.data.author.id &&
-        resource.data.status in [
-          'Minor Revision',
-          'Major Revision',
-          'Awaiting Revision: Similarity Issues'
-        ] &&
-        request.resource.data.diff(resource.data).changedKeys()
-          .hasOnly([
-            'manuscriptUrl',
-            'status',
-            'revision',
-            'originalManuscriptUrl'
-          ])
+        isAuthor() && request.auth.uid == resource.data.author.id && (
+            // Allow revision uploads
+            (resource.data.status in ['Minor Revision', 'Major Revision', 'Awaiting Revision: Similarity Issues'] &&
+             request.resource.data.diff(resource.data).changedKeys().hasOnly(['manuscriptUrl', 'status', 'revision', 'originalManuscriptUrl'])) ||
+            // Allow title/abstract edits before final decision
+            (resource.data.status != 'Accepted' && resource.data.status != 'Rejected' &&
+             request.resource.data.diff(resource.data).changedKeys().hasOnly(['title', 'abstract']))
+        )
       );
 
-      allow delete: if isEditorialMember() || isAdmin();
+      allow delete: if (isAuthor() && resource.data.author.id == request.auth.uid && resource.data.status == 'Submitted') || isEditorialMember() || isAdmin();
 
       // ---------------------------
       // REVIEWS SUBCOLLECTION

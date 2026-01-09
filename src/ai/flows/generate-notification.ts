@@ -14,7 +14,7 @@ import { UserRole }from '@/types';
 const NotificationInputSchema = z.object({
   userId: z.string().describe("The UID of the user who should receive the notification, or a role group like 'Admins'."),
   submissionId: z.string(),
-  eventType: z.enum(['STATUS_CHANGED', 'REVIEW_SUBMITTED', 'NEW_SUBMISSION', 'REVIEWER_ASSIGNED']),
+  eventType: z.enum(['STATUS_CHANGED', 'REVIEW_SUBMITTED', 'NEW_SUBMISSION', 'REVIEWER_ASSIGNED', 'REVISION_SUBMITTED']),
   context: z.record(z.string()).optional(),
 });
 export type NotificationInput = z.infer<typeof NotificationInputSchema>;
@@ -52,6 +52,11 @@ function generateNotificationDetails(input: NotificationInput): { message: strin
              return {
                 message: `You have been assigned to review the manuscript '${truncatedTitle}'.`,
                 icon: 'UserCheck',
+            };
+        case 'REVISION_SUBMITTED':
+            return {
+                message: `A revision for '${truncatedTitle}' has been submitted by ${authorName}.`,
+                icon: 'Upload',
             };
         default:
             return {

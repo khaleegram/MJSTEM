@@ -1,8 +1,8 @@
 
 'use client';
 
-import { notFound, useParams } from 'next/navigation';
-import { doc, getDoc, updateDoc, arrayUnion, collection, getDocs, addDoc, serverTimestamp, query, where, runTransaction } from 'firebase/firestore';
+import { notFound, useParams, useRouter } from 'next/navigation';
+import { doc, getDoc, updateDoc, arrayUnion, collection, getDocs, addDoc, serverTimestamp, query, where, runTransaction, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
   Card,
@@ -15,7 +15,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { File, Calendar, User, Mail, PlusCircle, Download, BookCopy, Edit, Sparkles, UserCheck, MessageSquare, Shield, Upload, Clock, CheckCircle2, FileSearch, Info } from 'lucide-react';
+import { File, Calendar, User, Mail, PlusCircle, Download, BookCopy, Edit, Sparkles, UserCheck, MessageSquare, Shield, Upload, Clock, CheckCircle2, FileSearch, Info, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { SubmissionStatus, Reviewer, Submission, UserProfile, Volume } from '@/types';
 import { cn } from '@/lib/utils';
@@ -46,6 +46,12 @@ import { FileUploader } from '@/components/file-uploader';
 import { generateNotification } from '@/ai/flows/generate-notification';
 import { Input } from '@/components/ui/input';
 import { PDFDocument } from 'pdf-lib';
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+
 
 async function getNextSubmissionId(): Promise<string> {
     const counterRef = doc(db, 'settings', 'submissionCounter');
@@ -257,13 +263,7 @@ const AuthorRevisionForm = ({ submission, onRevisionSubmit }: { submission: Subm
         const submissionRef = doc(db, 'submissions', submission.id);
         const newStatus: SubmissionStatus = newRevision >= 2 ? 'Under Review-R2' : 'Under Review-R1';
         
-        // Preserve the old manuscript URL
-        const updateData: {
-            manuscriptUrl: string;
-            status: SubmissionStatus;
-            originalManuscriptUrl?: string;
-            revision: number;
-        } = {
+        const updateData: any = {
             manuscriptUrl: fileUrl,
             status: newStatus,
             revision: newRevision
@@ -279,6 +279,16 @@ const AuthorRevisionForm = ({ submission, onRevisionSubmit }: { submission: Subm
                     submissionId: submission.id,
                     eventType: 'STATUS_CHANGED',
                     context: { actorName: userProfile?.displayName || 'Author', status: `Revision Submitted (${submission.status})` }
+                });
+                
+                await generateNotification({
+                    userId: 'Admins', // Notify all admins/editors
+                    submissionId: submission.id,
+                    eventType: 'REVISION_SUBMITTED',
+                    context: {
+                        submissionTitle: submission.title,
+                        authorName: userProfile?.displayName || 'the author'
+                    }
                 });
 
                 toast({ title: "Revision Submitted", description: "Your updated manuscript has been sent to the editor." });
@@ -479,6 +489,87 @@ const PageCountManager = ({ submission, onUpdate }: { submission: Submission, on
     );
 };
 
+const editSubmissionSchema = z.object({
+    title: z.string().min(10, 'Title must be at least 10 characters long.'),
+    abstract: z.string().min(50, 'Abstract must be at least 50 characters long.'),
+});
+
+const AuthorEditForm = ({ submission, onUpdate, onCancel }: { submission: Submission; onUpdate: () => void; onCancel: () => void }) => {
+    const { toast } = useToast();
+    const [isSubmitting, setIsSubmitting] = React.useState(false);
+
+    const form = useForm<z.infer<typeof editSubmissionSchema>>({
+        resolver: zodResolver(editSubmissionSchema),
+        defaultValues: {
+            title: submission.title,
+            abstract: submission.abstract,
+        },
+    });
+
+    const onSubmit = async (values: z.infer<typeof editSubmissionSchema>) => {
+        setIsSubmitting(true);
+        const submissionRef = doc(db, 'submissions', submission.id);
+        const updateData = {
+            title: values.title,
+            abstract: values.abstract,
+        };
+
+        try {
+            await updateDoc(submissionRef, updateData);
+            toast({ title: 'Submission Updated', description: 'Your changes have been saved.' });
+            onUpdate();
+        } catch (serverError) {
+            const permissionError = new FirestorePermissionError({
+                path: submissionRef.path,
+                operation: 'update',
+                requestResourceData: updateData,
+            });
+            errorEmitter.emit('permission-error', permissionError);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    return (
+        <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <FormField
+                    control={form.control}
+                    name="title"
+                    render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Title</FormLabel>
+                            <FormControl>
+                                <Input {...field} />
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                />
+                <FormField
+                    control={form.control}
+                    name="abstract"
+                    render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Abstract</FormLabel>
+                            <FormControl>
+                                <Textarea {...field} className="min-h-[150px]" />
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                />
+                <div className="flex justify-end gap-2">
+                    <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
+                    <Button type="submit" disabled={isSubmitting}>
+                        {isSubmitting ? 'Saving...' : 'Save Changes'}
+                    </Button>
+                </div>
+            </form>
+        </Form>
+    );
+};
+
 
 export default function SubmissionDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -489,6 +580,9 @@ export default function SubmissionDetailPage() {
   const [availableReviewers, setAvailableReviewers] = React.useState<UserProfile[]>([]);
   const { user, userProfile } = useAuth();
   const [refetchTrigger, setRefetchTrigger] = React.useState(0);
+  const [isAuthorEditing, setIsAuthorEditing] = React.useState(false);
+  const router = useRouter();
+
 
   const isEditor = userProfile?.role === 'Editor' || userProfile?.role === 'Admin' || userProfile?.role === 'Managing Editor';
   const isAuthor = userProfile?.uid === submission?.author.id;
@@ -583,6 +677,24 @@ export default function SubmissionDetailPage() {
         setIsUpdating(false);
     }
   }
+  
+  const handleDeleteSubmission = async () => {
+    if (!submission) return;
+    
+    const submissionRef = doc(db, 'submissions', submission.id);
+    
+    try {
+        await deleteDoc(submissionRef);
+        toast({ title: "Submission Deleted", description: "The submission has been permanently removed." });
+        router.push('/dashboard/author');
+    } catch (serverError) {
+        const permissionError = new FirestorePermissionError({
+            path: submissionRef.path,
+            operation: 'delete',
+        });
+        errorEmitter.emit('permission-error', permissionError);
+    }
+  };
 
   const handleAssignReviewer = async (reviewer: UserProfile) => {
       if(!submission || !userProfile) return;
@@ -730,82 +842,106 @@ export default function SubmissionDetailPage() {
 
   const isDecisionMade = submission.status === 'Accepted' || submission.status === 'Rejected';
   const needsRevision = submission.status === 'Minor Revision' || submission.status === 'Major Revision' || submission.status === 'Awaiting Revision: Similarity Issues';
-
+  const canAuthorEdit = isAuthor && !isDecisionMade;
+  const canAuthorDelete = isAuthor && submission.status === 'Submitted';
 
   return (
     <div className="grid gap-8 lg:grid-cols-3">
       <div className="lg:col-span-2 space-y-8">
         <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <Badge variant={getStatusVariant(submission.status)} className={cn("w-fit mb-2")}>
-                  {submission.status}
-              </Badge>
-              {submission.uniqueId && (
-                <p className="text-sm font-mono text-muted-foreground">{submission.uniqueId}</p>
-              )}
-            </div>
-            <CardTitle className="font-headline text-3xl">{submission.title}</CardTitle>
-            <div className="text-sm text-muted-foreground flex items-center flex-wrap gap-x-4 gap-y-2 pt-2">
-                <div className="flex items-center gap-2">
-                    <User className="h-4 w-4" />
-                    <span>{submission.author.name}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4" />
-                    <span>Submitted on {format(submission.submittedAt, 'PPP')}</span>
-                </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <h3 className="font-semibold mb-2 font-headline">Abstract</h3>
-            <p className="text-muted-foreground leading-relaxed break-words">
-              {submission.abstract}
-            </p>
-            <Separator className="my-6" />
-            <h3 className="font-semibold mb-2 font-headline">Keywords</h3>
-            <div className="flex flex-wrap gap-2">
-                {submission.keywords && submission.keywords.split(',').map(keyword => keyword.trim()).filter(Boolean).map(keyword => (
-                    <Badge key={keyword} variant="secondary">{keyword}</Badge>
-                ))}
-            </div>
-             <Separator className="my-6" />
-            <div className="space-y-1">
-                 <h3 className="font-semibold mb-2 font-headline">Page Count</h3>
-                 <PageCountManager submission={submission} onUpdate={() => setRefetchTrigger(p => p + 1)} />
-            </div>
-          </CardContent>
-          <CardFooter className="flex-wrap gap-2">
-            {submission.originalManuscriptUrl && submission.manuscriptUrl && (
-                 <>
-                    <Button variant="outline" asChild>
-                        <Link href={submission.originalManuscriptUrl} target="_blank" rel="noopener noreferrer">
-                            <Download className="mr-2 h-4 w-4" />
-                            Download Original Manuscript
-                        </Link>
-                    </Button>
+            {isAuthorEditing ? (
+                 <CardContent className="p-6">
+                    <AuthorEditForm 
+                        submission={submission}
+                        onUpdate={() => {
+                            setIsAuthorEditing(false);
+                            setRefetchTrigger(p => p+1);
+                        }}
+                        onCancel={() => setIsAuthorEditing(false)}
+                    />
+                 </CardContent>
+            ) : (
+                <>
+                <CardHeader>
+                    <div className="flex items-center justify-between">
+                    <Badge variant={getStatusVariant(submission.status)} className={cn("w-fit mb-2")}>
+                        {submission.status}
+                    </Badge>
+                    {submission.uniqueId && (
+                        <p className="text-sm font-mono text-muted-foreground">{submission.uniqueId}</p>
+                    )}
+                    </div>
+                    <CardTitle className="font-headline text-3xl">{submission.title}</CardTitle>
+                    <div className="text-sm text-muted-foreground flex items-center flex-wrap gap-x-4 gap-y-2 pt-2">
+                        <div className="flex items-center gap-2">
+                            <User className="h-4 w-4" />
+                            <span>{submission.author.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Calendar className="h-4 w-4" />
+                            <span>Submitted on {format(submission.submittedAt, 'PPP')}</span>
+                        </div>
+                    </div>
+                </CardHeader>
+                <CardContent>
+                    <h3 className="font-semibold mb-2 font-headline">Abstract</h3>
+                    <p className="text-muted-foreground leading-relaxed break-words">
+                    {submission.abstract}
+                    </p>
+                    <Separator className="my-6" />
+                    <h3 className="font-semibold mb-2 font-headline">Keywords</h3>
+                    <div className="flex flex-wrap gap-2">
+                        {submission.keywords && submission.keywords.split(',').map(keyword => keyword.trim()).filter(Boolean).map(keyword => (
+                            <Badge key={keyword} variant="secondary">{keyword}</Badge>
+                        ))}
+                    </div>
+                    <Separator className="my-6" />
+                    <div className="space-y-1">
+                        <h3 className="font-semibold mb-2 font-headline">Page Count</h3>
+                        <PageCountManager submission={submission} onUpdate={() => setRefetchTrigger(p => p + 1)} />
+                    </div>
+                </CardContent>
+                </>
+            )}
+
+          <CardFooter className="flex-wrap gap-2 justify-between">
+             <div className="flex-wrap gap-2 flex">
+                {submission.originalManuscriptUrl && submission.manuscriptUrl && (
+                    <>
+                        <Button variant="outline" asChild>
+                            <Link href={submission.originalManuscriptUrl} target="_blank" rel="noopener noreferrer">
+                                <Download className="mr-2 h-4 w-4" />
+                                Download Original Manuscript
+                            </Link>
+                        </Button>
+                        <Button variant="outline" asChild>
+                            <Link href={submission.manuscriptUrl} target="_blank" rel="noopener noreferrer">
+                                <Download className="mr-2 h-4 w-4" />
+                                Download Revised Manuscript
+                            </Link>
+                        </Button>
+                    </>
+                )}
+                {(!submission.originalManuscriptUrl && submission.manuscriptUrl) && (
                     <Button variant="outline" asChild>
                         <Link href={submission.manuscriptUrl} target="_blank" rel="noopener noreferrer">
                             <Download className="mr-2 h-4 w-4" />
-                            Download Revised Manuscript
+                            Download Manuscript
                         </Link>
                     </Button>
-                 </>
-            )}
-             {(!submission.originalManuscriptUrl && submission.manuscriptUrl) && (
-                <Button variant="outline" asChild>
-                    <Link href={submission.manuscriptUrl} target="_blank" rel="noopener noreferrer">
-                        <Download className="mr-2 h-4 w-4" />
-                        Download Manuscript
-                    </Link>
+                )}
+            </div>
+            {canAuthorEdit && !isAuthorEditing && (
+                <Button variant="secondary" onClick={() => setIsAuthorEditing(true)}>
+                    <Edit className="mr-2 h-4 w-4" /> Edit
                 </Button>
-             )}
+            )}
           </CardFooter>
         </Card>
 
         {isReviewer && <ReviewSubmissionForm submission={submission} onReviewSubmit={handleRevisionSubmit} />}
-
-        <SubmittedReviews submissionId={submission.id} showForAuthor={isAuthor} />
+        
+        {(isEditor || isAuthor) && <SubmittedReviews submissionId={submission.id} showForAuthor={isAuthor} />}
 
         {isAuthor && needsRevision && <AuthorRevisionForm submission={submission} onRevisionSubmit={handleRevisionSubmit} />}
 
@@ -852,22 +988,17 @@ export default function SubmissionDetailPage() {
                 <ul className="space-y-4">
                     {submission.reviewers.map((reviewer, index) => {
                         const isSubmitted = reviewer.status === 'Review Submitted';
+                        const displayName = isEditor ? reviewer.name : `Reviewer ${index + 1}`;
                         
                         return (
                          <li key={reviewer.id} className="flex items-center justify-between">
                            <div className="flex items-center gap-4">
-                                {isEditor ? (
-                                    <Avatar>
-                                        <AvatarImage src={availableReviewers.find(r => r.uid === reviewer.id)?.photoURL || ''} alt={reviewer.name} />
-                                        <AvatarFallback>{getInitials(reviewer.name)}</AvatarFallback>
-                                    </Avatar>
-                                ) : (
-                                    <Avatar>
-                                       <AvatarFallback>R{index + 1}</AvatarFallback>
-                                    </Avatar>
-                                )}
+                                <Avatar>
+                                    {isEditor ? <AvatarImage src={availableReviewers.find(r => r.uid === reviewer.id)?.photoURL || ''} alt={reviewer.name} /> : null}
+                                    <AvatarFallback>{isEditor ? getInitials(reviewer.name) : `R${index+1}`}</AvatarFallback>
+                                </Avatar>
                                 <div>
-                                    <p className="font-medium">{isEditor ? reviewer.name : `Reviewer ${index + 1}`}</p>
+                                    <p className="font-medium">{displayName}</p>
                                     <div className={cn("flex items-center gap-1.5 text-xs", isSubmitted ? "text-green-600" : "text-muted-foreground")}>
                                       {isSubmitted ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
                                       <span>{reviewer.status}</span>
@@ -924,6 +1055,36 @@ export default function SubmissionDetailPage() {
           )}
         </Card>
         
+        {canAuthorDelete && (
+             <Card>
+                <CardHeader>
+                    <CardTitle className="font-headline text-lg text-destructive">Danger Zone</CardTitle>
+                </CardHeader>
+                <CardContent>
+                     <p className="text-sm text-muted-foreground mb-4">Deleting a submission is permanent and cannot be undone.</p>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                           <Button variant="destructive">
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete Submission
+                           </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                This will permanently delete your submission &quot;{submission.title}&quot;. This action cannot be undone.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleDeleteSubmission}>Delete</AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                </CardContent>
+            </Card>
+        )}
 
         <SubmissionHistory submissionId={id} />
       </div>
