@@ -1,3 +1,4 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -47,6 +48,10 @@ service cloud.firestore {
     function isEditorialMember() {
       return isEditor() || isManagingEditor() || isAdmin();
     }
+    
+    function isServer() {
+        return request.auth == null;
+    }
 
     // -------------------------------------------------------------------------
     // USERS COLLECTION
@@ -75,8 +80,9 @@ service cloud.firestore {
         (resource.data.reviewerIds != null && request.auth.uid in resource.data.reviewerIds) ||
         isEditorialMember()
       );
-
-      allow create: if (isAuthor() && request.resource.data.author.id == request.auth.uid) || isEditorialMember();
+      
+      // Allow creation by server actions (unauthenticated) or editorial members
+      allow create: if isServer() || isEditorialMember();
 
       allow update: if (
         isEditorialMember() ||
@@ -132,7 +138,8 @@ service cloud.firestore {
           )
         );
 
-        allow create: if isEditorialMember(); // Logged by trusted server-side flow
+        // Allow creation by server actions (unauthenticated) or editorial members
+        allow create: if isServer() || isEditorialMember(); 
         allow update, delete: if false;
       }
     }
@@ -142,9 +149,10 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
 
     match /notifications/{notificationId} {
-      allow list: if isSignedIn() && request.query.where.userId == request.auth.uid;
+      allow list: if isSignedIn() && request.query.where['userId'] == request.auth.uid;
       allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow create: if isEditorialMember(); // Created by trusted server-side flow
+      // Allow creation by server actions (unauthenticated) or editorial members
+      allow create: if isServer() || isEditorialMember();
       allow update: if isSignedIn() && resource.data.userId == request.auth.uid && request.resource.data.keys().hasOnly(['read']);
     }
 
@@ -179,7 +187,7 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     match /settings/submissionCounter {
       allow read: if true;
-      // Allow server-side actions to increment the counter
+      // Allow server-side actions (unauthenticated) to increment the counter
       allow write: if true; 
     }
 

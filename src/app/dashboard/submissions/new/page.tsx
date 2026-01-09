@@ -35,6 +35,7 @@ import { generateNotification } from '@/ai/flows/generate-notification';
 import { PDFDocument } from 'pdf-lib';
 import { sendConfirmationEmail } from '@/ai/flows/send-confirmation-email';
 import { getNextSubmissionIdAction } from './actions';
+import { Submission } from '@/types';
 
 const NewSubmissionSchema = z.object({
   title: z.string().min(10, 'Title must be at least 10 characters long.'),
@@ -149,8 +150,8 @@ export default function NewSubmissionPage() {
     }
 
     const primaryContact = values.contributors.find(c => c.isPrimaryContact);
-    if (!primaryContact) {
-        toast({ title: "Primary contact missing", description: "One author must be designated as the primary contact.", variant: 'destructive'});
+    if (!primaryContact || !primaryContact.name || !primaryContact.email) {
+        toast({ title: "Primary contact missing", description: "One author must be designated as the primary contact with a valid name and email.", variant: 'destructive'});
         return;
     }
 
@@ -175,7 +176,7 @@ export default function NewSubmissionPage() {
     const submissionData = {
         author: { id: user.uid, name: primaryContact.name, email: primaryContact.email },
         status: 'Submitted' as const,
-        submittedAt: serverTimestamp(),
+        submittedAt: new Date(), // Using client date, server will use its own timestamp
         title: values.title,
         abstract: values.abstract,
         keywords: values.keywords,
@@ -188,28 +189,13 @@ export default function NewSubmissionPage() {
         revision: 0,
     };
     
-    const submissionsCollectionRef = collection(db, 'submissions');
-    
-    addDoc(submissionsCollectionRef, submissionData).then(async (docRef) => {
-        await logSubmissionEvent({
-            submissionId: docRef.id,
-            eventType: 'SUBMISSION_CREATED',
-            context: { authorName: primaryContact.name },
-        });
-        
-        await generateNotification({
-            userId: 'Admins',
-            submissionId: docRef.id,
-            eventType: 'NEW_SUBMISSION',
-            context: { submissionTitle: values.title, authorName: primaryContact.name },
-        });
-
-        // Send confirmation email
+    try {
         await sendConfirmationEmail({
-            authorEmail: primaryContact.email!,
-            authorName: primaryContact.name!,
+            authorEmail: primaryContact.email,
+            authorName: primaryContact.name,
             manuscriptTitle: values.title,
-            uniqueId: uniqueId!,
+            uniqueId: uniqueId,
+            submissionData: submissionData
         });
 
         toast({
@@ -219,17 +205,18 @@ export default function NewSubmissionPage() {
             className: 'bg-green-500 text-white',
         });
         router.push('/dashboard/author');
-    }).catch(serverError => {
+
+    } catch (serverError) {
         console.error('Submission Error:', serverError);
         const permissionError = new FirestorePermissionError({
-            path: submissionsCollectionRef.path,
+            path: 'submissions',
             operation: 'create',
-            requestResourceData: submissionData
+            requestResourceData: {info: "Failed to create submission via server action."}
         });
         errorEmitter.emit('permission-error', permissionError);
-    }).finally(() => {
+    } finally {
         setIsSubmitting(false);
-    });
+    }
   }
 
   return (
