@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { collection, getDocs, orderBy, query, Timestamp, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,6 +14,7 @@ import { useAuth } from '@/contexts/auth-context';
 
 interface Review {
     id: string;
+    reviewerId: string;
     reviewerName: string;
     recommendation: 'Accept' | 'Minor Revision' | 'Major Revision' | 'Reject';
     commentsForEditor: string;
@@ -37,7 +38,6 @@ export const SubmittedReviews = ({ submissionId, showForAuthor = false }: { subm
     const [loading, setLoading] = useState(true);
     const { userProfile } = useAuth();
     const isEditor = userProfile?.role === 'Editor' || userProfile?.role === 'Admin' || userProfile?.role === 'Managing Editor';
-
 
     useEffect(() => {
         if (!submissionId) {
@@ -71,6 +71,20 @@ export const SubmittedReviews = ({ submissionId, showForAuthor = false }: { subm
 
         return () => unsubscribe();
     }, [submissionId]);
+    
+    const reviewerIdToAnonymousNameMap = useMemo(() => {
+        if (!showForAuthor) return new Map();
+        
+        // Get unique reviewer IDs from the reviews list
+        const uniqueReviewerIds = Array.from(new Set(reviews.map(review => review.reviewerId)));
+        
+        const map = new Map<string, string>();
+        uniqueReviewerIds.forEach((id, index) => {
+            map.set(id, `Reviewer #${index + 1}`);
+        });
+        return map;
+    }, [reviews, showForAuthor]);
+
 
     if (!isEditor && !showForAuthor) {
         return null;
@@ -116,13 +130,18 @@ export const SubmittedReviews = ({ submissionId, showForAuthor = false }: { subm
             </CardHeader>
             <CardContent>
                 <Accordion type="single" collapsible className="w-full" defaultValue='item-0'>
-                    {reviews.map((review, index) => (
+                    {reviews.map((review, index) => {
+                        const reviewerName = showForAuthor 
+                            ? reviewerIdToAnonymousNameMap.get(review.reviewerId) || `Reviewer #${index + 1}`
+                            : review.reviewerName;
+
+                        return (
                          <AccordionItem value={`item-${index}`} key={review.id}>
                             <AccordionTrigger>
                                <div className="flex items-center justify-between w-full pr-4">
                                     <div className='flex items-center gap-2'>
                                         <User className="w-4 h-4" />
-                                        <span>Review from {showForAuthor ? `Reviewer #${index + 1}` : review.reviewerName}</span>
+                                        <span>Review from {reviewerName}</span>
                                     </div>
                                     {!showForAuthor && <Badge variant={getRecommendationVariant(review.recommendation)}>{review.recommendation}</Badge>}
                                </div>
@@ -152,7 +171,8 @@ export const SubmittedReviews = ({ submissionId, showForAuthor = false }: { subm
                                 )}
                             </AccordionContent>
                         </AccordionItem>
-                    ))}
+                        )
+                    })}
                 </Accordion>
             </CardContent>
         </Card>
