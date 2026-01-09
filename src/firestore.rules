@@ -68,9 +68,9 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
 
     match /submissions/{submissionId} {
-      allow list: if isEditorialMember() || 
-                   (isSignedIn() && request.query.where.get('author.id', null) == request.auth.uid) ||
-                   (isSignedIn() && request.query.where.get('reviewerIds', null) in request.auth.uid);
+      // Allow list if the user is an editor OR if they are an author.
+      // The client-side query is responsible for filtering to only their own submissions.
+      allow list: if isEditorialMember() || isAuthor();
 
       allow get: if isSignedIn() && (
         resource.data.author.id == request.auth.uid ||
@@ -86,7 +86,7 @@ service cloud.firestore {
         (
           isAuthor() &&
           request.auth.uid == resource.data.author.id &&
-          (resource.data.status == 'Minor Revision' || resource.data.status == 'Major Revision')
+          (resource.data.status == 'Minor Revision' || resource.data.status == 'Major Revision' || resource.data.status == 'Awaiting Revision: Similarity Issues')
         )
       );
 
@@ -102,7 +102,7 @@ service cloud.firestore {
             isAuthor() &&
             exists(/databases/$(database)/documents/submissions/$(submissionId)) &&
             get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid &&
-            get(/databases/$(database)/documents/submissions/$(submissionId)).data.status in ['Minor Revision', 'Major Revision']
+            get(/databases/$(database)/documents/submissions/$(submissionId)).data.status in ['Minor Revision', 'Major Revision', 'Awaiting Revision: Similarity Issues']
           )
         );
 
