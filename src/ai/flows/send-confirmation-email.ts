@@ -1,11 +1,11 @@
 
 'use server';
 /**
- * @fileOverview A flow for sending a submission confirmation email using AWS SES.
+ * @fileOverview A flow for sending a submission confirmation email using AWS SES via SMTP.
  */
 
 import { z } from 'zod';
-import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
+import nodemailer from 'nodemailer';
 
 const SendConfirmationEmailSchema = z.object({
   authorEmail: z.string().email(),
@@ -15,36 +15,33 @@ const SendConfirmationEmailSchema = z.object({
 });
 export type SendConfirmationEmailInput = z.infer<typeof SendConfirmationEmailSchema>;
 
-function getSESClient() {
-    const { AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY } = process.env;
-
-    if (!AWS_REGION || !AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY) {
-        throw new Error("AWS credentials or region are not configured in environment variables.");
-    }
-
-    return new SESv2Client({
-        region: AWS_REGION,
-        credentials: {
-            accessKeyId: AWS_ACCESS_KEY_ID,
-            secretAccessKey: AWS_SECRET_ACCESS_KEY,
-        },
-    });
-}
 
 export async function sendConfirmationEmail(input: SendConfirmationEmailInput): Promise<void> {
-    const { SES_FROM_ADDRESS } = process.env;
+    const { 
+        SES_SMTP_HOST, 
+        SES_SMTP_USER, 
+        SES_SMTP_PASS, 
+        SES_FROM_EMAIL 
+    } = process.env;
 
-    if (!SES_FROM_ADDRESS) {
-        console.error('Failed to send confirmation email: SES_FROM_ADDRESS is not set.');
+    if (!SES_SMTP_HOST || !SES_SMTP_USER || !SES_SMTP_PASS || !SES_FROM_EMAIL) {
+        console.error('Failed to send confirmation email: SMTP environment variables are not fully configured.');
         // Do not throw an error to the client, as the submission itself was successful.
         return;
     }
 
-    try {
-        const sesClient = getSESClient();
+    const transporter = nodemailer.createTransport({
+        host: SES_SMTP_HOST,
+        port: 587,
+        secure: false, // true for 465, false for other ports
+        auth: {
+            user: SES_SMTP_USER,
+            pass: SES_SMTP_PASS,
+        },
+    });
 
-        const subject = `Submission Confirmation - ${input.uniqueId}`;
-        const body = `Dear ${input.authorName},
+    const subject = `Submission Confirmation - ${input.uniqueId}`;
+    const body = `Dear ${input.authorName},
 <br><br>
 Thank you for submitting your manuscript, "${input.manuscriptTitle}", to MJSTEM.
 Your submission ID is: <strong>${input.uniqueId}</strong>. Please include this ID in any future correspondence regarding this submission.
@@ -55,34 +52,19 @@ Sincerely,
 <br>
 The MJSTEM Editorial Team`;
 
-        const command = new SendEmailCommand({
-            FromEmailAddress: SES_FROM_ADDRESS,
-            Destination: {
-                ToAddresses: [input.authorEmail],
-            },
-            Content: {
-                Simple: {
-                    Subject: {
-                        Data: subject,
-                        Charset: 'UTF-8',
-                    },
-                    Body: {
-                        Html: {
-                            Data: body,
-                            Charset: 'UTF-8',
-                        },
-                    },
-                },
-            },
-        });
+    const mailOptions = {
+        from: `"MJSTEM Editorial Team" <${SES_FROM_EMAIL}>`,
+        to: input.authorEmail,
+        subject: subject,
+        html: body,
+    };
 
-        await sesClient.send(command);
-
-        console.log('Confirmation email sent successfully to', input.authorEmail, 'via AWS SES.');
-
+    try {
+        await transporter.sendMail(mailOptions);
+        console.log('Confirmation email sent successfully to', input.authorEmail, 'via AWS SES SMTP.');
     } catch (error) {
-        console.error('Failed to send confirmation email via AWS SES:', error);
-        // In a production system, you'd add this to a retry queue.
+        console.error('Failed to send confirmation email via AWS SES SMTP:', error);
+        // In a production system, you might add this to a retry queue.
         // We still don't want to throw an error to the client.
     }
 }
