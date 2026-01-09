@@ -38,6 +38,8 @@ import Image from 'next/image';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { updateProfile } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
+import { useRequestNotificationPermission } from '@/hooks/use-request-notification-permission';
+import { Bell } from 'lucide-react';
 
 const profileFormSchema = UserProfileSchema.pick({
   displayName: true,
@@ -50,6 +52,7 @@ export default function ProfilePage() {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
+  const { requestPermission, permission, isSupported } = useRequestNotificationPermission();
 
   const form = useForm<z.infer<typeof profileFormSchema>>({
     resolver: zodResolver(profileFormSchema),
@@ -149,6 +152,7 @@ export default function ProfilePage() {
   }
 
   return (
+    <>
     <Card className="max-w-2xl mx-auto">
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
@@ -237,5 +241,32 @@ export default function ProfilePage() {
         </form>
       </Form>
     </Card>
+
+    <Card className="max-w-2xl mx-auto mt-8">
+        <CardHeader>
+            <CardTitle className="font-headline">Notifications</CardTitle>
+            <CardDescription>Manage how you receive notifications from the journal.</CardDescription>
+        </CardHeader>
+        <CardContent>
+            {isSupported ? (
+                permission === 'granted' ? (
+                     <p className="text-sm text-muted-foreground">You have enabled push notifications on this device.</p>
+                ) : (
+                    <div className="flex items-center justify-between rounded-lg border p-4">
+                        <div>
+                            <h3 className="font-medium">Enable Push Notifications</h3>
+                            <p className="text-sm text-muted-foreground">Get notified about important updates directly on your device.</p>
+                        </div>
+                        <Button onClick={requestPermission} disabled={permission === 'denied'}>
+                             {permission === 'denied' ? 'Permission Denied' : 'Enable'}
+                        </Button>
+                    </div>
+                )
+            ) : (
+                <p className="text-sm text-muted-foreground">Push notifications are not supported on this browser or device.</p>
+            )}
+        </CardContent>
+    </Card>
+    </>
   );
 }
