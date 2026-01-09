@@ -11,6 +11,8 @@ import {
   User as FirebaseUser,
   GoogleAuthProvider,
   signInWithPopup,
+  sendEmailVerification,
+  sendPasswordResetEmail,
 } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
@@ -21,10 +23,11 @@ interface AuthContextType {
   user: FirebaseUser | null;
   userProfile: UserProfile | null;
   loading: boolean;
-  login: (email: string, pass: string) => Promise<any>;
+  login: (email: string, pass: string) => Promise<FirebaseUser>;
   signup: (email: string, pass: string, displayName: string) => Promise<any>;
   logout: () => Promise<void>;
   signInWithGoogle: () => Promise<any>;
+  sendPasswordReset: (email: string) => Promise<void>;
   refetchUserProfile: () => Promise<void>;
 }
 
@@ -32,10 +35,11 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   userProfile: null,
   loading: true,
-  login: async () => {},
+  login: async () => ({} as FirebaseUser),
   signup: async () => {},
   logout: async () => {},
   signInWithGoogle: async () => {},
+  sendPasswordReset: async () => {},
   refetchUserProfile: async () => {},
 });
 
@@ -81,8 +85,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return () => unsubscribe();
   }, []);
 
-  const login = (email: string, pass: string) => {
-    return signInWithEmailAndPassword(auth, email, pass);
+  const login = async (email: string, pass: string) => {
+    const userCredential = await signInWithEmailAndPassword(auth, email, pass);
+    return userCredential.user;
   };
 
   const signup = async (email: string, pass: string, displayName: string) => {
@@ -91,6 +96,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     
     if(user) {
         await updateProfile(user, { displayName });
+        await sendEmailVerification(user);
         // The onAuthStateChanged listener will handle creating the user document
     }
     return userCredential;
@@ -101,6 +107,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const result = await signInWithPopup(auth, provider);
     // The onAuthStateChanged listener will handle creating/fetching the user document
     return result;
+  }
+
+  const sendPasswordReset = (email: string) => {
+    return sendPasswordResetEmail(auth, email);
   }
 
   const logout = () => {
@@ -122,6 +132,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     signup,
     logout,
     signInWithGoogle,
+    sendPasswordReset,
     refetchUserProfile,
   };
 

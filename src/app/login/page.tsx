@@ -20,13 +20,25 @@ import {
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Icons } from '@/components/icons';
+import { Icons } from '@/components/ui/icons';
 import { useAuth } from '@/contexts/auth-context';
 import { useState, useEffect } from 'react';
 import { Separator } from '@/components/ui/separator';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+
 
 const formSchema = z.object({
   email: z.string().email('Please enter a valid email address.'),
@@ -36,11 +48,13 @@ const formSchema = z.object({
 export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const { login, signInWithGoogle } = useAuth();
+  const { login, signInWithGoogle, sendPasswordReset } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [loadingLogo, setLoadingLogo] = useState(true);
+  const [resetEmail, setResetEmail] = useState('');
+
 
   useEffect(() => {
     const fetchLogo = async () => {
@@ -71,7 +85,16 @@ export default function LoginPage() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
     try {
-      await login(values.email, values.password);
+      const user = await login(values.email, values.password);
+      if (user && !user.emailVerified) {
+         toast({
+            title: 'Email Not Verified',
+            description: "Please check your inbox and verify your email address to log in.",
+            variant: 'destructive',
+         });
+         setIsLoading(false);
+         return;
+      }
       toast({
         title: 'Login Successful!',
         description: "You've been successfully logged in.",
@@ -107,6 +130,20 @@ export default function LoginPage() {
         setIsGoogleLoading(false);
     }
   }
+
+  async function handlePasswordReset() {
+    if (!resetEmail) {
+      toast({ title: 'Email required', description: 'Please enter your email address.', variant: 'destructive' });
+      return;
+    }
+    try {
+      await sendPasswordReset(resetEmail);
+      toast({ title: 'Password Reset Email Sent', description: 'If an account exists, an email will be sent with instructions.' });
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    }
+  }
+
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-secondary/50 p-4">
@@ -153,7 +190,32 @@ export default function LoginPage() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Password</FormLabel>
+                    <div className="flex justify-between items-center">
+                        <FormLabel>Password</FormLabel>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="link" type="button" className="p-0 h-auto text-xs">Forgot Password?</Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Reset Your Password</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Enter your email address and we will send you a link to reset your password.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <Input
+                              type="email"
+                              placeholder="you@example.com"
+                              value={resetEmail}
+                              onChange={(e) => setResetEmail(e.target.value)}
+                            />
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={handlePasswordReset}>Send Reset Link</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                    </div>
                     <FormControl>
                       <Input type="password" placeholder="••••••••" {...field} />
                     </FormControl>

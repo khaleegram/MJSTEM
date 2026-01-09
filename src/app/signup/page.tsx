@@ -20,7 +20,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Icons } from '@/components/icons';
+import { Icons } from '@/components/ui/icons';
 import { useAuth } from '@/contexts/auth-context';
 import { useState, useEffect } from 'react';
 import { Separator } from '@/components/ui/separator';
@@ -75,8 +75,9 @@ export default function SignUpPage() {
     try {
       await signup(values.email, values.password, values.displayName);
       toast({
-        title: 'Account Created!',
-        description: "You've been successfully signed up. Please log in.",
+        title: 'Verification Email Sent!',
+        description: "A verification link has been sent to your email. Please check your inbox.",
+        duration: 6000,
       });
       router.push('/login');
     } catch (error: any) {
