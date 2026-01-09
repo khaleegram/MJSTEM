@@ -72,6 +72,8 @@ import { DroppableIssue } from '@/components/droppable-issue';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useDroppable } from '@dnd-kit/core';
 import { cn } from '@/lib/utils';
+import { FirestorePermissionError } from '@/firebase/errors';
+import { errorEmitter } from '@/firebase/error-emitter';
 
 
 const ManageVolumeDialog = ({ volume, onActionComplete }: { volume: Volume; onActionComplete: () => void }) => {
@@ -86,33 +88,32 @@ const ManageVolumeDialog = ({ volume, onActionComplete }: { volume: Volume; onAc
             return;
         }
         setIsSaving(true);
-        try {
-            const volumeRef = doc(db, 'volumes', volume.id);
-            await updateDoc(volumeRef, { title: newTitle });
+        const volumeRef = doc(db, 'volumes', volume.id);
+        updateDoc(volumeRef, { title: newTitle }).then(() => {
             toast({ title: 'Volume Updated', description: 'The volume title has been saved.' });
             onActionComplete();
             setIsOpen(false);
-        } catch (error) {
-            console.error('Error updating volume title:', error);
-            toast({ title: 'Error', description: 'Could not update volume title.', variant: 'destructive' });
-        } finally {
+        }).catch((serverError) => {
+            const permissionError = new FirestorePermissionError({ path: volumeRef.path, operation: 'update', requestResourceData: { title: newTitle }});
+            errorEmitter.emit('permission-error', permissionError);
+        }).finally(() => {
             setIsSaving(false);
-        }
+        });
     };
 
     const handleDeleteVolume = async () => {
         setIsSaving(true);
-        try {
-            await deleteDoc(doc(db, 'volumes', volume.id));
+        const volumeRef = doc(db, 'volumes', volume.id);
+        deleteDoc(volumeRef).then(() => {
             toast({ title: 'Volume Deleted', description: `"${volume.title}" has been permanently removed.` });
             onActionComplete();
             setIsOpen(false);
-        } catch (error) {
-            console.error('Error deleting volume:', error);
-            toast({ title: 'Error', description: 'Could not delete the volume.', variant: 'destructive' });
-        } finally {
+        }).catch((serverError) => {
+            const permissionError = new FirestorePermissionError({ path: volumeRef.path, operation: 'delete' });
+            errorEmitter.emit('permission-error', permissionError);
+        }).finally(() => {
             setIsSaving(false);
-        }
+        });
     };
 
 
@@ -170,25 +171,26 @@ const AddIssueDialog = ({ volume, onIssueAdded }: { volume: Volume; onIssueAdded
       return;
     }
 
-    try {
-      const volumeRef = doc(db, 'volumes', volume.id);
-      const newIssue: Omit<Issue, 'id'> & { id: string } = {
-        id: `issue_${Date.now()}`,
-        title: issueTitle,
-        articles: [],
-      };
-      await updateDoc(volumeRef, {
-        issues: arrayUnion(newIssue),
-      });
-
-      toast({ title: 'Issue Created', description: `Added "${issueTitle}" to ${volume.title}` });
-      onIssueAdded();
-      setIsOpen(false);
-      setIssueTitle('');
-    } catch (error) {
-      console.error('Error creating issue: ', error);
-      toast({ title: 'Error', description: 'Could not create the issue.', variant: 'destructive' });
-    }
+    const volumeRef = doc(db, 'volumes', volume.id);
+    const newIssue: Omit<Issue, 'id'> & { id: string } = {
+      id: `issue_${Date.now()}`,
+      title: issueTitle,
+      articles: [],
+    };
+    
+    updateDoc(volumeRef, { issues: arrayUnion(newIssue) }).then(() => {
+        toast({ title: 'Issue Created', description: `Added "${issueTitle}" to ${volume.title}` });
+        onIssueAdded();
+        setIsOpen(false);
+        setIssueTitle('');
+    }).catch(serverError => {
+        const permissionError = new FirestorePermissionError({
+            path: volumeRef.path,
+            operation: 'update',
+            requestResourceData: { issues: `(arrayUnion with ${newIssue.title})` }
+        });
+        errorEmitter.emit('permission-error', permissionError);
+    });
   };
 
   return (
@@ -319,13 +321,9 @@ export default function PublicationsPage() {
       
       setUnassignedSubmissions(subs);
 
-    } catch (error) {
-      console.error('Error fetching data: ', error);
-      toast({
-        title: 'Error',
-        description: 'Could not fetch publications data.',
-        variant: 'destructive',
-      });
+    } catch (serverError) {
+        const permissionError = new FirestorePermissionError({ path: 'volumes', operation: 'list' });
+        errorEmitter.emit('permission-error', permissionError);
     } finally {
       setLoading(false);
     }
@@ -341,22 +339,23 @@ export default function PublicationsPage() {
       toast({ title: 'Volume title cannot be empty', variant: 'destructive' });
       return;
     }
-    try {
-      await addDoc(collection(db, 'volumes'), {
+    const volumeData = {
         title: newVolumeTitle,
         year: new Date().getFullYear(),
         issues: [],
-      });
-      toast({
-        title: 'Volume Created!',
-        description: `${newVolumeTitle} has been added.`,
-      });
-      fetchPublicationsData();
-      setNewVolumeTitle(`Volume ${volumes.length + 2}, ${new Date().getFullYear()}`);
-    } catch (error) {
-      console.error('Error creating volume: ', error);
-      toast({ title: 'Error', description: 'Could not create the volume.', variant: 'destructive' });
-    }
+    };
+    const volumesCollectionRef = collection(db, 'volumes');
+    addDoc(volumesCollectionRef, volumeData).then(() => {
+        toast({
+            title: 'Volume Created!',
+            description: `${newVolumeTitle} has been added.`,
+        });
+        fetchPublicationsData();
+        setNewVolumeTitle(`Volume ${volumes.length + 2}, ${new Date().getFullYear()}`);
+    }).catch(serverError => {
+        const permissionError = new FirestorePermissionError({ path: volumesCollectionRef.path, operation: 'create', requestResourceData: volumeData });
+        errorEmitter.emit('permission-error', permissionError);
+    });
   };
 
   function findContainer(id: string | null) {
@@ -501,7 +500,8 @@ export default function PublicationsPage() {
       toast({ title: "Publication Updated", description: "Article position has been saved." });
     } catch (e: any) {
         console.error("DND transaction failed: ", e);
-        toast({ title: "Update Failed", description: e.message || "Could not move the article.", variant: "destructive"});
+        const permissionError = new FirestorePermissionError({ path: 'volumes', operation: 'write', requestResourceData: { info: 'Drag and drop operation failed' } });
+        errorEmitter.emit('permission-error', permissionError);
     } finally {
       fetchPublicationsData();
     }
@@ -592,3 +592,5 @@ export default function PublicationsPage() {
     </DndContext>
   );
 }
+
+    
