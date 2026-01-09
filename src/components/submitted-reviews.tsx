@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, getDocs, orderBy, query, Timestamp } from 'firebase/firestore';
+import { collection, getDocs, orderBy, query, Timestamp, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Shield, MessageSquare, User } from 'lucide-react';
 import { Badge } from './ui/badge';
 import { format } from 'date-fns';
+import { useAuth } from '@/contexts/auth-context';
 
 interface Review {
     id: string;
@@ -34,39 +35,46 @@ const getRecommendationVariant = (recommendation: string) => {
 export const SubmittedReviews = ({ submissionId, showForAuthor = false }: { submissionId: string; showForAuthor?: boolean }) => {
     const [reviews, setReviews] = useState<Review[]>([]);
     const [loading, setLoading] = useState(true);
+    const { userProfile } = useAuth();
+    const isEditor = userProfile?.role === 'Editor' || userProfile?.role === 'Admin' || userProfile?.role === 'Managing Editor';
+
 
     useEffect(() => {
-        const fetchReviews = async () => {
-            setLoading(true);
-            try {
-                const reviewsQuery = query(
-                    collection(db, 'submissions', submissionId, 'reviews'),
-                    orderBy('submittedAt', 'desc')
-                );
-                const querySnapshot = await getDocs(reviewsQuery);
-                const fetchedReviews = querySnapshot.docs.map(doc => {
-                    const data = doc.data();
-                    const submittedAt = data.submittedAt instanceof Timestamp 
-                        ? data.submittedAt.toDate() 
-                        : new Date(data.submittedAt);
-                    return {
-                        id: doc.id,
-                        ...data,
-                        submittedAt,
-                    } as Review;
-                });
-                setReviews(fetchedReviews);
-            } catch (error) {
-                console.error("Error fetching reviews:", error);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        if (submissionId) {
-            fetchReviews();
+        if (!submissionId) {
+            setLoading(false);
+            return;
         }
+
+        const reviewsQuery = query(
+            collection(db, 'submissions', submissionId, 'reviews'),
+            orderBy('submittedAt', 'desc')
+        );
+        
+        const unsubscribe = onSnapshot(reviewsQuery, (querySnapshot) => {
+            const fetchedReviews = querySnapshot.docs.map(doc => {
+                const data = doc.data();
+                const submittedAt = data.submittedAt instanceof Timestamp 
+                    ? data.submittedAt.toDate() 
+                    : new Date(data.submittedAt);
+                return {
+                    id: doc.id,
+                    ...data,
+                    submittedAt,
+                } as Review;
+            });
+            setReviews(fetchedReviews);
+            setLoading(false);
+        }, (error) => {
+            console.error("Error fetching reviews:", error);
+            setLoading(false);
+        });
+
+        return () => unsubscribe();
     }, [submissionId]);
+
+    if (!isEditor && !showForAuthor) {
+        return null;
+    }
 
     if (loading) {
         return (
@@ -107,7 +115,7 @@ export const SubmittedReviews = ({ submissionId, showForAuthor = false }: { subm
                 <CardDescription>{showForAuthor ? "Feedback from reviewers to guide your revision." : "Feedback from the assigned peer reviewers."}</CardDescription>
             </CardHeader>
             <CardContent>
-                <Accordion type="single" collapsible className="w-full">
+                <Accordion type="single" collapsible className="w-full" defaultValue='item-0'>
                     {reviews.map((review, index) => (
                          <AccordionItem value={`item-${index}`} key={review.id}>
                             <AccordionTrigger>

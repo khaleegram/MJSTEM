@@ -147,7 +147,7 @@ const ReviewSubmissionForm = ({ submission, onReviewSubmit }: { submission: Subm
                 context: { reviewerName: userProfile?.displayName || 'A reviewer' }
             });
             
-             // 4. Notify editors
+             // 4. Notify editors and author
             await generateNotification({
                 userId: 'Admins', // Special keyword for all Admins/Managing Editors
                 submissionId: submission.id,
@@ -156,6 +156,13 @@ const ReviewSubmissionForm = ({ submission, onReviewSubmit }: { submission: Subm
                     submissionTitle: submission.title,
                     reviewerName: userProfile?.displayName || 'a reviewer'
                 }
+            });
+
+            await generateNotification({
+                userId: submission.author.id,
+                submissionId: submission.id,
+                eventType: 'REVIEW_SUBMITTED',
+                context: { submissionTitle: submission.title }
             });
             
             toast({ title: "Review Submitted", description: "Thank you for your contribution. The editor has been notified." });
@@ -500,12 +507,7 @@ export default function SubmissionDetailPage() {
             setAvailableReviewers(users);
         } catch (error) {
             console.error("Error fetching reviewers:", error);
-            const permissionError = new FirestorePermissionError({
-                path: 'users',
-                operation: 'list',
-                requestResourceData: { info: "Could not fetch list of available reviewers." }
-            });
-            errorEmitter.emit('permission-error', permissionError);
+            // This error is handled gracefully by not showing the assign reviewer button
         }
     }
     fetchReviewers();
@@ -803,7 +805,7 @@ export default function SubmissionDetailPage() {
 
         {isReviewer && <ReviewSubmissionForm submission={submission} onReviewSubmit={handleRevisionSubmit} />}
 
-        {(isEditor || (isAuthor && needsRevision)) && <SubmittedReviews submissionId={submission.id} showForAuthor={isAuthor && needsRevision} />}
+        <SubmittedReviews submissionId={submission.id} showForAuthor={isAuthor} />
 
         {isAuthor && needsRevision && <AuthorRevisionForm submission={submission} onRevisionSubmit={handleRevisionSubmit} />}
 
@@ -849,15 +851,14 @@ export default function SubmissionDetailPage() {
              {submission.reviewers && submission.reviewers.length > 0 ? (
                 <ul className="space-y-4">
                     {submission.reviewers.map((reviewer, index) => {
-                        const reviewerProfile = availableReviewers.find(r => r.uid === reviewer.id);
                         const isSubmitted = reviewer.status === 'Review Submitted';
                         
                         return (
                          <li key={reviewer.id} className="flex items-center justify-between">
                            <div className="flex items-center gap-4">
-                                {isEditor && reviewerProfile ? (
+                                {isEditor ? (
                                     <Avatar>
-                                        <AvatarImage src={reviewerProfile?.photoURL || ''} alt={reviewer.name} />
+                                        <AvatarImage src={availableReviewers.find(r => r.uid === reviewer.id)?.photoURL || ''} alt={reviewer.name} />
                                         <AvatarFallback>{getInitials(reviewer.name)}</AvatarFallback>
                                     </Avatar>
                                 ) : (
@@ -929,4 +930,3 @@ export default function SubmissionDetailPage() {
     </div>
   );
 }
-
