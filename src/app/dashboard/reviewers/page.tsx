@@ -28,6 +28,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { UserProfile } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/auth-context';
+import { FirestorePermissionError } from '@/firebase/errors';
+import { errorEmitter } from '@/firebase/error-emitter';
 
 export default function ReviewersPage() {
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
@@ -45,24 +47,24 @@ export default function ReviewersPage() {
   useEffect(() => {
     const fetchUsers = async () => {
       setLoading(true);
+      const usersCollection = collection(db, 'users');
       try {
-        const q = query(collection(db, 'users'));
+        const q = query(usersCollection);
         const querySnapshot = await getDocs(q);
         const userList: UserProfile[] = querySnapshot.docs.map(doc => doc.data() as UserProfile);
         setAllUsers(userList);
-      } catch (error) {
-        console.error("Error fetching users: ", error);
-        toast({
-          title: "Error",
-          description: "Could not fetch user list.",
-          variant: "destructive"
+      } catch (serverError) {
+        const permissionError = new FirestorePermissionError({
+          path: usersCollection.path,
+          operation: 'list',
         });
+        errorEmitter.emit('permission-error', permissionError);
       } finally {
         setLoading(false);
       }
     };
     fetchUsers();
-  }, [toast]);
+  }, []);
 
   const filteredUsers = useMemo(() => {
     let usersToShow = allUsers;
