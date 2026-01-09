@@ -67,7 +67,8 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
 
     match /submissions/{submissionId} {
-      allow list: if isSignedIn(); // Clients should filter on authorId or reviewerIds
+      allow list: if isEditorialMember() || 
+                   (isSignedIn() && request.query.where['author.id'] == request.auth.uid);
 
       allow get: if isSignedIn() && (
         resource.data.author.id == request.auth.uid ||
@@ -112,7 +113,13 @@ service cloud.firestore {
 
       // --- HISTORY SUBCOLLECTION ---
       match /history/{historyId} {
-        allow list: if isEditorialMember() || (isSignedIn() && exists(/databases/$(database)/documents/submissions/$(submissionId)) && get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid);
+        allow list: if (
+            isEditorialMember() ||
+            (
+                exists(/databases/$(database)/documents/submissions/$(submissionId)) &&
+                get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid
+            )
+        );
         allow read: if (
           isEditorialMember() ||
           (
@@ -124,7 +131,7 @@ service cloud.firestore {
           )
         );
 
-        allow write: if isEditorialMember();
+        allow write: if isSignedIn();
       }
     }
 
@@ -133,9 +140,9 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
 
     match /notifications/{notificationId} {
-      allow list: if isSignedIn(); // Client must query by user ID
+      allow list: if isSignedIn();
       allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn();
       allow update: if isSignedIn() && resource.data.userId == request.auth.uid && request.resource.data.keys().hasOnly(['read']);
     }
 
@@ -153,6 +160,14 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
 
     match /editorialBoard/{memberId} {
+      allow read: if true;
+      allow write: if isManagingEditor() || isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // INDEXING SERVICES COLLECTION
+    // -------------------------------------------------------------------------
+    match /indexingServices/{serviceId} {
       allow read: if true;
       allow write: if isManagingEditor() || isAdmin();
     }
