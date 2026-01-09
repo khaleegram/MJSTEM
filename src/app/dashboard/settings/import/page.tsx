@@ -96,7 +96,7 @@ export default function ImportSubmissionPage() {
 
     if (url.toLowerCase().endsWith('.pdf')) {
       try {
-        const fileBytes = await fetch(url).then(res => res.arrayBuffer());
+        const fileBytes = await fetch(`https://cors-anywhere.herokuapp.com/${url}`).then(res => res.arrayBuffer());
         const pdfDoc = await PDFDocument.load(fileBytes);
         form.setValue('pageCount', pdfDoc.getPageCount());
       } catch (error) {
