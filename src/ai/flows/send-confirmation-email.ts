@@ -1,22 +1,18 @@
 
 'use server';
 /**
- * @fileOverview A flow for sending a submission confirmation email and creating the submission document.
+ * @fileOverview A flow for sending a submission confirmation email.
+ * This is decoupled from the submission creation process.
  */
 
 import { z } from 'zod';
 import { google } from 'googleapis';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { logSubmissionEvent } from './log-submission-event';
-import { generateNotification } from './generate-notification';
 
 const SendConfirmationEmailSchema = z.object({
   authorEmail: z.string().email(),
   authorName: z.string(),
   manuscriptTitle: z.string(),
   uniqueId: z.string(),
-  submissionData: z.any(), // Not ideal, but avoids circular dependency with SubmissionSchema
 });
 export type SendConfirmationEmailInput = z.infer<typeof SendConfirmationEmailSchema>;
 
@@ -49,30 +45,7 @@ async function getGmailClient() {
 
 
 export async function sendConfirmationEmail(input: SendConfirmationEmailInput): Promise<void> {
-  // 1. Create the submission document in Firestore
-  const submissionsCollectionRef = collection(db, 'submissions');
-  const submissionDocRef = await addDoc(submissionsCollectionRef, {
-      ...input.submissionData,
-      submittedAt: serverTimestamp(), // Use server timestamp for accuracy
-  });
-
-  // 2. Log the creation event
-  await logSubmissionEvent({
-      submissionId: submissionDocRef.id,
-      eventType: 'SUBMISSION_CREATED',
-      context: { authorName: input.authorName },
-  });
-  
-  // 3. Notify editors
-  await generateNotification({
-      userId: 'Admins',
-      submissionId: submissionDocRef.id,
-      eventType: 'NEW_SUBMISSION',
-      context: { submissionTitle: input.manuscriptTitle, authorName: input.authorName },
-  });
-
-
-  // 4. Send the confirmation email
+  // This flow now ONLY sends the email. The document creation is handled on the client.
   try {
     const gmail = await getGmailClient();
 

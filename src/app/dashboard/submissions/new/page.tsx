@@ -172,11 +172,10 @@ export default function NewSubmissionPage() {
         return;
     }
 
-
     const submissionData = {
         author: { id: user.uid, name: primaryContact.name, email: primaryContact.email },
         status: 'Submitted' as const,
-        submittedAt: new Date(), // Using client date, server will use its own timestamp
+        submittedAt: serverTimestamp(),
         title: values.title,
         abstract: values.abstract,
         keywords: values.keywords,
@@ -189,14 +188,11 @@ export default function NewSubmissionPage() {
         revision: 0,
     };
     
+    const submissionsCollectionRef = collection(db, 'submissions');
+
     try {
-        await sendConfirmationEmail({
-            authorEmail: primaryContact.email,
-            authorName: primaryContact.name,
-            manuscriptTitle: values.title,
-            uniqueId: uniqueId,
-            submissionData: submissionData
-        });
+        // 1. Create the submission document first.
+        const docRef = await addDoc(submissionsCollectionRef, submissionData);
 
         toast({
             title: 'Submission Successful!',
@@ -204,14 +200,40 @@ export default function NewSubmissionPage() {
             variant: 'default',
             className: 'bg-green-500 text-white',
         });
+
+        // 2. After success, trigger background tasks (email, logs, notifications)
+        // These can fail without affecting the core submission.
+        try {
+            await logSubmissionEvent({
+                submissionId: docRef.id,
+                eventType: 'SUBMISSION_CREATED',
+                context: { authorName: primaryContact.name },
+            });
+            await generateNotification({
+                userId: 'Admins',
+                submissionId: docRef.id,
+                eventType: 'NEW_SUBMISSION',
+                context: { submissionTitle: values.title, authorName: primaryContact.name },
+            });
+            await sendConfirmationEmail({
+                authorEmail: primaryContact.email,
+                authorName: primaryContact.name,
+                manuscriptTitle: values.title,
+                uniqueId: uniqueId,
+            });
+        } catch (backgroundError) {
+            console.error("Failed to send post-submission notifications/emails:", backgroundError);
+            // Don't bother the user with this, just log it. The main submission worked.
+        }
+
         router.push('/dashboard/author');
 
     } catch (serverError) {
         console.error('Submission Error:', serverError);
         const permissionError = new FirestorePermissionError({
-            path: 'submissions',
+            path: submissionsCollectionRef.path,
             operation: 'create',
-            requestResourceData: {info: "Failed to create submission via server action."}
+            requestResourceData: submissionData,
         });
         errorEmitter.emit('permission-error', permissionError);
     } finally {

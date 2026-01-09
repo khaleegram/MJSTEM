@@ -81,8 +81,8 @@ service cloud.firestore {
         isEditorialMember()
       );
       
-      // Allow creation by server actions (unauthenticated) or editorial members
-      allow create: if isServer() || isEditorialMember();
+      // Allow creation by authenticated users (authors)
+      allow create: if isSignedIn();
 
       allow update: if (
         isEditorialMember() ||
@@ -188,7 +188,7 @@ service cloud.firestore {
     match /settings/submissionCounter {
       allow read: if true;
       // Allow server-side actions (unauthenticated) to increment the counter
-      allow write: if true; 
+      allow write: if isServer(); 
     }
 
     match /settings/{settingId} {
