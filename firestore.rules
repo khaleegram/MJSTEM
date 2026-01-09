@@ -55,11 +55,11 @@ service cloud.firestore {
     // USERS COLLECTION
     // ---------------------------
     match /users/{userId} {
-      allow list: if isEditorialMember() || isAdmin();
+      allow list: if isSignedIn();
       allow read: if request.auth.uid == userId || isEditorialMember() || isAdmin();
       allow create: if isSignedIn() && request.auth.uid == userId;
       allow update: if (
-        (isSignedIn() && request.auth.uid == userId && request.resource.data.role == resource.data.role &&
+        (isSignedIn() && request.auth.uid == userId &&
          request.resource.data.diff(resource.data).changedKeys().hasOnly(['displayName', 'photoURL', 'specialization']))
         || isAdmin() || isManagingEditor()
       );
@@ -69,23 +69,18 @@ service cloud.firestore {
     // SUBMISSIONS COLLECTION
     // ---------------------------
     match /submissions/{submissionId} {
+      // List submissions: authors see their own, reviewers see assigned, editors/admin see all
+      allow list: if isEditorialMember() || isAdmin() || isAuthor() || isReviewer();
 
-      // Listing: Admin/Editorial sees all, Author sees own, Reviewer sees assigned
-      allow list: if isEditorialMember() || isAdmin() || 
-                  (isAuthor()) || (isReviewer());
-
-      // Get single submission
       allow get: if isSignedIn() &&
                   (
-                    resource.data.author.id == request.auth.uid ||                       // Author sees own
-                    (resource.data.reviewerIds != null && request.auth.uid in resource.data.reviewerIds) || // Reviewer sees assigned
-                    isEditorialMember() || isAdmin()                                     // Admin/Editorial sees all
+                    resource.data.author.id == request.auth.uid ||
+                    (resource.data.reviewerIds != null && request.auth.uid in resource.data.reviewerIds) ||
+                    isEditorialMember() || isAdmin()
                   );
 
-      // Create submission
       allow create: if isSignedIn() && request.resource.data.author.id == request.auth.uid;
 
-      // Update submission
       allow update: if isEditorialMember() || isAdmin() ||
                     (
                       isAuthor() &&
@@ -94,51 +89,26 @@ service cloud.firestore {
                       request.resource.data.diff(resource.data).changedKeys().hasOnly(['manuscriptUrl','status','revision','originalManuscriptUrl'])
                     );
 
-      // Delete submission
       allow delete: if isEditorialMember() || isAdmin();
 
-      // ---------------------------
-      // REVIEWS SUBCOLLECTION
-      // ---------------------------
+      // --- REVIEWS SUBCOLLECTION ---
       match /reviews/{reviewId} {
-        // Only Admin/Editorial can list all reviews
         allow list: if isEditorialMember() || isAdmin();
-
-        // Read review
         allow read: if isEditorialMember() || isAdmin() ||
-                    (
-                      isReviewer() &&
-                      request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds
-                    ) ||
-                    (
-                      isAuthor() &&
-                      request.auth.uid == get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id
-                    ); // Author can see review metadata
-
-        // Create review
-        allow create: if isReviewer() &&
-                      request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds;
-
+                    (isReviewer() && request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds) ||
+                    (isAuthor() && request.auth.uid == get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id);
+        allow create: if isReviewer() && request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds;
         allow update, delete: if false;
       }
 
-      // ---------------------------
-      // HISTORY SUBCOLLECTION
-      // ---------------------------
+      // --- HISTORY SUBCOLLECTION ---
       match /history/{historyId} {
         allow list: if isEditorialMember() || isAdmin() ||
                      (isAuthor() && request.auth.uid == get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id);
-
         allow read: if isEditorialMember() || isAdmin() ||
-                    (
-                      isAuthor() && request.auth.uid == get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id
-                    ) ||
-                    (
-                      isReviewer() &&
-                      request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds
-                    );
-
-        allow create: if isServer() || isEditorialMember() || isAdmin(); 
+                    (isAuthor() && request.auth.uid == get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id) ||
+                    (isReviewer() && request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds);
+        allow create: if isServer() || isEditorialMember() || isAdmin();
         allow update, delete: if false;
       }
     }
@@ -150,7 +120,7 @@ service cloud.firestore {
       allow list: if isSignedIn();
       allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow create: if isServer() || isEditorialMember() || isAdmin();
-      allow update: if isSignedIn() && resource.data.userId == request.auth.uid && request.resource.data.keys().hasOnly(['read']);
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
     }
 
     // ---------------------------
@@ -182,13 +152,12 @@ service cloud.firestore {
     // ---------------------------
     match /settings/submissionCounter {
       allow read: if true;
-      allow write: if isServer(); 
+      allow write: if isServer();
     }
 
     match /settings/{settingId} {
       allow read: if true;
       allow write: if (isManagingEditor() || isAdmin()) && settingId != 'submissionCounter';
     }
-
   }
 }
