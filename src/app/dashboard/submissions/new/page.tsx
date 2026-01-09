@@ -155,30 +155,42 @@ export default function NewSubmissionPage() {
     }
 
     setIsSubmitting(true);
+    let uniqueId;
     
     try {
-        const uniqueId = await getNextSubmissionIdAction();
+        uniqueId = await getNextSubmissionIdAction();
+    } catch(serverError) {
+        console.error('ID Generation Error:', serverError);
+        const permissionError = new FirestorePermissionError({
+            path: 'settings/submissionCounter',
+            operation: 'write',
+            requestResourceData: {info: "Failed to get new submission ID."}
+        });
+        errorEmitter.emit('permission-error', permissionError);
+        setIsSubmitting(false);
+        return;
+    }
 
-        const submissionData = {
-            author: { id: user.uid, name: primaryContact.name, email: primaryContact.email },
-            status: 'Submitted' as const,
-            submittedAt: serverTimestamp(),
-            title: values.title,
-            abstract: values.abstract,
-            keywords: values.keywords,
-            manuscriptUrl: values.manuscriptUrl,
-            contributors: values.contributors,
-            reviewers: [],
-            reviewerIds: [],
-            pageCount: values.pageCount || 0,
-            uniqueId: uniqueId,
-            revision: 0,
-        };
-        
-        const submissionsCollectionRef = collection(db, 'submissions');
-        
-        const docRef = await addDoc(submissionsCollectionRef, submissionData);
 
+    const submissionData = {
+        author: { id: user.uid, name: primaryContact.name, email: primaryContact.email },
+        status: 'Submitted' as const,
+        submittedAt: serverTimestamp(),
+        title: values.title,
+        abstract: values.abstract,
+        keywords: values.keywords,
+        manuscriptUrl: values.manuscriptUrl,
+        contributors: values.contributors,
+        reviewers: [],
+        reviewerIds: [],
+        pageCount: values.pageCount || 0,
+        uniqueId: uniqueId,
+        revision: 0,
+    };
+    
+    const submissionsCollectionRef = collection(db, 'submissions');
+    
+    addDoc(submissionsCollectionRef, submissionData).then(async (docRef) => {
         await logSubmissionEvent({
             submissionId: docRef.id,
             eventType: 'SUBMISSION_CREATED',
@@ -197,7 +209,7 @@ export default function NewSubmissionPage() {
             authorEmail: primaryContact.email!,
             authorName: primaryContact.name!,
             manuscriptTitle: values.title,
-            uniqueId: uniqueId,
+            uniqueId: uniqueId!,
         });
 
         toast({
@@ -207,17 +219,17 @@ export default function NewSubmissionPage() {
             className: 'bg-green-500 text-white',
         });
         router.push('/dashboard/author');
-
-    } catch (serverError) {
+    }).catch(serverError => {
         console.error('Submission Error:', serverError);
         const permissionError = new FirestorePermissionError({
-            path: 'submissions or settings/submissionCounter',
+            path: submissionsCollectionRef.path,
             operation: 'create',
-            requestResourceData: {info: "Failed to create submission or get new ID."}
+            requestResourceData: submissionData
         });
         errorEmitter.emit('permission-error', permissionError);
+    }).finally(() => {
         setIsSubmitting(false);
-    }
+    });
   }
 
   return (

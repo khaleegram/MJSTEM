@@ -145,7 +145,7 @@ service cloud.firestore {
     match /notifications/{notificationId} {
       allow list: if isSignedIn() && request.query.where.userId == request.auth.uid;
       allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow create: if isSignedIn(); // Created by trusted server-side flow
+      allow create: if isEditorialMember(); // Created by trusted server-side flow
       allow update: if isSignedIn() && resource.data.userId == request.auth.uid && request.resource.data.keys().hasOnly(['read']);
     }
 
@@ -182,12 +182,13 @@ service cloud.firestore {
     match /settings/{settingId} {
         allow read: if true;
         
-        // Allow server-side actions to update the counter
+        // Allow the server-side transaction to update the counter.
+        // This is a specific exception.
         match /submissionCounter {
-            allow read, write: if isSignedIn();
+            allow read, write: if true;
         }
 
-        // Restrict other settings to admins/editors
+        // Restrict other settings writes to admins/editors.
         allow write: if (isManagingEditor() || isAdmin()) && settingId != 'submissionCounter';
     }
   }
