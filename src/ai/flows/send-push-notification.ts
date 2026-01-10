@@ -5,7 +5,7 @@
  */
 
 import admin from '@/lib/firebase-admin';
-import { getDocs, collection, query, where, DocumentData } from 'firebase-firestore';
+import { getDocs, collection, query, where, DocumentData } from 'firebase/firestore';
 
 // Note: This uses the regular Firestore client to query for user tokens,
 // but the Firebase Admin SDK to actually send the messages.
