@@ -57,6 +57,7 @@ const ensureUserDocument = async (user: FirebaseUser): Promise<UserProfile> => {
       photoURL: user.photoURL || '',
       role: 'Author', // Default role
       specialization: '', // Default specialization
+      fcmTokens: [],
     };
     await setDoc(userRef, newProfile);
     return newProfile;

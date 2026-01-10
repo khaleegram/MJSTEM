@@ -1,3 +1,4 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -61,7 +62,7 @@ service cloud.firestore {
       allow update: if (
         (isSignedIn() && request.auth.uid == userId &&
          request.resource.data.diff(resource.data).changedKeys()
-           .hasOnly(['displayName', 'photoURL', 'specialization']))
+           .hasOnly(['displayName', 'photoURL', 'specialization', 'fcmTokens']))
         || isAdmin() || isManagingEditor()
       );
     }
