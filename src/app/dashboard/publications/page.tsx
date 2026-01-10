@@ -1,24 +1,6 @@
-
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import {
-  DndContext,
-  closestCenter,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
-  DragOverEvent,
-  DragStartEvent,
-} from '@dnd-kit/core';
-import {
-  arrayMove,
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 import {
   Card,
   CardContent,
@@ -30,9 +12,10 @@ import { Button } from '@/components/ui/button';
 import {
   PlusCircle,
   Book,
-  GripVertical,
   Settings2,
   Trash2,
+  Move,
+  BookCopy,
 } from 'lucide-react';
 import {
   Dialog,
@@ -43,6 +26,13 @@ import {
   DialogTrigger,
   DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -68,13 +58,11 @@ import {
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
-import { DroppableIssue } from '@/components/droppable-issue';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { useDroppable } from '@dnd-kit/core';
-import { cn } from '@/lib/utils';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { errorEmitter } from '@/firebase/error-emitter';
 
+// --- DIALOGS AND SUB-COMPONENTS ---
 
 const ManageVolumeDialog = ({ volume, onActionComplete }: { volume: Volume; onActionComplete: () => void }) => {
     const [newTitle, setNewTitle] = useState(volume.title);
@@ -224,88 +212,114 @@ const AddIssueDialog = ({ volume, onIssueAdded }: { volume: Volume; onIssueAdded
   );
 };
 
-const DraggableArticle = ({ article }: { article: Submission }) => {
-    const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: article.id });
-    const style = {
-        transform: CSS.Transform.toString(transform),
-        transition,
-    };
+
+const AddToIssueDialog = ({ article, volumes, onActionComplete }: { article: Submission; volumes: Volume[], onActionComplete: () => void }) => {
+    const [selectedIssueId, setSelectedIssueId] = useState('');
+    const [isOpen, setIsOpen] = useState(false);
+    const { toast } = useToast();
+
+    const handleAddToIssue = async () => {
+        if (!selectedIssueId) {
+            toast({ title: 'Please select an issue', variant: 'destructive' });
+            return;
+        }
+        
+        const [volumeId, issueId] = selectedIssueId.split('/');
+        const volumeRef = doc(db, 'volumes', volumeId);
+
+        const newArticle: Article = {
+            id: article.id,
+            title: article.title,
+            authorName: article.author.name,
+            contributors: article.contributors,
+            manuscriptUrl: article.manuscriptUrl,
+            pageCount: article.pageCount || null,
+            uniqueId: article.uniqueId,
+        };
+
+        try {
+            await runTransaction(db, async (transaction) => {
+                const volDoc = await transaction.get(volumeRef);
+                if (!volDoc.exists()) throw new Error("Volume not found");
+
+                const currentVolume = volDoc.data() as Volume;
+                const updatedIssues = currentVolume.issues?.map(issue => {
+                    if (issue.id === issueId) {
+                        return { ...issue, articles: [...(issue.articles || []), newArticle] };
+                    }
+                    return issue;
+                }) || [];
+                
+                transaction.update(volumeRef, { issues: updatedIssues });
+            });
+            toast({ title: 'Article Added', description: `Moved "${article.title}" to the selected issue.` });
+            onActionComplete();
+            setIsOpen(false);
+        } catch (error) {
+             toast({ title: 'Failed to add article', variant: 'destructive' });
+             console.error(error);
+        }
+    }
+
     return (
-        <div ref={setNodeRef} style={style} {...attributes} {...listeners} data-dnd-id={article.id}>
-            <Card className="p-4 hover:shadow-md cursor-grab active:cursor-grabbing">
-                <div className="flex items-center gap-4">
-                <GripVertical className="h-5 w-5 text-muted-foreground" />
-                <div>
-                    <p className="font-medium leading-snug">{article.title}</p>
-                    <p className="text-sm text-muted-foreground">{article.author.name}</p>
+        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+            <DialogTrigger asChild>
+                <Button size="sm">Add to Issue</Button>
+            </DialogTrigger>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Add "{article.title}" to an issue</DialogTitle>
+                </DialogHeader>
+                <div className="py-4">
+                    <Label>Target Issue</Label>
+                    <Select onValueChange={setSelectedIssueId}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Select a volume and issue..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {volumes.map(volume => (
+                                <optgroup label={volume.title} key={volume.id}>
+                                    {volume.issues?.map(issue => (
+                                        <SelectItem key={`${volume.id}/${issue.id}`} value={`${volume.id}/${issue.id}`}>
+                                            {issue.title}
+                                        </SelectItem>
+                                    ))}
+                                </optgroup>
+                            ))}
+                        </SelectContent>
+                    </Select>
                 </div>
-                </div>
-            </Card>
-        </div>
+                <DialogFooter>
+                    <Button onClick={handleAddToIssue}>Add to Issue</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     )
 }
 
-const UnassignedArticles = ({ submissions, loading }: { submissions: Submission[], loading: boolean }) => {
-    const { setNodeRef, isOver } = useDroppable({
-        id: 'unassigned-articles-droppable-area',
-    });
-    const submissionIds = useMemo(() => submissions.map(s => s.id), [submissions]);
-
-    return (
-        <div ref={setNodeRef} className={cn("flex-1 overflow-y-auto space-y-4 p-1 rounded-lg transition-colors", isOver && "bg-primary/10")}>
-            <SortableContext items={submissionIds} strategy={verticalListSortingStrategy} id="unassigned">
-                {loading ? (
-                    Array.from({ length: 4 }).map((_, i) => (
-                    <Card key={i} className="p-4">
-                        <div className="flex items-center gap-4">
-                        <Skeleton className="h-6 w-6" /><div className="space-y-2"><Skeleton className="h-4 w-48" /><Skeleton className="h-3 w-32" /></div>
-                        </div>
-                    </Card>
-                    ))
-                ) : submissions.length > 0 ? (
-                    submissions.map((sub) => (
-                       <DraggableArticle key={sub.id} article={sub} />
-                    ))
-                ) : (
-                    <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed shadow-sm h-full">
-                    <div className="flex flex-col items-center gap-4 text-center">
-                        <Book className="h-16 w-16 text-muted-foreground" />
-                        <h3 className="text-xl font-bold tracking-tight font-headline">No Unassigned Articles</h3>
-                        <p className="text-sm text-muted-foreground max-w-md">Accepted manuscripts will appear here. Any articles already in an issue will not be shown.</p>
-                    </div>
-                    </div>
-                )}
-            </SortableContext>
-        </div>
-    )
-}
-
+// --- MAIN PAGE COMPONENT ---
 
 export default function PublicationsPage() {
   const [unassignedSubmissions, setUnassignedSubmissions] = useState<Submission[]>([]);
   const [volumes, setVolumes] = useState<Volume[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
-  const [newVolumeTitle, setNewVolumeTitle] = useState(`Volume ${volumes.length + 1}, ${new Date().getFullYear()}`);
-  const sensors = useSensors(useSensor(PointerSensor));
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [newVolumeTitle, setNewVolumeTitle] = useState('');
 
   const fetchPublicationsData = async () => {
     setLoading(true);
     try {
-      // Fetch all volumes and their articles
       const volsQuery = query(collection(db, 'volumes'), orderBy('year', 'desc'));
       const volsSnapshot = await getDocs(volsQuery);
-      const vols: Volume[] = volsSnapshot.docs.map((doc) => ({
+      const volsData: Volume[] = volsSnapshot.docs.map((doc) => ({
         id: doc.id,
         ...(doc.data() as Omit<Volume, 'id'>),
       }));
-      setVolumes(vols);
+      setVolumes(volsData);
+      setNewVolumeTitle(`Volume ${volsData.length + 1}, ${new Date().getFullYear()}`);
 
-      // Get all article IDs that are already in issues
-      const assignedArticleIds = vols.flatMap(v => v.issues?.flatMap(i => i.articles?.map(a => a.id) || []) || []);
+      const assignedArticleIds = volsData.flatMap(v => v.issues?.flatMap(i => i.articles?.map(a => a.id) || []) || []);
 
-      // Fetch accepted submissions that are NOT in the assigned list
       const subsQuery = query(
         collection(db, 'submissions'),
         where('status', '==', 'Accepted')
@@ -317,7 +331,7 @@ export default function PublicationsPage() {
           ...(doc.data() as Omit<Submission, 'id'>),
           submittedAt: doc.data().submittedAt.toDate(),
         }))
-        .filter(sub => !assignedArticleIds.includes(sub.id)); // Filter out already assigned articles
+        .filter(sub => !assignedArticleIds.includes(sub.id));
       
       setUnassignedSubmissions(subs);
 
@@ -331,8 +345,7 @@ export default function PublicationsPage() {
 
   useEffect(() => {
     fetchPublicationsData();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [toast]);
+  }, []);
 
   const handleCreateVolume = async () => {
     if (!newVolumeTitle.trim()) {
@@ -351,171 +364,38 @@ export default function PublicationsPage() {
             description: `${newVolumeTitle} has been added.`,
         });
         fetchPublicationsData();
-        setNewVolumeTitle(`Volume ${volumes.length + 2}, ${new Date().getFullYear()}`);
     }).catch(serverError => {
         const permissionError = new FirestorePermissionError({ path: volumesCollectionRef.path, operation: 'create', requestResourceData: volumeData });
         errorEmitter.emit('permission-error', permissionError);
     });
   };
+  
+    const handleRemoveArticle = async (articleId: string, fromIssueId: string, fromVolumeId: string) => {
+        const volumeRef = doc(db, 'volumes', fromVolumeId);
+        try {
+            await runTransaction(db, async (transaction) => {
+                const volDoc = await transaction.get(volumeRef);
+                if (!volDoc.exists()) throw new Error("Volume not found");
 
-  function findContainer(id: string | null) {
-      if (!id) return null;
-      if (id === 'unassigned-articles-droppable-area' || unassignedSubmissions.some(s => s.id === id)) {
-        return { type: 'unassigned' as const, items: unassignedSubmissions };
-      }
-      for (const volume of volumes) {
-        for (const issue of volume.issues || []) {
-          if (`issue-${issue.id}` === id) {
-            return { type: 'issue' as const, volumeId: volume.id, issueId: issue.id, items: issue.articles || [] };
-          }
-          if (issue.articles?.some(a => a.id === id)) {
-            return { type: 'issue' as const, volumeId: volume.id, issueId: issue.id, items: issue.articles };
-          }
+                const currentVolume = volDoc.data() as Volume;
+                const updatedIssues = currentVolume.issues?.map(issue => {
+                    if (issue.id === fromIssueId) {
+                        return { ...issue, articles: issue.articles?.filter(a => a.id !== articleId) || [] };
+                    }
+                    return issue;
+                }) || [];
+                transaction.update(volumeRef, { issues: updatedIssues });
+            });
+            toast({ title: 'Article Removed', description: 'The article has been returned to the unassigned list.' });
+            fetchPublicationsData();
+        } catch (error) {
+            toast({ title: 'Failed to remove article', variant: 'destructive' });
+            console.error(error);
         }
-      }
-      return null;
-  }
-
-  const handleDragStart = (event: DragStartEvent) => {
-    setActiveId(event.active.id as string);
-  }
-
-  const handleDragOver = (event: DragOverEvent) => {
-      const { active, over } = event;
-      const overId = over?.id;
-
-      if (!overId) return;
-
-      const activeContainerData = findContainer(active.id as string);
-      const overContainerData = findContainer(overId as string);
-
-      if (!activeContainerData || !overContainerData || activeContainerData === overContainerData) {
-          return;
-      }
-      
-      // This is a simplified handler that visually moves items but doesn't commit changes.
-      // The real logic is in handleDragEnd.
-  }
-
-  const handleDragEnd = async (event: DragEndEvent) => {
-    const { active, over } = event;
-    setActiveId(null);
-
-    if (!over || !active.id || active.id === over.id) return;
-    
-    const originalContainer = findContainer(active.id as string);
-    let overContainer = findContainer(over.id as string);
-
-    if (over.data.current?.type === 'issue' && overContainer?.type !== 'issue') {
-        overContainer = { type: 'issue', volumeId: over.data.current.volumeId, issueId: over.data.current.issueId, items: [] };
-    }
-     if (over.id === 'unassigned-articles-droppable-area') {
-        overContainer = { type: 'unassigned', items: unassignedSubmissions };
-    }
-
-
-    if (!originalContainer || !overContainer) return;
-    
-    const activeIndex = originalContainer.items.findIndex(item => item.id === active.id);
-    let overIndex = -1;
-    if (overContainer.items) {
-      overIndex = overContainer.items.findIndex(item => item.id === over.id);
-    }
-    if (overIndex === -1) {
-      overIndex = overContainer.items?.length || 0;
-    }
-
-
-    // --- Firestore Logic ---
-    try {
-      await runTransaction(db, async (transaction) => {
-        let movedItem: Article | Submission;
-        let submissionBeingMoved: Submission;
-
-        if (originalContainer.type === 'unassigned') {
-            const submissionDoc = await transaction.get(doc(db, 'submissions', active.id as string));
-            if (!submissionDoc.exists()) throw new Error("Submission not found");
-            submissionBeingMoved = { id: submissionDoc.id, ...submissionDoc.data() } as Submission;
-        } else {
-            // If moving from an issue, we need to fetch the full submission to get all data.
-            const submissionDoc = await transaction.get(doc(db, 'submissions', active.id as string));
-            if (!submissionDoc.exists()) throw new Error("Submission not found");
-            submissionBeingMoved = { id: submissionDoc.id, ...submissionDoc.data() } as Submission;
-        }
-        
-          const sourceItems = [...originalContainer.items];
-          let destinationItems = overContainer.items ? [...overContainer.items] : [];
-          
-          sourceItems.splice(activeIndex, 1);
-
-          if (originalContainer.type === 'issue' && overContainer.type === 'unassigned') {
-                // MOVE FROM ISSUE TO UNASSIGNED
-                const sourceVolRef = doc(db, 'volumes', originalContainer.volumeId);
-                const sourceVolDoc = await transaction.get(sourceVolRef);
-                const sourceVolData = sourceVolDoc.data() as Volume;
-                const updatedSourceIssues = sourceVolData.issues?.map(i => 
-                    i.id === originalContainer.issueId ? { ...i, articles: sourceItems } : i
-                );
-                transaction.update(sourceVolRef, { issues: updatedSourceIssues });
-          } else if (originalContainer.type === 'issue' && overContainer.type === 'issue' && originalContainer.issueId === overContainer.issueId) {
-            // REORDER WITHIN THE SAME ISSUE
-            const reorderedItems = arrayMove(originalContainer.items, activeIndex, overIndex);
-             const volRef = doc(db, 'volumes', originalContainer.volumeId);
-             const volDoc = await transaction.get(volRef);
-             const currentVolData = volDoc.data() as Volume;
-             const updatedIssues = currentVolData.issues?.map(i => i.id === originalContainer.issueId ? { ...i, articles: reorderedItems } : i);
-             transaction.update(volRef, { issues: updatedIssues });
-          } else {
-            // MOVE BETWEEN DIFFERENT CONTAINERS (unassigned -> issue, issue -> different issue)
-            
-            const newArticle: Article = {
-                id: submissionBeingMoved.id,
-                title: submissionBeingMoved.title,
-                authorName: submissionBeingMoved.author.name,
-                contributors: submissionBeingMoved.contributors,
-                manuscriptUrl: submissionBeingMoved.manuscriptUrl,
-                pageCount: submissionBeingMoved.pageCount || null,
-                uniqueId: submissionBeingMoved.uniqueId,
-            };
-
-            destinationItems.splice(overIndex, 0, newArticle);
-
-            if (originalContainer.type === 'issue') {
-              const sourceVolRef = doc(db, 'volumes', originalContainer.volumeId);
-              const sourceVolDoc = await transaction.get(sourceVolRef);
-              const sourceVolData = sourceVolDoc.data() as Volume;
-              const updatedSourceIssues = sourceVolData.issues?.map(i => i.id === originalContainer.issueId ? { ...i, articles: sourceItems } : i);
-              transaction.update(sourceVolRef, { issues: updatedSourceIssues });
-            }
-
-            if (overContainer.type === 'issue') {
-              const destVolRef = doc(db, 'volumes', overContainer.volumeId!);
-              const destVolDoc = await transaction.get(destVolRef);
-              const destVolData = destVolDoc.data() as Volume;
-              const updatedDestIssues = destVolData.issues?.map(i => i.id === overContainer!.issueId ? { ...i, articles: destinationItems } : i);
-              transaction.update(destVolRef, { issues: updatedDestIssues });
-            }
-          }
-      });
-      toast({ title: "Publication Updated", description: "Article position has been saved." });
-    } catch (e: any) {
-        console.error("DND transaction failed: ", e);
-        const permissionError = new FirestorePermissionError({ path: 'volumes', operation: 'write', requestResourceData: { info: 'Drag and drop operation failed' } });
-        errorEmitter.emit('permission-error', permissionError);
-    } finally {
-      fetchPublicationsData();
-    }
-  };
+    };
 
 
   return (
-    <DndContext 
-      sensors={sensors} 
-      collisionDetection={closestCenter} 
-      onDragStart={handleDragStart} 
-      onDragEnd={handleDragEnd}
-      onDragOver={handleDragOver}
-    >
       <div className="grid gap-8 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-8">
           <Card>
@@ -559,10 +439,34 @@ export default function PublicationsPage() {
                                 <ManageVolumeDialog volume={volume} onActionComplete={fetchPublicationsData} />
                             </div>
                         </div>
-                      <AccordionContent className="pl-6">
+                      <AccordionContent className="pl-6 space-y-4">
                         {volume.issues && volume.issues.length > 0 ? (
                           volume.issues.map((issue) => (
-                             <DroppableIssue key={issue.id} issue={issue} volumeId={volume.id} onActionComplete={fetchPublicationsData} />
+                             <div key={issue.id} className="border-l pl-6 py-4">
+                                <div className="flex items-center justify-between">
+                                    <h4 className="font-semibold flex items-center gap-2"><BookCopy className="w-4 h-4" />{issue.title}</h4>
+                                </div>
+                                <div className="mt-2 space-y-2 text-sm text-muted-foreground">
+                                    {issue.articles && issue.articles.length > 0 ? (
+                                        issue.articles.map(article => (
+                                            <div key={article.id} className="p-2 bg-card border rounded-md flex items-center justify-between gap-2">
+                                                <span className="truncate">{article.title}</span>
+                                                <div className="flex items-center">
+                                                    <AlertDialog>
+                                                        <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7"><Trash2 className="h-4 w-4 text-destructive"/></Button></AlertDialogTrigger>
+                                                        <AlertDialogContent>
+                                                            <AlertDialogHeader><AlertDialogTitle>Confirm Removal</AlertDialogTitle><AlertDialogDescription>Are you sure you want to remove this article from the issue? It will be moved back to the "Ready for Publication" list.</AlertDialogDescription></AlertDialogHeader>
+                                                            <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleRemoveArticle(article.id, issue.id, volume.id)}>Remove</AlertDialogAction></AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    </AlertDialog>
+                                                </div>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <p className="text-xs italic py-4 text-center">No articles in this issue.</p>
+                                    )}
+                                </div>
+                            </div>
                           ))
                         ) : (
                           <div className="text-center text-muted-foreground py-6"><p>No issues in this volume yet.</p></div>
@@ -581,16 +485,39 @@ export default function PublicationsPage() {
           <Card className="max-h-[calc(100vh-10rem)] flex flex-col">
             <CardHeader>
               <CardTitle className="font-headline">Ready for Publication</CardTitle>
-              <CardDescription>Drag accepted articles into an issue.</CardDescription>
+              <CardDescription>Articles that are accepted but not yet in an issue.</CardDescription>
             </CardHeader>
             <CardContent className="flex-1 overflow-y-auto">
-                <UnassignedArticles submissions={unassignedSubmissions} loading={loading} />
+                <div className="flex-1 overflow-y-auto space-y-4 p-1 rounded-lg">
+                {loading ? (
+                    Array.from({ length: 4 }).map((_, i) => (
+                    <Card key={i} className="p-4"><div className="flex items-center gap-4"><Skeleton className="h-4 w-4" /><div className="space-y-2"><Skeleton className="h-4 w-48" /><Skeleton className="h-3 w-32" /></div></div></Card>
+                    ))
+                ) : unassignedSubmissions.length > 0 ? (
+                    unassignedSubmissions.map((sub) => (
+                       <Card key={sub.id} className="p-4">
+                            <div className="flex items-center justify-between gap-4">
+                                <div>
+                                    <p className="font-medium leading-snug">{sub.title}</p>
+                                    <p className="text-sm text-muted-foreground">{sub.author.name}</p>
+                                </div>
+                                <AddToIssueDialog article={sub} volumes={volumes} onActionComplete={fetchPublicationsData} />
+                            </div>
+                        </Card>
+                    ))
+                ) : (
+                    <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed shadow-sm h-full py-20">
+                    <div className="flex flex-col items-center gap-4 text-center">
+                        <Book className="h-16 w-16 text-muted-foreground" />
+                        <h3 className="text-xl font-bold tracking-tight font-headline">No Unassigned Articles</h3>
+                        <p className="text-sm text-muted-foreground max-w-md">Accepted manuscripts will appear here once they are approved.</p>
+                    </div>
+                    </div>
+                )}
+                </div>
             </CardContent>
           </Card>
         </div>
       </div>
-    </DndContext>
   );
 }
-
-    
