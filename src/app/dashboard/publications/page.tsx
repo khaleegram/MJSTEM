@@ -396,7 +396,7 @@ export default function PublicationsPage() {
 
 
   return (
-      <div className="grid gap-8 lg:grid-cols-3">
+      <div className="grid gap-8 md:grid-cols-1 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-8">
           <Card>
             <CardHeader>
@@ -449,9 +449,9 @@ export default function PublicationsPage() {
                                 <div className="mt-2 space-y-2 text-sm text-muted-foreground">
                                     {issue.articles && issue.articles.length > 0 ? (
                                         issue.articles.map(article => (
-                                            <div key={article.id} className="p-2 bg-card border rounded-md flex items-center justify-between gap-2">
-                                                <span className="truncate">{article.title}</span>
-                                                <div className="flex items-center">
+                                            <div key={article.id} className="p-2 bg-card border rounded-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                                                <span className="truncate flex-1">{article.title}</span>
+                                                <div className="flex items-center self-end sm:self-center">
                                                     <AlertDialog>
                                                         <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7"><Trash2 className="h-4 w-4 text-destructive"/></Button></AlertDialogTrigger>
                                                         <AlertDialogContent>
@@ -496,12 +496,14 @@ export default function PublicationsPage() {
                 ) : unassignedSubmissions.length > 0 ? (
                     unassignedSubmissions.map((sub) => (
                        <Card key={sub.id} className="p-4">
-                            <div className="flex items-center justify-between gap-4">
-                                <div>
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                                <div className="flex-1">
                                     <p className="font-medium leading-snug">{sub.title}</p>
                                     <p className="text-sm text-muted-foreground">{sub.author.name}</p>
                                 </div>
-                                <AddToIssueDialog article={sub} volumes={volumes} onActionComplete={fetchPublicationsData} />
+                                <div className="self-end sm:self-center">
+                                    <AddToIssueDialog article={sub} volumes={volumes} onActionComplete={fetchPublicationsData} />
+                                </div>
                             </div>
                         </Card>
                     ))
