@@ -51,6 +51,7 @@ import * as z from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { sendReviewerAssignmentEmail } from '@/ai/flows/send-reviewer-assignment-email';
+import { sendDecisionEmail } from '@/ai/flows/send-decision-email';
 
 
 async function getNextSubmissionId(): Promise<string> {
@@ -683,10 +684,18 @@ export default function SubmissionDetailPage() {
             eventType: 'STATUS_CHANGED',
             context: { status, submissionTitle: submission.title }
         });
+        
+        await sendDecisionEmail({
+            authorEmail: submission.author.email,
+            authorName: submission.author.name,
+            manuscriptTitle: submission.title,
+            submissionId: submission.id,
+            decision: status,
+        });
 
         toast({
             title: "Status Updated",
-            description: `Submission marked as ${status}.`,
+            description: `Submission marked as ${status}. The author has been notified by email.`,
         });
 
         setRefetchTrigger(prev => prev + 1); // Trigger refetch
