@@ -36,7 +36,7 @@ export const metadata: Metadata = {
     description: 'A premier, peer-reviewed, open-access journal.',
   },
   icons: {
-    icon: '/favicon.jpeg',
+    icon: '/favicon.jpg',
     apple: '/icons/apple/apple-touch-icon.png',
   }
 };
