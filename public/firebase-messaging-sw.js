@@ -1,44 +1,34 @@
-// This file is intentionally left blank in this template.
-// It will be populated with the necessary Firebase messaging service worker code.
-// For security reasons, the actual code containing API keys is not shown here.
 
-// In a real application, this file would contain:
-// 1. Imports for the Firebase SDK
-// 2. Firebase app initialization with your project's config
-// 3. A background message handler
+// Import and initialize the Firebase SDK
+importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js');
 
-// Example structure:
-/*
-importScripts("https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js");
-importScripts("https://www.gstatic.com/firebasejs/9.0.0/firebase-messaging-compat.js");
-
+// Your web app's Firebase configuration
 const firebaseConfig = {
-    apiKey: "...",
-    authDomain: "...",
-    projectId: "...",
-    storageBucket: "...",
-    messagingSenderId: "...",
-    appId: "..."
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
+// Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 
+// Retrieve an instance of Firebase Messaging so that it can handle background
+// messages.
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage((payload) => {
   console.log('[firebase-messaging-sw.js] Received background message ', payload);
+  
   const notificationTitle = payload.notification.title;
   const notificationOptions = {
     body: payload.notification.body,
-    icon: '/icons/icon-192x192.png'
+    icon: '/icons/apple/apple-touch-icon-180x180.png'
   };
 
   self.registration.showNotification(notificationTitle, notificationOptions);
-});
-
-*/
-// NOTE: For this to work, you MUST replace the placeholder firebaseConfig
-// with your actual Firebase project configuration.
-self.addEventListener('fetch', () => {
-  // This is a placeholder to ensure the service worker is installed.
 });
