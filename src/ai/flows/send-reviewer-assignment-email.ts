@@ -22,10 +22,11 @@ export async function sendReviewerAssignmentEmail(input: SendReviewerAssignmentE
         SMTP_PORT,
         SMTP_USER,
         SMTP_PASS,
-        MAIL_FROM
+        MAIL_FROM,
+        NEXT_PUBLIC_BASE_URL
     } = process.env;
 
-    if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASS || !MAIL_FROM) {
+    if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASS || !MAIL_FROM || !NEXT_PUBLIC_BASE_URL) {
         console.error('Failed to send reviewer assignment email: SMTP environment variables are not fully configured.');
         return;
     }
@@ -48,7 +49,7 @@ You have been invited to review a new manuscript, "${input.manuscriptTitle}", fo
 Your expertise in this area is highly valued, and we would be grateful for your contribution to the peer review process.
 <br><br>
 You can access the submission and submit your review by following this link:
-<a href="${process.env.NEXT_PUBLIC_BASE_URL}/dashboard/submissions/${input.submissionId}">View Submission</a>
+<a href="${NEXT_PUBLIC_BASE_URL}/dashboard/submissions/${input.submissionId}">View Submission</a>
 <br><br>
 Thank you for considering this request.
 <br><br>

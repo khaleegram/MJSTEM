@@ -1,3 +1,4 @@
+
 'use client';
 
 import { notFound, useParams, useRouter } from 'next/navigation';
@@ -397,123 +398,6 @@ const DetailPageSkeleton = () => (
     </div>
 )
 
-const PageCountManager = ({ submission, onUpdate }: { submission: Submission, onUpdate: () => void }) => {
-    const { userProfile } = useAuth();
-    const isEditor = userProfile?.role === 'Editor' || userProfile?.role === 'Admin' || userProfile?.role === 'Managing Editor';
-    const [pageCount, setPageCount] = React.useState<number | undefined | null>(submission.pageCount);
-    const [isEditing, setIsEditing] = React.useState(false);
-    const [isSaving, setIsSaving] = React.useState(false);
-    const [isAnalyzing, setIsAnalyzing] = React.useState(false);
-    const { toast } = useToast();
-
-    const handleSave = async () => {
-        if (pageCount === undefined || pageCount === null || pageCount < 0) {
-            toast({ title: "Invalid page count", variant: "destructive" });
-            return;
-        }
-        setIsSaving(true);
-        const submissionRef = doc(db, 'submissions', submission.id);
-
-        try {
-            await runTransaction(db, async (transaction) => {
-                // 1. Update the main submission document
-                transaction.update(submissionRef, { pageCount });
-
-                // 2. Find which volume/issue this article is in and update it there too
-                const volumesQuery = query(collection(db, 'volumes'));
-                const volumesSnapshot = await getDocs(volumesQuery);
-                for (const volDoc of volumesSnapshot.docs) {
-                    const volume = volDoc.data() as Volume;
-                    let volumeUpdated = false;
-                    const updatedIssues = volume.issues?.map(issue => {
-                        const articleIndex = issue.articles?.findIndex(a => a.id === submission.id);
-                        if (articleIndex !== -1 && issue.articles) {
-                            issue.articles[articleIndex].pageCount = pageCount;
-                            volumeUpdated = true;
-                        }
-                        return issue;
-                    });
-
-                    if (volumeUpdated) {
-                        transaction.update(doc(db, 'volumes', volDoc.id), { issues: updatedIssues });
-                        // Assuming an article is only in one place, we can break
-                        break; 
-                    }
-                }
-            });
-
-            toast({ title: "Page count updated successfully" });
-            onUpdate();
-            setIsEditing(false);
-        } catch (error) {
-            console.error("Error saving page count:", error);
-            toast({ title: "Failed to save page count", variant: "destructive" });
-        } finally {
-            setIsSaving(false);
-        }
-    };
-    
-    const analyzePdf = async () => {
-        if (!submission.manuscriptUrl) {
-            toast({ title: "No manuscript file found", variant: "destructive" });
-            return;
-        }
-        setIsAnalyzing(true);
-        try {
-            const fileBytes = await fetch(submission.manuscriptUrl).then(res => res.arrayBuffer());
-            const pdfDoc = await PDFDocument.load(fileBytes);
-            setPageCount(pdfDoc.getPageCount());
-             toast({ title: "PDF Analyzed", description: `Found ${pdfDoc.getPageCount()} pages. Click 'Save' to confirm.` });
-        } catch (error) {
-            console.error("Failed to analyze PDF:", error);
-            toast({ title: "Failed to analyze PDF", description: "The file might be corrupted or not a valid PDF.", variant: "destructive" });
-        } finally {
-            setIsAnalyzing(false);
-        }
-    }
-
-    if (!isEditor) {
-        return submission.pageCount ? (
-            <p className="text-sm text-muted-foreground">{submission.pageCount} pages</p>
-        ) : null;
-    }
-
-    if (isEditing) {
-        return (
-            <div className="space-y-2">
-                 <div className="flex items-center gap-2">
-                    <Input
-                        type="number"
-                        value={pageCount ?? ''}
-                        onChange={(e) => setPageCount(parseInt(e.target.value, 10))}
-                        className="h-8 w-24"
-                        placeholder="Pages"
-                    />
-                    <Button size="sm" onClick={handleSave} disabled={isSaving}>
-                        {isSaving ? 'Saving...' : 'Save'}
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setIsEditing(false)}>Cancel</Button>
-                </div>
-                <Button size="sm" variant="outline" onClick={analyzePdf} disabled={isAnalyzing}>
-                    <FileSearch className="mr-2 h-4 w-4" />
-                    {isAnalyzing ? 'Analyzing...' : 'Analyze PDF'}
-                </Button>
-            </div>
-        );
-    }
-
-    return (
-        <div className="flex items-center gap-2">
-            <p className="text-sm font-medium">
-                {pageCount !== undefined && pageCount !== null ? `${pageCount} pages` : 'Page count not set'}
-            </p>
-            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsEditing(true)}>
-                <Edit className="h-4 w-4" />
-            </Button>
-        </div>
-    );
-};
-
 const editSubmissionSchema = z.object({
     title: z.string().min(10, 'Title must be at least 10 characters long.'),
     abstract: z.string().min(50, 'Abstract must be at least 50 characters long.'),
@@ -663,7 +547,7 @@ export default function SubmissionDetailPage() {
 
 
   const handleDecision = async (status: SubmissionStatus) => {
-    if(!submission || !userProfile) return;
+    if(!submission || !userProfile || !submission.uniqueId) return;
     setIsUpdating(true);
 
     const submissionRef = doc(db, 'submissions', submission.id);
@@ -690,6 +574,7 @@ export default function SubmissionDetailPage() {
             authorName: submission.author.name,
             manuscriptTitle: submission.title,
             submissionId: submission.id,
+            uniqueId: submission.uniqueId,
             decision: status,
         });
 
@@ -940,7 +825,7 @@ export default function SubmissionDetailPage() {
                     <Separator className="my-6" />
                     <div className="space-y-1">
                         <h3 className="font-semibold mb-2 font-headline">Page Count</h3>
-                        <PageCountManager submission={submission} onUpdate={() => setRefetchTrigger(p => p + 1)} />
+                        {submission.pageCount ? <p className="text-sm text-muted-foreground">{submission.pageCount} pages</p> : <p className="text-sm text-muted-foreground italic">Not set.</p>}
                     </div>
                 </CardContent>
                 </>

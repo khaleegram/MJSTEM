@@ -111,27 +111,35 @@ export default function NewSubmissionPage() {
   }
 
   const handleFileUploadComplete = useCallback(async (url: string) => {
-    if (!url) return;
     form.setValue('manuscriptUrl', url);
-
-    if (url.toLowerCase().endsWith('.pdf')) {
-      try {
-        // Using a CORS proxy to fetch the file if direct fetch fails
-        const response = await fetch(`https://cors-anywhere.herokuapp.com/${url}`);
-        if (!response.ok) throw new Error(`Failed to fetch PDF with status: ${response.status}`);
-        const fileBytes = await response.arrayBuffer();
-        const pdfDoc = await PDFDocument.load(fileBytes);
-        form.setValue('pageCount', pdfDoc.getPageCount());
-      } catch (error) {
-        console.error("Failed to count PDF pages:", error);
-        toast({
-          title: "Could not count pages",
-          description: "Could not automatically count the pages in the PDF. This is optional.",
-          variant: "destructive"
-        })
-      }
+    if (!url || !url.toLowerCase().endsWith('.pdf')) {
+        form.setValue('pageCount', 0);
+        return;
+    }
+  
+    try {
+      // Using a CORS proxy to fetch the file if direct fetch fails
+      const response = await fetch(`https://cors-anywhere.herokuapp.com/${url}`);
+      if (!response.ok) throw new Error(`CORS proxy failed: ${response.statusText}`);
+      
+      const fileBytes = await response.arrayBuffer();
+      const pdfDoc = await PDFDocument.load(fileBytes);
+      form.setValue('pageCount', pdfDoc.getPageCount());
+      toast({
+        title: "PDF Analyzed",
+        description: `Successfully counted ${pdfDoc.getPageCount()} pages.`,
+      });
+    } catch (error) {
+      console.error("Failed to count PDF pages:", error);
+      toast({
+        title: "Could Not Count Pages",
+        description: "Could not automatically count pages. This is optional and can be set later.",
+        variant: "destructive",
+      });
+      form.setValue('pageCount', 0);
     }
   }, [form, toast]);
+
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     if (!user || !user.displayName || !user.email) {
@@ -337,7 +345,7 @@ export default function NewSubmissionPage() {
                                         }}
                                     />
                                 </FormControl>
-                                <FormDescription>Please upload your manuscript in .docx or .pdf format.</FormDescription>
+                                <FormDescription>Upload your manuscript. Page count for PDFs is determined automatically.</FormDescription>
                                 <FormMessage />
                             </FormItem>
                         )}

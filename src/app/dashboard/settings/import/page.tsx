@@ -91,22 +91,32 @@ export default function ImportSubmissionPage() {
   }
 
   const handleFileUploadComplete = useCallback(async (url: string) => {
-    if (!url) return;
     form.setValue('manuscriptUrl', url);
-
-    if (url.toLowerCase().endsWith('.pdf')) {
-      try {
-        const fileBytes = await fetch(`https://cors-anywhere.herokuapp.com/${url}`).then(res => res.arrayBuffer());
-        const pdfDoc = await PDFDocument.load(fileBytes);
-        form.setValue('pageCount', pdfDoc.getPageCount());
-      } catch (error) {
-        console.error("Failed to count PDF pages:", error);
-        toast({
-          title: "Could not count pages",
-          description: "Could not automatically count the pages in the PDF.",
-          variant: "destructive"
-        })
-      }
+    if (!url || !url.toLowerCase().endsWith('.pdf')) {
+        form.setValue('pageCount', 0);
+        return;
+    }
+  
+    try {
+      // Using a CORS proxy to fetch the file if direct fetch fails
+      const response = await fetch(`https://cors-anywhere.herokuapp.com/${url}`);
+      if (!response.ok) throw new Error(`CORS proxy failed: ${response.statusText}`);
+      
+      const fileBytes = await response.arrayBuffer();
+      const pdfDoc = await PDFDocument.load(fileBytes);
+      form.setValue('pageCount', pdfDoc.getPageCount());
+       toast({
+        title: "PDF Analyzed",
+        description: `Successfully counted ${pdfDoc.getPageCount()} pages.`,
+      });
+    } catch (error) {
+      console.error("Failed to count PDF pages:", error);
+      toast({
+        title: "Could Not Count Pages",
+        description: "Could not automatically count pages. You can set it manually if needed.",
+        variant: "destructive",
+      });
+      form.setValue('pageCount', 0);
     }
   }, [form, toast]);
 
@@ -195,7 +205,7 @@ export default function ImportSubmissionPage() {
                         <FormItem><FormLabel>Keywords</FormLabel><FormControl><Input placeholder="e.g., Quantum Physics, AI, Climate Change" {...field} disabled={isSubmitting}/></FormControl><FormDescription>Separate keywords with commas.</FormDescription><FormMessage /></FormItem>
                     )}/>
                     <FormField control={form.control} name="manuscriptUrl" render={({ field }) => (
-                        <FormItem><FormLabel>Manuscript File</FormLabel><FormControl><FileUploader endpoint="documentUploader" onUploadComplete={handleFileUploadComplete} onUploadError={(error) => toast({title: 'Upload Failed', description: error.message, variant: 'destructive'})}/></FormControl><FormDescription>Upload the .docx or .pdf file.</FormDescription><FormMessage /></FormItem>
+                        <FormItem><FormLabel>Manuscript File</FormLabel><FormControl><FileUploader endpoint="documentUploader" onUploadComplete={handleFileUploadComplete} onUploadError={(error) => toast({title: 'Upload Failed', description: error.message, variant: 'destructive'})}/></FormControl><FormDescription>Upload the .docx or .pdf file. Page count will be determined automatically for PDFs.</FormDescription><FormMessage /></FormItem>
                     )}/>
                 </CardContent>
             </Card>

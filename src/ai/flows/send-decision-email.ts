@@ -13,6 +13,7 @@ const SendDecisionEmailSchema = z.object({
   authorName: z.string(),
   manuscriptTitle: z.string(),
   submissionId: z.string(),
+  uniqueId: z.string(),
   decision: z.enum([
     'Accepted', 'Rejected', 'Minor Revision', 'Major Revision', 
     'Awaiting Revision: Similarity Issues'
@@ -57,10 +58,11 @@ export async function sendDecisionEmail(input: SendDecisionEmailInput): Promise<
         SMTP_PORT,
         SMTP_USER,
         SMTP_PASS,
-        MAIL_FROM
+        MAIL_FROM,
+        NEXT_PUBLIC_BASE_URL
     } = process.env;
 
-    if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASS || !MAIL_FROM) {
+    if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASS || !MAIL_FROM || !NEXT_PUBLIC_BASE_URL) {
         console.error('Failed to send decision email: SMTP environment variables are not fully configured.');
         return;
     }
@@ -75,14 +77,14 @@ export async function sendDecisionEmail(input: SendDecisionEmailInput): Promise<
         },
     });
 
-    const { subject, body: emailBody } = getEmailContent(input.decision, input.manuscriptTitle, input.submissionId);
+    const { subject, body: emailBody } = getEmailContent(input.decision, input.manuscriptTitle, input.uniqueId);
 
     const finalBody = `Dear ${input.authorName},
 <br><br>
 ${emailBody}
 <br><br>
 You can view your submission details here:
-<a href="${process.env.NEXT_PUBLIC_BASE_URL}/dashboard/submissions/${input.submissionId}">View Submission</a>
+<a href="${NEXT_PUBLIC_BASE_URL}/dashboard/submissions/${input.submissionId}">View Submission</a>
 <br><br>
 Sincerely,
 <br>
