@@ -1,4 +1,3 @@
-
 'use client';
 
 import { notFound, useParams, useRouter } from 'next/navigation';
@@ -51,6 +50,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { sendReviewerAssignmentEmail } from '@/ai/flows/send-reviewer-assignment-email';
 
 
 async function getNextSubmissionId(): Promise<string> {
@@ -754,36 +754,45 @@ export default function SubmissionDetailPage() {
       try {
         await updateDoc(submissionRef, updateData);
 
-        await logSubmissionEvent({
+        // Fire-and-forget background tasks
+        logSubmissionEvent({
             submissionId: submission.id,
             eventType: 'REVIEWER_ASSIGNED',
             context: { reviewerName: reviewer.displayName, actorName: userProfile.displayName }
-        });
+        }).catch(e => console.error("Failed to log event:", e));
         
-        await generateNotification({
+        generateNotification({
             userId: reviewer.uid,
             submissionId: submission.id,
             eventType: 'REVIEWER_ASSIGNED',
             context: { submissionTitle: submission.title }
-        });
+        }).catch(e => console.error("Failed to generate in-app notification:", e));
+
+        sendReviewerAssignmentEmail({
+            reviewerEmail: reviewer.email,
+            reviewerName: reviewer.displayName,
+            manuscriptTitle: submission.title,
+            submissionId: submission.id,
+        }).catch(e => console.error("Failed to send assignment email:", e));
 
         if (updateData.status) {
-             await logSubmissionEvent({
+             logSubmissionEvent({
                 submissionId: submission.id,
                 eventType: 'STATUS_CHANGED',
                 context: { actorName: userProfile.displayName, status: updateData.status }
-            });
-            await generateNotification({
+            }).catch(e => console.error("Failed to log status change:", e));
+
+            generateNotification({
                 userId: submission.author.id,
                 submissionId: submission.id,
                 eventType: 'STATUS_CHANGED',
                 context: { status: updateData.status, submissionTitle: submission.title }
-            });
+            }).catch(e => console.error("Failed to generate status change notification:", e));
         }
         
         toast({
             title: "Reviewer Assigned",
-            description: `${reviewer.displayName} has been assigned.`,
+            description: `${reviewer.displayName} has been assigned and notified.`,
         });
 
         setRefetchTrigger(prev => prev + 1);
