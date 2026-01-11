@@ -127,6 +127,7 @@ export default function ProfilePage() {
   };
   
   const getInitials = (name: string) => {
+    if (!name) return 'U';
     const names = name.split(' ');
     if (names.length > 1) return names[0][0] + names[names.length - 1][0];
     return name.substring(0, 2);
@@ -250,7 +251,10 @@ export default function ProfilePage() {
         <CardContent>
             {isSupported ? (
                 permission === 'granted' ? (
-                     <p className="text-sm text-muted-foreground">You have enabled push notifications on this device.</p>
+                     <p className="text-sm text-muted-foreground flex items-center gap-2">
+                        <Bell className="w-4 h-4 text-green-500" />
+                        You have enabled push notifications on this device.
+                    </p>
                 ) : (
                     <div className="flex items-center justify-between rounded-lg border p-4">
                         <div>

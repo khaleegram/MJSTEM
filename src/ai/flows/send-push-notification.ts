@@ -40,6 +40,12 @@ async function getTokensForUsers(userIds: string[]): Promise<string[]> {
 }
 
 export async function sendPushNotification(input: PushNotificationInput): Promise<void> {
+    // Check if the admin app is initialized before trying to use it.
+    if (admin.apps.length === 0) {
+        console.warn("[Push Notification] Firebase Admin SDK not initialized. Skipping push notification.");
+        return;
+    }
+
     const { userIds, title, body, link } = input;
 
     const tokens = await getTokensForUsers(userIds);
