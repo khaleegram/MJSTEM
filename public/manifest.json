@@ -1,56 +1,33 @@
 {
-  "name": "MJSTEM",
+  "name": "MJSTEM - Multidisciplinary Journal",
   "short_name": "MJSTEM",
   "description": "A premier, peer-reviewed, open-access journal for science, technology, education, and management.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#F5F5DC",
-  "theme_color": "#90EE90",
+  "background_color": "#ffffff",
+  "theme_color": "#101827",
   "icons": [
     {
-      "src": "/favicon.ico",
-      "sizes": "any",
-      "type": "image/x-icon"
-    },
-    {
-      "src": "/icons/android/android-launchericon-192-192.png",
+      "src": "/icons/icon-192x192.png",
       "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any"
+      "type": "image/png"
     },
     {
-      "src": "/icons/android/android-launchericon-512-512.png",
+      "src": "/icons/icon-512x512.png",
       "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
+      "type": "image/png"
     },
     {
-      "src": "/icons/android/android-launchericon-192-192.png",
+      "src": "/icons/icon-maskable-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/icons/android/android-launchericon-512-512.png",
+      "src": "/icons/icon-maskable-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
-    }
-  ],
-  "screenshots": [
-    {
-      "src": "/screenshots/desktop.png",
-      "sizes": "1280x720",
-      "type": "image/png",
-      "form_factor": "wide",
-      "label": "MJSTEM Journal Homepage on Desktop"
-    },
-    {
-      "src": "/screenshots/mobile.png",
-      "sizes": "750x1334",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "MJSTEM Journal Homepage on Mobile"
     }
   ]
 }
