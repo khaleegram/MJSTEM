@@ -1,21 +1,21 @@
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ---------------------------
+    // ===========================
     // UTILITY FUNCTIONS
-    // ---------------------------
+    // ===========================
     function isSignedIn() {
       return request.auth != null;
     }
 
     function hasUserDoc() {
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
     function userRole() {
-      return isSignedIn() && hasUserDoc()
+      return hasUserDoc()
         ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
         : null;
     }
@@ -49,53 +49,93 @@ service cloud.firestore {
     }
 
     function isServer() {
+      // Cloud Functions / Admin SDK
       return request.auth == null;
     }
 
-    // ---------------------------
+    // ===========================
     // USERS COLLECTION
-    // ---------------------------
+    // ===========================
     match /users/{userId} {
       allow list: if isSignedIn() || isServer();
-      allow read: if request.auth.uid == userId || isEditorialMember() || isAdmin();
-      allow create: if isSignedIn() && request.auth.uid == userId;
-      allow update: if (
-        (isSignedIn() && request.auth.uid == userId &&
-         request.resource.data.diff(resource.data).changedKeys()
-           .hasOnly(['displayName', 'photoURL', 'specialization', 'fcmTokens']))
-        || isAdmin() || isManagingEditor()
+
+      allow get: if isSignedIn() && (
+        request.auth.uid == userId ||
+        isEditorialMember() ||
+        isAdmin()
       );
+
+      allow create: if isSignedIn() &&
+        request.auth.uid == userId;
+
+      allow update: if (
+        isSignedIn() &&
+        request.auth.uid == userId &&
+        request.resource.data.diff(resource.data)
+          .changedKeys()
+          .hasOnly(['displayName', 'photoURL', 'specialization', 'fcmTokens'])
+      ) || isAdmin() || isManagingEditor();
+
+      allow delete: if false;
     }
 
-    // ---------------------------
+    // ===========================
     // SUBMISSIONS COLLECTION
-    // ---------------------------
+    // ===========================
     match /submissions/{submissionId} {
 
-      allow list: if isEditorialMember() || isAdmin() || isAuthor() || isReviewer();
+      allow list: if isSignedIn();
 
       allow get: if isSignedIn() && (
         resource.data.author.id == request.auth.uid ||
         (resource.data.reviewerIds != null &&
          request.auth.uid in resource.data.reviewerIds) ||
-        isEditorialMember() || isAdmin()
+        isEditorialMember() ||
+        isAdmin()
       );
 
       allow create: if isSignedIn() &&
         request.resource.data.author.id == request.auth.uid;
 
-      allow update: if isEditorialMember() || isAdmin() || (
-        isAuthor() && request.auth.uid == resource.data.author.id && (
-            // Allow revision uploads
-            (resource.data.status in ['Minor Revision', 'Major Revision', 'Awaiting Revision: Similarity Issues'] &&
-             request.resource.data.diff(resource.data).changedKeys().hasOnly(['manuscriptUrl', 'status', 'revision', 'originalManuscriptUrl', 'pageCount'])) ||
-            // Allow title/abstract edits before final decision
-            (resource.data.status != 'Accepted' && resource.data.status != 'Rejected' &&
-             request.resource.data.diff(resource.data).changedKeys().hasOnly(['title', 'abstract']))
-        )
-      );
+      allow update: if
+        isEditorialMember() ||
+        isAdmin() ||
+        (
+          isAuthor() &&
+          request.auth.uid == resource.data.author.id &&
+          (
+            (
+              resource.data.status in [
+                'Minor Revision',
+                'Major Revision',
+                'Awaiting Revision: Similarity Issues'
+              ] &&
+              request.resource.data.diff(resource.data)
+                .changedKeys()
+                .hasOnly([
+                  'manuscriptUrl',
+                  'status',
+                  'revision',
+                  'originalManuscriptUrl',
+                  'pageCount'
+                ])
+            ) ||
+            (
+              resource.data.status != 'Accepted' &&
+              resource.data.status != 'Rejected' &&
+              request.resource.data.diff(resource.data)
+                .changedKeys()
+                .hasOnly(['title', 'abstract'])
+            )
+          )
+        );
 
-      allow delete: if (isAuthor() && resource.data.author.id == request.auth.uid && resource.data.status == 'Submitted') || isEditorialMember() || isAdmin();
+      allow delete: if
+        (isAuthor() &&
+         resource.data.author.id == request.auth.uid &&
+         resource.data.status == 'Submitted')
+        || isEditorialMember()
+        || isAdmin();
 
       // ---------------------------
       // REVIEWS SUBCOLLECTION
@@ -104,8 +144,9 @@ service cloud.firestore {
 
         allow list: if isEditorialMember() || isAdmin();
 
-        allow read: if
-          isEditorialMember() || isAdmin() ||
+        allow get: if
+          isEditorialMember() ||
+          isAdmin() ||
           (
             isReviewer() &&
             get(/databases/$(database)/documents/submissions/$(submissionId))
@@ -121,20 +162,18 @@ service cloud.firestore {
                 .data.author.id
           );
 
-        allow create: if
-          isSignedIn() &&
+        allow create: if isSignedIn() && (
           (
-            (
-              isReviewer() &&
+            isReviewer() &&
+            get(/databases/$(database)/documents/submissions/$(submissionId))
+              .data.reviewerIds != null &&
+            request.auth.uid in
               get(/databases/$(database)/documents/submissions/$(submissionId))
-                .data.reviewerIds != null &&
-              request.auth.uid in
-                get(/databases/$(database)/documents/submissions/$(submissionId))
-                  .data.reviewerIds
-            )
-            || isEditorialMember()
-            || isAdmin()
-          );
+                .data.reviewerIds
+          ) ||
+          isEditorialMember() ||
+          isAdmin()
+        );
 
         allow update, delete: if false;
       }
@@ -144,7 +183,9 @@ service cloud.firestore {
       // ---------------------------
       match /history/{historyId} {
 
-        allow list: if isEditorialMember() || isAdmin() ||
+        allow list: if
+          isEditorialMember() ||
+          isAdmin() ||
           (
             isAuthor() &&
             request.auth.uid ==
@@ -152,7 +193,9 @@ service cloud.firestore {
                 .data.author.id
           );
 
-        allow read: if isEditorialMember() || isAdmin() ||
+        allow get: if
+          isEditorialMember() ||
+          isAdmin() ||
           (
             isAuthor() &&
             request.auth.uid ==
@@ -171,47 +214,58 @@ service cloud.firestore {
       }
     }
 
-    // ---------------------------
+    // ===========================
     // NOTIFICATIONS COLLECTION
-    // ---------------------------
+    // ===========================
     match /notifications/{notificationId} {
-      allow list: if isSignedIn() && request.query.where.userId == request.auth.uid;
+
+      // Users can query, Firestore filters per document
+      allow list: if isSignedIn();
+
+      // Only owner can read a notification
       allow get: if isSignedIn() &&
         resource.data.userId == request.auth.uid;
+
+      // Only backend or editorial/admin can create
       allow create: if isServer() || isEditorialMember() || isAdmin();
+
+      // User can only mark as read
       allow update: if isSignedIn() &&
         resource.data.userId == request.auth.uid &&
         request.resource.data.diff(resource.data)
-          .affectedKeys().hasOnly(['read']);
+          .affectedKeys()
+          .hasOnly(['read']);
+
+      allow delete: if false;
     }
 
-    // ---------------------------
-    // VOLUMES COLLECTION
-    // ---------------------------
+    // ===========================
+    // VOLUMES
+    // ===========================
     match /volumes/{volumeId} {
       allow read: if true;
       allow write: if isManagingEditor() || isAdmin();
     }
 
-    // ---------------------------
-    // EDITORIAL BOARD COLLECTION
-    // ---------------------------
+    // ===========================
+    // EDITORIAL BOARD
+    // ===========================
     match /editorialBoard/{memberId} {
       allow read: if true;
       allow write: if isManagingEditor() || isAdmin();
     }
 
-    // ---------------------------
-    // INDEXING SERVICES COLLECTION
-    // ---------------------------
+    // ===========================
+    // INDEXING SERVICES
+    // ===========================
     match /indexingServices/{serviceId} {
       allow read: if true;
       allow write: if isManagingEditor() || isAdmin();
     }
 
-    // ---------------------------
-    // SETTINGS COLLECTION
-    // ---------------------------
+    // ===========================
+    // SETTINGS
+    // ===========================
     match /settings/submissionCounter {
       allow read: if true;
       allow write: if isServer();
