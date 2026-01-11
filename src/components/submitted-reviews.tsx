@@ -11,6 +11,8 @@ import { Shield, MessageSquare, User } from 'lucide-react';
 import { Badge } from './ui/badge';
 import { format } from 'date-fns';
 import { useAuth } from '@/contexts/auth-context';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 interface Review {
     id: string;
@@ -64,8 +66,12 @@ export const SubmittedReviews = ({ submissionId, showForAuthor = false }: { subm
             });
             setReviews(fetchedReviews);
             setLoading(false);
-        }, (error) => {
-            console.error("Error fetching reviews:", error);
+        }, (serverError) => {
+            const permissionError = new FirestorePermissionError({
+                path: `submissions/${submissionId}/reviews`,
+                operation: 'list',
+            });
+            errorEmitter.emit('permission-error', permissionError);
             setLoading(false);
         });
 
