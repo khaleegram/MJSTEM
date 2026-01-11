@@ -56,7 +56,7 @@ service cloud.firestore {
     // USERS COLLECTION
     // ---------------------------
     match /users/{userId} {
-      allow list: if isSignedIn();
+      allow list: if isSignedIn() || isServer();
       allow read: if request.auth.uid == userId || isEditorialMember() || isAdmin();
       allow create: if isSignedIn() && request.auth.uid == userId;
       allow update: if (
@@ -175,7 +175,7 @@ service cloud.firestore {
     // NOTIFICATIONS COLLECTION
     // ---------------------------
     match /notifications/{notificationId} {
-      allow list: if isSignedIn();
+      allow list: if isSignedIn() && request.query.where.userId == request.auth.uid;
       allow get: if isSignedIn() &&
         resource.data.userId == request.auth.uid;
       allow create: if isServer() || isEditorialMember() || isAdmin();
