@@ -1,11 +1,15 @@
 {
   "name": "MJSTEM",
   "short_name": "MJSTEM",
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#111827",
   "description": "Multidisciplinary Journal of Science, Technology, Education and Management",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "lang": "en-US",
+  "background_color": "#F5F5DC",
+  "theme_color": "#90EE90",
+  "categories": ["education", "books_and_reference"],
   "icons": [
     {
       "src": "/icons/icon-72x72.png",
