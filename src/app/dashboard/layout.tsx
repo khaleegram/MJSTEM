@@ -1,4 +1,3 @@
-
 'use client';
 
 import { DashboardSidebar } from '@/components/dashboard-sidebar';
@@ -7,6 +6,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { NotificationPermissionManager } from '@/components/notification-permission-manager';
 
 // Define which roles can access which paths
 const rolePermissions: { [key: string]: string[] } = {
@@ -134,14 +134,17 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="grid min-h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr]">
-      <DashboardSidebar />
-      <div className="flex flex-col">
-        <Header />
-        <main className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6">
-          {children}
-        </main>
+    <>
+      <NotificationPermissionManager />
+      <div className="grid min-h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr]">
+        <DashboardSidebar />
+        <div className="flex flex-col">
+          <Header />
+          <main className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6">
+            {children}
+          </main>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
