@@ -9,6 +9,8 @@ import { ThemeProvider } from '@/components/theme-provider';
 import { FirebaseErrorListener } from '@/components/firebase-error-listener';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { Icons } from '@/components/icons';
+
 
 export const metadata: Metadata = {
   title: 'MJSTEM - Multidisciplinary Journal of Science, Technology, Education and Management',
@@ -32,6 +34,10 @@ export const metadata: Metadata = {
     card: 'summary',
     title: 'MJSTEM - Multidisciplinary Journal',
     description: 'A premier, peer-reviewed, open-access journal.',
+  },
+  icons: {
+    icon: '/favicon.ico',
+    apple: '/icons/apple/apple-touch-icon.png',
   }
 };
 
@@ -67,10 +73,7 @@ export default async function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,700;1,7..72,400&family=PT+Sans:wght@400;700&display=swap" rel="stylesheet" />
-        {logoUrl && (
-          <link rel="icon" href={logoUrl} type="image/png" sizes="any" />
-        )}
-        <link rel="apple-touch-icon" href="/icons/apple/apple-touch-icon.png" />
+        
       </head>
       <body className={cn("font-body antialiased", fontSans.variable)}>
         <ThemeProvider
