@@ -24,7 +24,7 @@ async function getTokensForUsers(userIds: string[]): Promise<string[]> {
     try {
         const usersRef = collection(db, 'users');
         // Firestore 'in' query is limited to 30 items. If we need more, this needs batching.
-        const q = query(usersRef, where('__name__', 'in', userIds));
+        const q = query(usersRef, where('__name__', 'in', userIds.slice(0, 30)));
         const querySnapshot = await getDocs(q);
 
         const allTokens = querySnapshot.docs.flatMap(doc => {
@@ -34,7 +34,7 @@ async function getTokensForUsers(userIds: string[]): Promise<string[]> {
         
         return [...new Set(allTokens)]; // Return unique tokens
     } catch (error) {
-        console.error("Error fetching user tokens for push notification:", error);
+        console.error("[Push Notification] Error fetching user tokens:", error);
         return [];
     }
 }
@@ -45,7 +45,7 @@ export async function sendPushNotification(input: PushNotificationInput): Promis
     const tokens = await getTokensForUsers(userIds);
 
     if (tokens.length === 0) {
-        console.log("No push notification tokens found for the target users.");
+        console.log("[Push Notification] No push notification tokens found for the target users.");
         return;
     }
 
@@ -60,7 +60,7 @@ export async function sendPushNotification(input: PushNotificationInput): Promis
                 // icon: '/icons/icon-192x192.png' 
             },
             fcm_options: {
-                link: link,
+                link: `${process.env.NEXT_PUBLIC_BASE_URL}${link}`,
             },
         },
         tokens: tokens,
@@ -69,17 +69,17 @@ export async function sendPushNotification(input: PushNotificationInput): Promis
     try {
         // Use the initialized Firebase Admin SDK to send the message
         const response = await admin.messaging().sendEachForMulticast(messagePayload);
-        console.log(`Successfully sent ${response.successCount} push notifications.`);
+        console.log(`[Push Notification] Successfully sent ${response.successCount} push notifications.`);
         if (response.failureCount > 0) {
-            console.warn(`Failed to send ${response.failureCount} push notifications.`);
+            console.warn(`[Push Notification] Failed to send ${response.failureCount} push notifications.`);
             response.responses.forEach((resp, idx) => {
                 if (!resp.success) {
-                    console.error(`Error for token ${tokens[idx]}:`, resp.error);
+                    console.error(`[Push Notification] Error for token ${tokens[idx]}:`, resp.error);
                 }
             });
         }
     } catch (error) {
-        console.error("Error sending push notifications via Admin SDK:", error);
+        console.error("[Push Notification] Error sending push notifications via Admin SDK:", error);
         // We don't throw here to avoid breaking the calling flow
     }
 }
