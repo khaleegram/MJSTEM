@@ -110,7 +110,8 @@ export default function AllSubmissionsPage() {
         if (!searchTerm) return submissions;
         return submissions.filter(submission => 
             submission.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            submission.author.name.toLowerCase().includes(searchTerm.toLowerCase())
+            submission.author.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (submission.uniqueId && submission.uniqueId.toLowerCase().includes(searchTerm.toLowerCase()))
         );
     }, [submissions, searchTerm]);
     
@@ -186,7 +187,7 @@ export default function AllSubmissionsPage() {
                  <div className="relative w-full sm:max-w-sm">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                     <Input 
-                        placeholder="Search by title or author..." 
+                        placeholder="Search by title, author, or ID..." 
                         className="pl-10"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
