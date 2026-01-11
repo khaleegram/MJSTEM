@@ -1,7 +1,7 @@
 
 'use server';
 /**
- * @fileOverview A flow for sending a submission confirmation email using AWS SES via SMTP.
+ * @fileOverview A flow for sending a submission confirmation email using Gmail SMTP.
  */
 
 import { z } from 'zod';
@@ -18,25 +18,26 @@ export type SendConfirmationEmailInput = z.infer<typeof SendConfirmationEmailSch
 
 export async function sendConfirmationEmail(input: SendConfirmationEmailInput): Promise<void> {
     const { 
-        SES_SMTP_HOST, 
-        SES_SMTP_USER, 
-        SES_SMTP_PASS, 
-        SES_FROM_EMAIL 
+        SMTP_HOST,
+        SMTP_PORT,
+        SMTP_USER,
+        SMTP_PASS,
+        MAIL_FROM
     } = process.env;
 
-    if (!SES_SMTP_HOST || !SES_SMTP_USER || !SES_SMTP_PASS || !SES_FROM_EMAIL) {
-        console.error('Failed to send confirmation email: SMTP environment variables are not fully configured.');
+    if (!SMTP_HOST || !SMTP_PORT || !SMTP_USER || !SMTP_PASS || !MAIL_FROM) {
+        console.error('Failed to send confirmation email: SMTP environment variables for Gmail are not fully configured.');
         // Do not throw an error to the client, as the submission itself was successful.
         return;
     }
 
     const transporter = nodemailer.createTransport({
-        host: SES_SMTP_HOST,
-        port: 587,
-        secure: false, // true for 465, false for other ports
+        host: SMTP_HOST,
+        port: parseInt(SMTP_PORT, 10),
+        secure: parseInt(SMTP_PORT, 10) === 465, // true for 465, false for other ports
         auth: {
-            user: SES_SMTP_USER,
-            pass: SES_SMTP_PASS,
+            user: SMTP_USER,
+            pass: SMTP_PASS,
         },
     });
 
@@ -53,7 +54,7 @@ Sincerely,
 The MJSTEM Editorial Team`;
 
     const mailOptions = {
-        from: `"MJSTEM Editorial Team" <${SES_FROM_EMAIL}>`,
+        from: MAIL_FROM,
         to: input.authorEmail,
         subject: subject,
         html: body,
@@ -61,9 +62,9 @@ The MJSTEM Editorial Team`;
 
     try {
         await transporter.sendMail(mailOptions);
-        console.log('Confirmation email sent successfully to', input.authorEmail, 'via AWS SES SMTP.');
+        console.log('Confirmation email sent successfully to', input.authorEmail, 'via Gmail SMTP.');
     } catch (error) {
-        console.error('Failed to send confirmation email via AWS SES SMTP:', error);
+        console.error('Failed to send confirmation email via Gmail SMTP:', error);
         // In a production system, you might add this to a retry queue.
         // We still don't want to throw an error to the client.
     }
