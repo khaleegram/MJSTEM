@@ -56,13 +56,13 @@ service cloud.firestore {
     // USERS COLLECTION
     // ---------------------------
     match /users/{userId} {
-      allow list: if isSignedIn();
+      allow list: if isSignedIn() || isServer();
       allow read: if request.auth.uid == userId || isEditorialMember() || isAdmin();
       allow create: if isSignedIn() && request.auth.uid == userId;
       allow update: if (
         (isSignedIn() && request.auth.uid == userId &&
          request.resource.data.diff(resource.data).changedKeys()
-           .hasOnly(['displayName', 'photoURL', 'specialization']))
+           .hasOnly(['displayName', 'photoURL', 'specialization', 'fcmTokens']))
         || isAdmin() || isManagingEditor()
       );
     }
@@ -85,23 +85,17 @@ service cloud.firestore {
         request.resource.data.author.id == request.auth.uid;
 
       allow update: if isEditorialMember() || isAdmin() || (
-        isAuthor() &&
-        request.auth.uid == resource.data.author.id &&
-        resource.data.status in [
-          'Minor Revision',
-          'Major Revision',
-          'Awaiting Revision: Similarity Issues'
-        ] &&
-        request.resource.data.diff(resource.data).changedKeys()
-          .hasOnly([
-            'manuscriptUrl',
-            'status',
-            'revision',
-            'originalManuscriptUrl'
-          ])
+        isAuthor() && request.auth.uid == resource.data.author.id && (
+            // Allow revision uploads
+            (resource.data.status in ['Minor Revision', 'Major Revision', 'Awaiting Revision: Similarity Issues'] &&
+             request.resource.data.diff(resource.data).changedKeys().hasOnly(['manuscriptUrl', 'status', 'revision', 'originalManuscriptUrl', 'pageCount'])) ||
+            // Allow title/abstract edits before final decision
+            (resource.data.status != 'Accepted' && resource.data.status != 'Rejected' &&
+             request.resource.data.diff(resource.data).changedKeys().hasOnly(['title', 'abstract']))
+        )
       );
 
-      allow delete: if isEditorialMember() || isAdmin();
+      allow delete: if (isAuthor() && resource.data.author.id == request.auth.uid && resource.data.status == 'Submitted') || isEditorialMember() || isAdmin();
 
       // ---------------------------
       // REVIEWS SUBCOLLECTION
