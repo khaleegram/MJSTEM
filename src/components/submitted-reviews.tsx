@@ -7,12 +7,14 @@ import { db } from '@/lib/firebase';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Shield, MessageSquare, User } from 'lucide-react';
+import { Shield, MessageSquare, User, Paperclip, Download } from 'lucide-react';
 import { Badge } from './ui/badge';
 import { format } from 'date-fns';
 import { useAuth } from '@/contexts/auth-context';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
+import { Button } from './ui/button';
+import Link from 'next/link';
 
 interface Review {
     id: string;
@@ -22,6 +24,7 @@ interface Review {
     commentsForEditor: string;
     commentsForAuthor: string;
     submittedAt: Date;
+    attachmentUrl?: string;
 }
 
 const getRecommendationVariant = (recommendation: string) => {
@@ -172,6 +175,20 @@ export const SubmittedReviews = ({ submissionId, showForAuthor = false }: { subm
                                         <p className="text-sm text-muted-foreground border p-3 rounded-md">{review.commentsForAuthor}</p>
                                     </div>
                                )}
+                               {!showForAuthor && review.attachmentUrl && (
+                                    <div>
+                                        <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
+                                            <Paperclip className="w-4 h-4" />
+                                            Reviewer's Attachment
+                                        </h4>
+                                        <Button asChild size="sm" variant="outline">
+                                            <Link href={review.attachmentUrl} target="_blank" rel="noopener noreferrer">
+                                                <Download className="w-4 h-4 mr-2" />
+                                                Download Attached File
+                                            </Link>
+                                        </Button>
+                                    </div>
+                                )}
                                 {!review.commentsForEditor && !review.commentsForAuthor && (
                                     <p className="text-sm text-muted-foreground text-center py-4">The reviewer did not provide any written comments.</p>
                                 )}

@@ -111,6 +111,7 @@ const ReviewSubmissionForm = ({ submission, onReviewSubmit }: { submission: Subm
     const [recommendation, setRecommendation] = React.useState('');
     const [commentsForEditor, setCommentsForEditor] = React.useState('');
     const [commentsForAuthor, setCommentsForAuthor] = React.useState('');
+    const [attachmentUrl, setAttachmentUrl] = React.useState('');
 
     const myReviewAssignment = submission.reviewers?.find(r => r.id === user?.uid);
 
@@ -133,6 +134,7 @@ const ReviewSubmissionForm = ({ submission, onReviewSubmit }: { submission: Subm
             commentsForEditor,
             commentsForAuthor,
             submittedAt: serverTimestamp(),
+            attachmentUrl,
         };
 
         const submissionRef = doc(db, 'submissions', submission.id);
@@ -232,6 +234,18 @@ const ReviewSubmissionForm = ({ submission, onReviewSubmit }: { submission: Subm
                             onChange={(e) => setCommentsForAuthor(e.target.value)}
                             placeholder="These comments will be shared with the author anonymously." 
                         />
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium flex items-center gap-2">
+                            <Paperclip className="w-4 h-4" />
+                            Upload Annotated Manuscript (Optional)
+                        </label>
+                        <FileUploader 
+                            endpoint="documentUploader"
+                            onUploadComplete={(url) => setAttachmentUrl(url || '')}
+                            onUploadError={(err) => toast({ title: "Upload Error", description: err.message, variant: "destructive"})}
+                        />
+                        <p className="text-xs text-muted-foreground">You can optionally upload a version of the manuscript with your comments.</p>
                     </div>
                 </CardContent>
                 <CardFooter>
@@ -1026,5 +1040,3 @@ export default function SubmissionDetailPage() {
     </div>
   );
 }
-
-    
