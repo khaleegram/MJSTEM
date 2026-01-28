@@ -1,5 +1,5 @@
 
-import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, limit, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Volume, Issue, Article } from '@/types';
 
@@ -47,5 +47,38 @@ export async function getLatestIssue(): Promise<IssueWithVolume | null> {
     } catch (error) {
         console.error("Error fetching latest issue:", error);
         return null;
+    }
+}
+
+export async function getFeaturedArticles(): Promise<Article[]> {
+    try {
+        const articlesQuery = query(
+            collection(db, 'submissions'),
+            where('status', '==', 'Accepted'),
+            orderBy('submittedAt', 'desc'),
+            limit(3)
+        );
+
+        const articlesSnapshot = await getDocs(articlesQuery);
+
+        if (articlesSnapshot.empty) {
+            return [];
+        }
+
+        return articlesSnapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                title: data.title,
+                contributors: data.contributors,
+                manuscriptUrl: data.manuscriptUrl,
+                authorName: data.author.name,
+                uniqueId: data.uniqueId
+            } as Article;
+        });
+
+    } catch (error) {
+        console.error("Error fetching featured articles:", error);
+        return [];
     }
 }

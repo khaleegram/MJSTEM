@@ -4,16 +4,18 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowRight, Feather, Microscope, BookOpen, BookText, Download, FileText as FileTextIcon, Info } from 'lucide-react';
+import { ArrowRight, Feather, Microscope, BookOpen, BookText, Download, FileText as FileTextIcon, Info, Search } from 'lucide-react';
 import { PublicHeader } from '@/components/public-header';
 import { Icons } from '@/components/icons';
 import Image from 'next/image';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import type { IndexingService } from '@/types';
+import type { Article, IndexingService } from '@/types';
 import type { IssueWithVolume } from '@/services/publication-service';
+import { Input } from './ui/input';
 
 interface HomePageClientProps {
     latestIssue: IssueWithVolume | null;
+    featuredArticles: Article[];
     journalInfo: { coverLetterUrl?: string, submissionTemplateUrl?: string };
     branding: { logoUrl?: string };
     indexingServices: IndexingService[];
@@ -33,7 +35,7 @@ const HowItWorksCard = ({ icon, title, children }: { icon: React.ReactNode, titl
   </Card>
 );
 
-export function HomePageClient({ latestIssue, journalInfo, branding, indexingServices }: HomePageClientProps) {
+export function HomePageClient({ latestIssue, featuredArticles, journalInfo, branding, indexingServices }: HomePageClientProps) {
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -61,15 +63,9 @@ export function HomePageClient({ latestIssue, journalInfo, branding, indexingSer
                  <h1 className="text-4xl md:text-5xl font-extrabold font-headline tracking-tight drop-shadow-md">
                     Multidisciplinary Journal of Science, Technology, Education and Management (MJSTEM)
                 </h1>
-                {latestIssue ? (
-                  <p className="mt-6 max-w-2xl mx-auto md:mx-0 text-lg md:text-xl text-muted-foreground drop-shadow-sm font-body">
-                    Read our latest publication: <span className="font-semibold text-foreground">{latestIssue.title}</span> from <span className="font-semibold text-foreground">{latestIssue.volumeTitle}</span>.
-                  </p>
-                ) : (
-                  <p className="mt-6 max-w-2xl mx-auto md:mx-0 text-lg md:text-xl text-muted-foreground drop-shadow-sm font-body">
+                 <p className="mt-6 max-w-2xl mx-auto md:mx-0 text-lg md:text-xl text-muted-foreground drop-shadow-sm font-body">
                     A premier, peer-reviewed, open-access journal for science, technology, education, and management.
                   </p>
-                )}
                 <div className="mt-8 flex flex-col sm:flex-row justify-center md:justify-start gap-4">
                     <Button size="lg" asChild>
                         <Link href="/dashboard/submissions/new">Submit Your Manuscript</Link>
@@ -94,6 +90,13 @@ export function HomePageClient({ latestIssue, journalInfo, branding, indexingSer
                       </Tooltip>
                     </TooltipProvider>
                 </div>
+                 <form action="/search" method="GET" className="mt-8 max-w-xl mx-auto md:mx-0 relative">
+                    <Input name="q" placeholder="Search articles by title, author, keyword..." className="h-12 pl-4 pr-12 text-base" />
+                    <Button type="submit" size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8">
+                      <Search className="h-4 w-4" />
+                      <span className="sr-only">Search</span>
+                    </Button>
+                </form>
               </div>
             </div>
           </div>
@@ -170,20 +173,20 @@ export function HomePageClient({ latestIssue, journalInfo, branding, indexingSer
           </div>
         </section>
 
-        {latestIssue && (
+        {featuredArticles && featuredArticles.length > 0 && (
           <section className="py-16 sm:py-24 bg-primary/10">
             <div className="container mx-auto px-4 sm:px-6 lg:px-8">
               <div className="text-center mb-12">
                 <h2 className="text-3xl md:text-4xl font-bold font-headline text-foreground">
-                  From Our Latest Issue
+                  Featured Articles
                 </h2>
-                <p className="text-muted-foreground mt-2">
-                  {latestIssue.volumeTitle} - {latestIssue.title}
+                 <p className="text-muted-foreground mt-2">
+                  Explore some of our most recently published work.
                 </p>
               </div>
               <div className="max-w-4xl mx-auto">
                 <ul className="space-y-4">
-                  {latestIssue.articles?.map((article) => (
+                  {featuredArticles.map((article) => (
                      <li key={article.id} className="p-4 rounded-lg border bg-card hover:border-primary/50 hover:shadow-lg transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                         <div className="flex-1">
                             <h3 className="font-headline font-semibold text-lg text-foreground">{article.title}</h3>
@@ -192,15 +195,9 @@ export function HomePageClient({ latestIssue, journalInfo, branding, indexingSer
                             </p>
                         </div>
                         <div className="flex items-center gap-4 self-end sm:self-center">
-                            {article.pageCount && (
-                                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                                    <FileTextIcon className="w-4 h-4" />
-                                    <span>{article.pageCount} pages</span>
-                                </div>
-                            )}
                             <Button asChild variant="outline" size="sm" className="shrink-0">
-                                <Link href={article.manuscriptUrl || '#'} target="_blank" rel="noopener noreferrer">
-                                    <BookText className="w-4 h-4 mr-2" /> Read
+                                <Link href={`/article/${article.id}`}>
+                                    <BookText className="w-4 h-4 mr-2" /> Read Article
                                 </Link>
                             </Button>
                         </div>
@@ -281,5 +278,3 @@ export function HomePageClient({ latestIssue, journalInfo, branding, indexingSer
     </div>
   );
 }
-
-    

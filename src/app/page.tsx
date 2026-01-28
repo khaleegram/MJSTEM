@@ -1,5 +1,6 @@
+
 import { PublicHeader } from '@/components/public-header';
-import { getLatestIssue } from '@/services/publication-service';
+import { getLatestIssue, getFeaturedArticles } from '@/services/publication-service';
 import { doc, getDoc, collection, getDocs, orderBy, query } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { IndexingService } from '@/types';
@@ -9,6 +10,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function HomePage() {
   const latestIssue = await getLatestIssue();
+  const featuredArticles = await getFeaturedArticles();
   let journalInfo: { coverLetterUrl?: string, submissionTemplateUrl?: string } = {};
   let branding: { logoUrl?: string } = {};
   let indexingServices: IndexingService[] = [];
@@ -34,6 +36,7 @@ export default async function HomePage() {
   return (
     <HomePageClient
       latestIssue={latestIssue}
+      featuredArticles={featuredArticles}
       journalInfo={journalInfo}
       branding={branding}
       indexingServices={indexingServices}
