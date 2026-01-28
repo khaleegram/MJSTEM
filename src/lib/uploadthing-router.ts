@@ -1,3 +1,4 @@
+
 import 'dotenv/config';
 import { createUploadthing, type FileRouter } from "uploadthing/next";
 import admin from '@/lib/firebase-admin'; // Import the initialized admin app
@@ -34,14 +35,12 @@ const handleAuth = async ({ req }: { req: Request }) => {
 // Define the file router
 export const ourFileRouter = {
   documentUploader: f({
-    pdf: { maxFileSize: "16MB", maxFileCount: 1 },
     "application/msword": { maxFileSize: "16MB", maxFileCount: 1 },
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": { maxFileSize: "16MB", maxFileCount: 1 },
   })
     .middleware(handleAuth)
     .onUploadComplete(async ({ metadata, file }) => {
       console.log("Upload complete for userId:", metadata.userId);
-      console.log("file url", file.url);
       return { uploadedBy: metadata.userId, url: file.url };
     }),
 

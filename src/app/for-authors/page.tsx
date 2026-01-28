@@ -22,7 +22,7 @@ export default function ForAuthorsPage() {
             </CardHeader>
             <CardContent>
               <p className="text-muted-foreground leading-relaxed">
-                Interested in submitting to this journal? We recommend that you review the <Link href="/aims-scope" className="text-primary hover:underline">Aims & Scope</Link> page for the journal's section policies, as well as the <Link href="/author-guidelines" className="text-primary hover:underline">Author Guidelines</Link>.
+                Interested in submitting to this journal? We recommend that you review the <Link href="/about-journal" className="text-primary hover:underline">About the Journal</Link> page for the journal's section policies, as well as the <Link href="/author-guidelines" className="text-primary hover:underline">Author Guidelines</Link>.
               </p>
               <p className="text-muted-foreground leading-relaxed mt-4">
                 Authors need to <Link href="/signup" className="text-primary hover:underline">register</Link> with the journal prior to submitting or, if already registered, can simply <Link href="/login" className="text-primary hover:underline">log in</Link> and begin the five-step process.
@@ -33,7 +33,7 @@ export default function ForAuthorsPage() {
       </main>
       <footer className="bg-background border-t">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 text-center text-sm text-muted-foreground">
-          <p className="mb-2">ISSN (Print): 3121-6552 | Barcode: 9773121655008</p>
+          <p className="mb-2">ISSN (Print): 3121-6552 | EISSN: 3121-9292</p>
           © {new Date().getFullYear()} MJSTEM. All Rights Reserved.
         </div>
       </footer>

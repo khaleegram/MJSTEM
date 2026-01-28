@@ -10,13 +10,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Static pages
   const staticRoutes = [
     '/',
-    '/aims-scope',
+    '/about-journal',
     '/author-guidelines',
     '/archive',
     '/editorial-board',
     '/for-authors',
     '/for-librarians',
     '/for-readers',
+    '/ethics-policies',
   ].map((route) => ({
     url: `${baseUrl}${route}`,
     lastModified: new Date(),

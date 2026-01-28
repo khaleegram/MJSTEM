@@ -59,7 +59,7 @@ export default async function AuthorGuidelinesPage() {
                                 The submission <strong>has not been previously published</strong>, nor is it under consideration by another journal (unless an explanation is provided in the Comments to the Editor).
                                </ChecklistItem>
                                <ChecklistItem>
-                                Manuscripts <strong>must be submitted in Microsoft Word format</strong>.
+                                Manuscripts <strong>must be submitted in Microsoft Word format (.doc, .docx)</strong>.
                                </ChecklistItem>
                                <ChecklistItem>
                                The text is <strong>single line-spaced</strong>, uses a <strong>12-point font</strong>, <strong>Times New Roman</strong> font style, and <strong>1-inch margins</strong> on all sides.
@@ -107,7 +107,7 @@ export default async function AuthorGuidelinesPage() {
                                 Manuscript originality <strong>should not exceed 15%</strong>
                                 </ChecklistItem>
                                  <ChecklistItem>
-                                <strong>No AI generated content is accepted</strong>
+                                <strong>No AI generated content is accepted</strong> for generating novel content, but may be used as a supportive tool.
                                 </ChecklistItem>
                                 <ChecklistItem>
                                 The manuscript should be divided into <strong>clearly labelled sections and subsections</strong>.
@@ -127,16 +127,20 @@ export default async function AuthorGuidelinesPage() {
 
                      <Card>
                         <CardHeader>
-                            <CardTitle className="font-headline">Author Guidelines</CardTitle>
+                            <CardTitle className="font-headline">Journal Policies</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-6">
-                            <div>
-                                <h3 className="font-bold text-lg font-headline">Referencing Style</h3>
-                                <p className="text-muted-foreground">References and in-text citations follow APA 7th Edition.</p>
-                            </div>
                              <div>
-                                <h3 className="font-bold text-lg font-headline">Originality of Submissions</h3>
-                                <p className="text-muted-foreground">We take the issue of plagiarism very seriously. Manuscript originality should not exceed 15%. All submissions will be subjected to originality checks and if the similarity level is more than the allowed percentage it will be returned to the author(s) to correct before proceeding to the next round of review. No AI generated content is accepted.</p>
+                                <h3 className="font-bold text-lg font-headline">Article Processing Charges (APCs)</h3>
+                                <p className="text-muted-foreground">MJSTEM does not charge any fees for submission, processing, or publication of articles.</p>
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-lg font-headline">Originality and Plagiarism</h3>
+                                <p className="text-muted-foreground">We take the issue of plagiarism very seriously. Manuscript originality should not exceed 15%. All submissions will be subjected to originality checks and if the similarity level is more than the allowed percentage it will be returned to the author(s) to correct before proceeding to the next round of review.</p>
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-lg font-headline">Use of Artificial Intelligence (AI)</h3>
+                                <p className="text-muted-foreground">AI tools may only be used as a supportive aid for improving language and readability. AI cannot be listed as an author. Authors remain responsible for the originality, accuracy, and integrity of their work. Using AI to generate content, manipulate data, or misrepresent findings is prohibited.</p>
                             </div>
                             <div>
                                 <h3 className="font-bold text-lg font-headline">Structured Abstract</h3>
@@ -225,7 +229,7 @@ export default async function AuthorGuidelinesPage() {
         </main>
         <footer className="bg-background border-t">
              <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 text-center text-sm text-muted-foreground">
-                <p className="mb-2">ISSN (Print): 3121-6552 | Barcode: 9773121655008</p>
+                <p className="mb-2">ISSN (Print): 3121-6552 | EISSN: 3121-9292</p>
                 © {new Date().getFullYear()} MJSTEM. All Rights Reserved.
             </div>
         </footer>

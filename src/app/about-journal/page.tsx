@@ -1,8 +1,7 @@
 
 import { PublicHeader } from '@/components/public-header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Check } from 'lucide-react';
-import { AuthorGuidelinesPage } from '../author-guidelines/page';
+import { Check, Info } from 'lucide-react';
 
 const ListItem = ({ children }: { children: React.ReactNode }) => (
   <li className="flex items-start gap-3">
@@ -11,13 +10,13 @@ const ListItem = ({ children }: { children: React.ReactNode }) => (
   </li>
 );
 
-export default function AimsScopePage() {
+export default function AboutJournalPage() {
   return (
     <div className="flex flex-col min-h-screen bg-background">
       <PublicHeader />
       <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="mb-12 text-center">
-          <h1 className="text-4xl font-bold font-headline text-foreground">Aims & Scope</h1>
+          <h1 className="text-4xl font-bold font-headline text-foreground">About the Journal</h1>
           <p className="text-muted-foreground mt-2 max-w-3xl mx-auto">
             Our mission is to foster interdisciplinary research and provide a platform for scholarly exchange across diverse fields.
           </p>
@@ -32,6 +31,13 @@ export default function AimsScopePage() {
               <p className="text-muted-foreground leading-relaxed">
                 The Multidisciplinary Journal of Science, Technology, Education and Management (MJSTEM) is an international, peer-reviewed, open-access journal dedicated to the rapid publication of high-quality, original research articles, reviews, and short communications. Our mission is to bridge the gaps between diverse disciplines, fostering a rich environment for collaboration and innovation. We believe that the most significant scientific breakthroughs often occur at the intersection of different fields of study.
               </p>
+              <div className="mt-6 flex items-start gap-3 rounded-lg border bg-secondary/50 p-4">
+                 <Info className="w-8 h-8 text-muted-foreground mt-1" />
+                 <div className="flex-1">
+                    <h4 className="font-semibold">Open Access</h4>
+                    <p className="text-sm text-muted-foreground">This is an open access article distributed under the terms of the Creative Commons Attribution 4.0 International License (CC BY 4.0).</p>
+                 </div>
+              </div>
             </CardContent>
           </Card>
 
@@ -92,7 +98,7 @@ export default function AimsScopePage() {
       </main>
       <footer className="bg-background border-t">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 text-center text-sm text-muted-foreground">
-          <p className="mb-2">ISSN (Print): 3121-6552 | Barcode: 9773121655008</p>
+          <p className="mb-2">ISSN (Print): 3121-6552 | EISSN: 3121-9292</p>
           © {new Date().getFullYear()} MJSTEM. All Rights Reserved.
         </div>
       </footer>

@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { Download, Calendar, Users, FileText } from 'lucide-react';
+import { Download, Calendar, Users, FileText, Info } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Metadata, ResolvingMetadata } from 'next';
@@ -136,13 +136,23 @@ export default async function ArticlePage({ params }: { params: { id: string } }
                                 <Badge key={keyword} variant="secondary">{keyword}</Badge>
                             ))}
                         </div>
+                    
+                    <Separator className="my-6" />
+
+                    <div className="flex items-start gap-3 rounded-lg border bg-secondary/50 p-4">
+                        <Info className="w-8 h-8 text-muted-foreground mt-1 flex-shrink-0" />
+                        <div className="flex-1">
+                            <h4 className="font-semibold">License</h4>
+                            <p className="text-sm text-muted-foreground">This is an open access article distributed under the terms of the <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Creative Commons Attribution License 4.0 (CC BY 4.0)</a>.</p>
+                        </div>
+                    </div>
                 </CardContent>
             </Card>
         </article>
       </main>
       <footer className="bg-background border-t">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 text-center text-sm text-muted-foreground">
-          <p className="mb-2">ISSN (Print): 3121-6552 | Barcode: 9773121655008</p>
+          <p className="mb-2">ISSN (Print): 3121-6552 | EISSN: 3121-9292</p>
           © {new Date().getFullYear()} MJSTEM. All Rights Reserved.
         </div>
       </footer>

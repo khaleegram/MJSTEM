@@ -41,17 +41,18 @@ export async function sendConfirmationEmail(input: SendConfirmationEmailInput): 
         },
     });
 
-    const subject = `Submission Confirmation - ${input.uniqueId}`;
+    const subject = `Manuscript Submission Received – MJSTEM`;
     const body = `Dear ${input.authorName},
 <br><br>
-Thank you for submitting your manuscript, "${input.manuscriptTitle}", to MJSTEM.
-Your submission ID is: <strong>${input.uniqueId}</strong>. Please include this ID in any future correspondence regarding this submission.
+Thank you for submitting your manuscript titled "${input.manuscriptTitle}" to MJSTEM. Your submission ID is: <strong>${input.uniqueId}</strong>.
 <br><br>
-Your manuscript will now undergo an initial editorial check to ensure it meets our scope and formatting guidelines. You will be notified once this check is complete and the manuscript is sent for peer review.
+Your manuscript will first undergo editorial review to assess its suitability, formatting, and compliance with journal policies. If it passes all editorial checks, it will then be sent for peer review.
 <br><br>
-Sincerely,
+You will receive further updates regarding the progress of your submission.
+<br><br>
+Best regards,
 <br>
-The MJSTEM Editorial Team`;
+MJSTEM Editorial Team`;
 
     const mailOptions = {
         from: MAIL_FROM,

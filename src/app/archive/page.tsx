@@ -140,7 +140,7 @@ export default function ArchivePage() {
       </main>
        <footer className="bg-background border-t">
              <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 text-center text-sm text-muted-foreground">
-                <p className="mb-2">ISSN (Print): 3121-6552 | Barcode: 9773121655008</p>
+                <p className="mb-2">ISSN (Print): 3121-6552 | EISSN: 3121-9292</p>
                 © {new Date().getFullYear()} MJSTEM. All Rights Reserved.
             </div>
         </footer>

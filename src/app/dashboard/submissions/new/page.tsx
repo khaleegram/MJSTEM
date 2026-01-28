@@ -21,7 +21,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Trash2, PlusCircle, Download } from 'lucide-react';
+import { Trash2, PlusCircle, Download, Sigma, Bot, Scale } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/auth-context';
 import { useState, useEffect, useCallback } from 'react';
@@ -36,6 +36,7 @@ import { PDFDocument } from 'pdf-lib';
 import { sendConfirmationEmail } from '@/ai/flows/send-confirmation-email';
 import { getNextSubmissionIdAction } from './actions';
 import { Submission } from '@/types';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 const NewSubmissionSchema = z.object({
   title: z.string().min(10, 'Title must be at least 10 characters long.'),
@@ -207,9 +208,10 @@ export default function NewSubmissionPage() {
 
         toast({
             title: 'Submission Successful!',
-            description: 'Your manuscript has been received.',
+            description: 'Your manuscript will first undergo editorial review to assess its suitability, formatting, and compliance with journal policies. If it passes all editorial checks, it will then be sent for peer review.',
             variant: 'default',
             className: 'bg-green-500 text-white',
+            duration: 8000,
         });
 
         // 2. After success, trigger background tasks (email, logs, notifications)
@@ -253,17 +255,30 @@ export default function NewSubmissionPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-4xl mx-auto space-y-8">
+        <div className="space-y-4">
+            <h1 className="text-3xl font-bold font-headline">Submit New Manuscript</h1>
+            <p className="text-muted-foreground">Fill out the form below to submit your work for review.</p>
+        </div>
+
+        <Alert variant="default" className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+            <AlertTitle className="font-headline text-blue-900 dark:text-blue-200">Important Policies</AlertTitle>
+            <AlertDescription className="text-blue-800 dark:text-blue-300">
+                <ul className="list-disc pl-5 space-y-1 mt-2">
+                    <li><strong className="font-semibold">Plagiarism:</strong> Submissions must have a similarity index of ≤15%.</li>
+                    <li><strong className="font-semibold">AI Usage:</strong> AI tools may be used for language editing, but not for generating content.</li>
+                    <li><strong className="font-semibold">APCs:</strong> This journal does not charge any Article Processing Charges.</li>
+                </ul>
+            </AlertDescription>
+        </Alert>
+
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
             <Card>
                 <CardHeader>
                     <div className="flex justify-between items-start">
                         <div>
-                            <CardTitle className="font-headline text-2xl">Submit New Manuscript</CardTitle>
-                            <CardDescription>
-                                Fill out the form below to submit your work for review.
-                            </CardDescription>
+                            <CardTitle className="font-headline text-xl">1. Manuscript Details</CardTitle>
                         </div>
                         {templateUrl && (
                              <Button asChild variant="outline">
@@ -339,13 +354,13 @@ export default function NewSubmissionPage() {
                                         onUploadError={(error) => {
                                             toast({
                                                 title: 'Upload Failed',
-                                                description: error.message,
+                                                description: error.message + " Only .doc and .docx files are accepted.",
                                                 variant: 'destructive'
                                             })
                                         }}
                                     />
                                 </FormControl>
-                                <FormDescription>Upload your manuscript. Page count for PDFs is determined automatically.</FormDescription>
+                                <FormDescription>Upload your manuscript in Word format (.doc or .docx).</FormDescription>
                                 <FormMessage />
                             </FormItem>
                         )}
@@ -355,7 +370,7 @@ export default function NewSubmissionPage() {
 
              <Card>
                 <CardHeader>
-                    <CardTitle className="font-headline text-xl">List of Contributors</CardTitle>
+                    <CardTitle className="font-headline text-xl">2. List of Contributors</CardTitle>
                     <CardDescription>Add all contributing authors. Designate one as the primary contact.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">

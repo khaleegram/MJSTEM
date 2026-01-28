@@ -86,7 +86,7 @@ export function PublicHeader() {
 
         {/* Centered Navigation for Desktop */}
         <nav className="hidden md:flex h-full items-center justify-center gap-1 rounded-full border border-border/40 bg-background/80 px-4 py-2 text-sm font-medium shadow-lg backdrop-blur-sm">
-            <NavLink href="/aims-scope">Aims & Scope</NavLink>
+            <NavLink href="/about-journal">About the Journal</NavLink>
             <NavLink href="/editorial-board">Editorial Board</NavLink>
             <NavLink href="/author-guidelines">Author Guidelines</NavLink>
             <NavLink href="/archive">Browse Archives</NavLink>
@@ -124,7 +124,7 @@ export function PublicHeader() {
                                     )}
                                     <span className="font-headline text-lg">MJSTEM</span>
                                 </Link>
-                                <Link href="/aims-scope" className="hover:text-foreground" onClick={() => setIsOpen(false)}>Aims & Scope</Link>
+                                <Link href="/about-journal" className="hover:text-foreground" onClick={() => setIsOpen(false)}>About the Journal</Link>
                                 <Link href="/editorial-board" className="hover:text-foreground" onClick={() => setIsOpen(false)}>Editorial Board</Link>
                                 <Link href="/author-guidelines" className="hover:text-foreground" onClick={() => setIsOpen(false)}>Author Guidelines</Link>
                                 <Link href="/archive" className="hover:text-foreground" onClick={() => setIsOpen(false)}>Browse Archives</Link>

@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -231,15 +232,16 @@ export function HomePageClient({ latestIssue, journalInfo, branding, indexingSer
                         </h2>
                     </Link>
                     <p className="text-sm text-muted-foreground mt-2">ISSN (Print): 3121-6552</p>
-                    <p className="text-sm text-muted-foreground">Barcode: 9773121655008</p>
+                    <p className="text-sm text-muted-foreground">EISSN: 3121-9292</p>
                 </div>
                 <div className="md:col-span-4">
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-8">
                          <div>
                             <h4 className="font-headline font-semibold mb-3">Journal</h4>
                             <ul className="space-y-2 text-sm text-muted-foreground">
-                                <li><Link href="/aims-scope" className="hover:text-primary">Aims & Scope</Link></li>
+                                <li><Link href="/about-journal" className="hover:text-primary">About the Journal</Link></li>
                                 <li><Link href="/editorial-board" className="hover:text-primary">Editorial Board</Link></li>
+                                <li><Link href="/ethics-policies" className="hover:text-primary">Ethics & Policies</Link></li>
                             </ul>
                         </div>
                         <div>
