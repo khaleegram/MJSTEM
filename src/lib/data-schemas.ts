@@ -20,6 +20,7 @@ export const NewSubmissionSchema = z.object({
   abstract: z.string().min(50, 'Abstract must be at least 50 characters long.'),
   keywords: z.string().min(3, 'Please provide at least one keyword.'),
   manuscriptUrl: z.string().url('Manuscript file is required.'),
+  supplementaryFileUrl: z.string().url().optional().or(z.literal('')),
   contributors: z.array(ContributorSchema).min(1, 'At least one contributor is required.'),
   pageCount: z.number().optional(),
 });
@@ -69,6 +70,7 @@ export const SubmissionSchema = z.object({
   keywords: z.string().min(3, 'Please provide at least one keyword.'),
   manuscriptUrl: z.string().url().min(1, 'Manuscript file is required.'),
   originalManuscriptUrl: z.string().url().optional(),
+  supplementaryFileUrl: z.string().url().optional(),
   reviewers: z.array(AssignedReviewerSchema).optional(),
   reviewerIds: z.array(z.string()).optional(), // For querying
   originalSubmissionDate: z.date().optional().nullable(),
@@ -130,3 +132,5 @@ export const IndexingServiceSchema = z.object({
   logoUrl: z.string().url("A valid logo URL is required."),
   order: z.number().optional(),
 });
+
+    

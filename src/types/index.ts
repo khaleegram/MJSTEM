@@ -30,3 +30,5 @@ export type EditorialBoardMember = z.infer<typeof EditorialBoardMemberSchema>;
 export type Notification = z.infer<typeof NotificationSchema> & { id: string };
 
 export type IndexingService = z.infer<typeof IndexingServiceSchema>;
+
+    

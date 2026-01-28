@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowRight, Feather, Microscope, BookOpen, BookText, Download, FileText as FileTextIcon } from 'lucide-react';
+import { ArrowRight, Feather, Microscope, BookOpen, BookText, Download, FileText as FileTextIcon, Info } from 'lucide-react';
 import { PublicHeader } from '@/components/public-header';
 import { Icons } from '@/components/icons';
 import Image from 'next/image';
@@ -126,7 +126,7 @@ export function HomePageClient({ latestIssue, journalInfo, branding, indexingSer
         <section className="py-16 sm:py-24">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center mb-12">
-                <h2 className="text-3xl md:text-4xl font-bold font-headline text-foreground">How It Works</h2>
+                <h2 className="text-3xl md:text-4xl font-bold font-headline text-foreground">About the Journal</h2>
                 <p className="text-muted-foreground mt-2 max-w-2xl mx-auto">A streamlined process from submission to publication, designed for authors.</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
@@ -162,6 +162,10 @@ export function HomePageClient({ latestIssue, journalInfo, branding, indexingSer
                  <HowItWorksCard icon={<BookOpen className="w-6 h-6"/>} title="4. Timely Publication">
                     Accepted articles are formatted, assigned a DOI, and published online swiftly, ensuring your research reaches the global community without delay.
                 </HowItWorksCard>
+            </div>
+            <div className="mt-12 text-center text-sm text-muted-foreground border-t pt-8 flex items-center justify-center gap-2">
+                 <Info className="w-4 h-4"/>
+                <p>This is an open access article distributed under the terms of the Creative Commons Attribution 4.0 International License (CC BY 4.0).</p>
             </div>
           </div>
         </section>
@@ -231,7 +235,6 @@ export function HomePageClient({ latestIssue, journalInfo, branding, indexingSer
                             MJSTEM
                         </h2>
                     </Link>
-                    <p className="text-sm text-muted-foreground mt-2">ISSN (Print): 3121-6552</p>
                     <p className="text-sm text-muted-foreground">EISSN: 3121-9292</p>
                 </div>
                 <div className="md:col-span-4">
@@ -278,3 +281,5 @@ export function HomePageClient({ latestIssue, journalInfo, branding, indexingSer
     </div>
   );
 }
+
+    

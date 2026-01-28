@@ -21,7 +21,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Trash2, PlusCircle, Download, Sigma, Bot, Scale } from 'lucide-react';
+import { Trash2, PlusCircle, Download, Sigma, Bot, Scale, Paperclip } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/auth-context';
 import { useState, useEffect, useCallback } from 'react';
@@ -43,6 +43,7 @@ const NewSubmissionSchema = z.object({
   abstract: z.string().min(50, 'Abstract must be at least 50 characters long.'),
   keywords: z.string().min(3, 'Please provide at least one keyword.'),
   manuscriptUrl: z.string().url('Manuscript file is required.'),
+  supplementaryFileUrl: z.string().url().optional().or(z.literal('')),
   contributors: z.array(ContributorSchema).min(1, 'At least one contributor is required.'),
   pageCount: z.number().optional(),
 });
@@ -78,6 +79,7 @@ export default function NewSubmissionPage() {
       abstract: '',
       keywords: '',
       manuscriptUrl: '',
+      supplementaryFileUrl: '',
       contributors: [],
       pageCount: 0,
     },
@@ -192,6 +194,7 @@ export default function NewSubmissionPage() {
         abstract: values.abstract,
         keywords: values.keywords,
         manuscriptUrl: values.manuscriptUrl,
+        supplementaryFileUrl: values.supplementaryFileUrl || '',
         contributors: values.contributors,
         reviewers: [],
         reviewerIds: [],
@@ -354,13 +357,41 @@ export default function NewSubmissionPage() {
                                         onUploadError={(error) => {
                                             toast({
                                                 title: 'Upload Failed',
-                                                description: error.message + " Only .doc and .docx files are accepted.",
+                                                description: error.message,
                                                 variant: 'destructive'
                                             })
                                         }}
                                     />
                                 </FormControl>
                                 <FormDescription>Upload your manuscript in Word format (.doc or .docx).</FormDescription>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+
+                     <FormField
+                        control={form.control}
+                        name="supplementaryFileUrl"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel className="flex items-center gap-2">
+                                    <Paperclip className="w-4 h-4" />
+                                    Supplementary File (Optional)
+                                </FormLabel>
+                                <FormControl>
+                                    <FileUploader
+                                        endpoint="documentUploader"
+                                        onUploadComplete={(url) => field.onChange(url)}
+                                        onUploadError={(error) => {
+                                            toast({
+                                                title: 'Upload Failed',
+                                                description: error.message,
+                                                variant: 'destructive'
+                                            })
+                                        }}
+                                    />
+                                </FormControl>
+                                <FormDescription>You can attach a single supplementary file if needed (e.g., dataset, appendix).</FormDescription>
                                 <FormMessage />
                             </FormItem>
                         )}
@@ -474,3 +505,5 @@ export default function NewSubmissionPage() {
     </div>
   );
 }
+
+    

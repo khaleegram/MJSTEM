@@ -15,7 +15,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { File, Calendar, User, Mail, PlusCircle, Download, BookCopy, Edit, Sparkles, UserCheck, MessageSquare, Shield, Upload, Clock, CheckCircle2, FileSearch, Info, Trash2 } from 'lucide-react';
+import { File, Calendar, User, Mail, PlusCircle, Download, BookCopy, Edit, Sparkles, UserCheck, MessageSquare, Shield, Upload, Clock, CheckCircle2, FileSearch, Info, Trash2, Paperclip } from 'lucide-react';
 import { format } from 'date-fns';
 import { SubmissionStatus, Reviewer, Submission, UserProfile, Volume } from '@/types';
 import { cn } from '@/lib/utils';
@@ -857,6 +857,14 @@ export default function SubmissionDetailPage() {
                         </Link>
                     </Button>
                 )}
+                 {submission.supplementaryFileUrl && (
+                    <Button variant="outline" asChild>
+                        <Link href={submission.supplementaryFileUrl} target="_blank" rel="noopener noreferrer">
+                            <Paperclip className="mr-2 h-4 w-4" />
+                            Download Supplementary File
+                        </Link>
+                    </Button>
+                )}
             </div>
             {canAuthorEdit && !isAuthorEditing && (
                 <Button variant="secondary" onClick={() => setIsAuthorEditing(true)}>
@@ -1018,3 +1026,5 @@ export default function SubmissionDetailPage() {
     </div>
   );
 }
+
+    
