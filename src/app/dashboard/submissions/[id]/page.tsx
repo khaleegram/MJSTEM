@@ -1,4 +1,3 @@
-
 'use client';
 
 import { notFound, useParams, useRouter } from 'next/navigation';
@@ -112,6 +111,7 @@ const ReviewSubmissionForm = ({ submission, onReviewSubmit }: { submission: Subm
     const [commentsForEditor, setCommentsForEditor] = React.useState('');
     const [commentsForAuthor, setCommentsForAuthor] = React.useState('');
     const [attachmentUrl, setAttachmentUrl] = React.useState('');
+    const [attachmentName, setAttachmentName] = React.useState('');
 
     const myReviewAssignment = submission.reviewers?.find(r => r.id === user?.uid);
 
@@ -135,6 +135,7 @@ const ReviewSubmissionForm = ({ submission, onReviewSubmit }: { submission: Subm
             commentsForAuthor,
             submittedAt: serverTimestamp(),
             attachmentUrl,
+            attachmentName,
         };
 
         const submissionRef = doc(db, 'submissions', submission.id);
@@ -242,7 +243,10 @@ const ReviewSubmissionForm = ({ submission, onReviewSubmit }: { submission: Subm
                         </label>
                         <FileUploader 
                             endpoint="documentUploader"
-                            onUploadComplete={(url) => setAttachmentUrl(url || '')}
+                            onUploadComplete={(url, name) => {
+                                setAttachmentUrl(url || '');
+                                setAttachmentName(name || 'attachment');
+                            }}
                             onUploadError={(err) => toast({ title: "Upload Error", description: err.message, variant: "destructive"})}
                         />
                         <p className="text-xs text-muted-foreground">You can optionally upload a version of the manuscript with your comments.</p>
@@ -766,6 +770,37 @@ export default function SubmissionDetailPage() {
     setRefetchTrigger(prev => prev + 1);
   }
   
+  const handleEditorFileUpload = async (url: string, name?: string) => {
+    if (!submission) return;
+    setIsUpdating(true);
+
+    const newAttachment = {
+        url,
+        name: name || url.split('/').pop() || 'Uploaded File',
+        uploadedAt: serverTimestamp(),
+    };
+
+    const submissionRef = doc(db, 'submissions', submission.id);
+    const updateData = {
+        editorAttachments: arrayUnion(newAttachment)
+    };
+
+    try {
+        await updateDoc(submissionRef, updateData);
+        toast({ title: "File Uploaded", description: "The file has been attached and is visible to the author." });
+        setRefetchTrigger(p => p + 1); // refetch
+    } catch (serverError) {
+        const permissionError = new FirestorePermissionError({
+            path: submissionRef.path,
+            operation: 'update',
+            requestResourceData: { editorAttachments: '(arrayUnion)' }
+        });
+        errorEmitter.emit('permission-error', permissionError);
+    } finally {
+        setIsUpdating(false);
+    }
+  }
+
   const getInitials = (name: string) => {
     if (!name) return 'U';
     const names = name.split(' ');
@@ -888,6 +923,33 @@ export default function SubmissionDetailPage() {
           </CardFooter>
         </Card>
 
+        {isAuthor && submission.editorAttachments && submission.editorAttachments.length > 0 && (
+            <Card>
+                <CardHeader>
+                    <CardTitle className="font-headline">Editor's Attachments</CardTitle>
+                    <CardDescription>Files provided by the editor for your review.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <ul className="space-y-2">
+                        {submission.editorAttachments.map((file, index) => (
+                            <li key={index} className="flex items-center justify-between text-sm p-3 border rounded-md bg-secondary/50">
+                                <div className="flex items-center gap-3">
+                                    <Paperclip className="h-4 w-4" />
+                                    <span>{file.name}</span>
+                                </div>
+                                <Button asChild variant="outline" size="sm">
+                                    <Link href={file.url} target="_blank" rel="noopener noreferrer">
+                                        <Download className="mr-2 h-4 w-4" />
+                                        Download
+                                    </Link>
+                                </Button>
+                            </li>
+                        ))}
+                    </ul>
+                </CardContent>
+            </Card>
+        )}
+
         {isReviewer && <ReviewSubmissionForm submission={submission} onReviewSubmit={handleRevisionSubmit} />}
         
         {(isEditor || (isAuthor && (needsRevision))) && <SubmittedReviews submissionId={submission.id} showForAuthor={isAuthor} />}
@@ -927,6 +989,36 @@ export default function SubmissionDetailPage() {
         </Card>
         )}
         
+        {isEditor && (
+            <Card>
+                <CardHeader>
+                    <CardTitle className="font-headline">Editor Attachments</CardTitle>
+                    <CardDescription>Upload files for the author (e.g., annotated manuscript, revision notes).</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {submission.editorAttachments && submission.editorAttachments.length > 0 && (
+                        <div className="space-y-2 mb-4">
+                            <h4 className="text-sm font-medium">Uploaded Files</h4>
+                            <ul className="space-y-2">
+                                {submission.editorAttachments.map((file, index) => (
+                                    <li key={index} className="flex items-center justify-between text-sm p-2 border rounded-md">
+                                        <span className="truncate">{file.name}</span>
+                                        <Button asChild variant="ghost" size="sm">
+                                            <Link href={file.url} target="_blank">Download</Link>
+                                        </Button>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+                    <FileUploader
+                        endpoint="documentUploader"
+                        onUploadComplete={handleEditorFileUpload}
+                        onUploadError={(err) => toast({ title: "Upload Failed", description: err.message, variant: "destructive"})}
+                    />
+                </CardContent>
+            </Card>
+        )}
         
         <Card>
           <CardHeader>

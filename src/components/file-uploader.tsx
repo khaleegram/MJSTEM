@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useUploadThing } from '@/lib/uploadthing';
@@ -14,7 +13,7 @@ import Image from 'next/image';
 
 interface FileUploaderProps {
   endpoint: keyof OurFileRouter;
-  onUploadComplete: (url: string, key?: string) => void;
+  onUploadComplete: (url: string, name?: string) => void;
   onUploadError: (error: Error) => void;
   value?: string;
 }
@@ -41,7 +40,7 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, value 
       };
       setFileName(res[0].name);
       setLocalValue(res[0].url);
-      onUploadComplete(res[0].url, res[0].key);
+      onUploadComplete(res[0].url, res[0].name);
       setUploadProgress(0); // Reset progress
     },
     onUploadError,

@@ -1,4 +1,3 @@
-
 'use client';
 import { z } from 'zod';
 
@@ -13,6 +12,12 @@ export const ContributorSchema = z.object({
   }).optional(),
   role: z.string().default('Author'),
   isPrimaryContact: z.boolean().default(false),
+});
+
+export const EditorAttachmentSchema = z.object({
+  url: z.string().url(),
+  name: z.string(),
+  uploadedAt: z.any(),
 });
 
 export const NewSubmissionSchema = z.object({
@@ -76,6 +81,7 @@ export const SubmissionSchema = z.object({
   originalSubmissionDate: z.date().optional().nullable(),
   pageCount: z.number().optional(),
   revision: z.number().default(0),
+  editorAttachments: z.array(EditorAttachmentSchema).optional(),
 });
 
 export const ArticleSchema = z.object({
@@ -132,5 +138,3 @@ export const IndexingServiceSchema = z.object({
   logoUrl: z.string().url("A valid logo URL is required."),
   order: z.number().optional(),
 });
-
-    
