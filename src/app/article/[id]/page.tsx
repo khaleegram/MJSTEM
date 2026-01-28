@@ -54,6 +54,7 @@ export async function generateMetadata(
         'citation_journal_title': 'Multidisciplinary Journal of Science, Technology, Education and Management (MJSTEM)',
         'citation_pdf_url': submission.manuscriptUrl,
         'citation_keywords': submission.keywords,
+        'citation_doi': submission.uniqueId || '',
     }
   }
 }
@@ -97,7 +98,9 @@ export default async function ArticlePage({ params }: { params: { id: string } }
             <Card>
                 <CardHeader>
                     {submission.uniqueId && (
-                         <p className="text-sm font-mono text-muted-foreground mb-2">{submission.uniqueId}</p>
+                        <Badge variant="secondary" className="w-fit mb-4">
+                           DOI: {submission.uniqueId}
+                        </Badge>
                     )}
                     <CardTitle className="text-3xl lg:text-4xl font-headline font-bold text-foreground">
                         {submission.title}

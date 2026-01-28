@@ -108,6 +108,9 @@ export const EditorialBoardMemberSchema = z.object({
   country: z.string().optional(),
   role: z.enum(['Editor-in-Chief', 'Associate Editor', 'Founding Editor', 'Senior Associate Editor']),
   photoURL: z.string().url().optional(),
+  orcid: z.string().refine(val => val === '' || !val || orcidRegex.test(val), {
+    message: "Invalid ORCID iD format. Expected: 0000-0000-0000-0000",
+  }).optional(),
   order: z.number().optional(),
 });
 

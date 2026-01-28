@@ -44,10 +44,16 @@ export async function sendReviewerAssignmentEmail(input: SendReviewerAssignmentE
     const subject = `Review Invitation - MJSTEM`;
     const body = `Dear ${input.reviewerName},
 <br><br>
-You have been invited to review a new manuscript, "${input.manuscriptTitle}", for the Multidisciplinary Journal of Science, Technology, Education and Management (MJSTEM).
+You have been invited to review a new manuscript, "${input.manuscriptTitle}", for the Multidisciplinary Journal of Science, Technology, Education and Management (MJSTEM). Your expertise in this area is highly valued, and we would be grateful for your contribution to the peer review process.
 <br><br>
-Your expertise in this area is highly valued, and we would be grateful for your contribution to the peer review process.
-<br><br>
+<b>Reviewer Guidelines:</b>
+<ul>
+    <li>Please read the full manuscript and provide constructive feedback for both the editor and the author.</li>
+    <li>Your recommendation should be based on the manuscript's originality, significance, and scientific rigor.</li>
+    <li>All reviews must be submitted through your reviewer dashboard on our website.</li>
+    <li>Please note this is a double-blind review. The author's identity is concealed from you, and your identity will be concealed from the author.</li>
+</ul>
+<br>
 You can access the submission and submit your review by following this link:
 <a href="${NEXT_PUBLIC_BASE_URL}/dashboard/submissions/${input.submissionId}">View Submission</a>
 <br><br>

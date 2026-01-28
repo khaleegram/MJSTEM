@@ -40,6 +40,7 @@ const MemberForm = ({ member, onSave, onCancel, allUsers }: { member?: Editorial
       role: 'Associate Editor',
       photoURL: '',
       userId: '',
+      orcid: '',
     },
   });
 
@@ -69,6 +70,7 @@ const MemberForm = ({ member, onSave, onCancel, allUsers }: { member?: Editorial
         country: '',
         userId: '',
         photoURL: '',
+        orcid: '',
       });
     } else {
       setIsManual(false);
@@ -159,6 +161,15 @@ const MemberForm = ({ member, onSave, onCancel, allUsers }: { member?: Editorial
             <FormItem><FormLabel>Country</FormLabel><FormControl><Input {...field} placeholder="e.g., Nigeria" /></FormControl><FormMessage /></FormItem>
             )} />
         </div>
+        <FormField control={form.control} name="orcid" render={({ field }) => (
+            <FormItem>
+                <FormLabel>ORCID iD</FormLabel>
+                <FormControl>
+                    <Input {...field} placeholder="0000-0000-0000-0000" />
+                </FormControl>
+                <FormMessage />
+            </FormItem>
+        )} />
         <FormField control={form.control} name="role" render={({ field }) => (
           <FormItem><FormLabel>Role</FormLabel>
             <Select onValueChange={field.onChange} defaultValue={field.value}>

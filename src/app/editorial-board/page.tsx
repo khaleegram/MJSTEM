@@ -21,6 +21,16 @@ const BoardMemberCard = ({ member }: { member: EditorialBoardMember }) => (
         </Avatar>
         <h3 className="font-bold font-headline text-lg text-foreground">{member.name}{member.qualifications && `, ${member.qualifications}`}</h3>
         <p className="text-sm text-muted-foreground">{member.affiliation}{member.country && `, ${member.country}`}</p>
+        {member.orcid && (
+            <a 
+                href={`https://orcid.org/${member.orcid}`} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-xs text-muted-foreground hover:text-primary mt-1"
+            >
+                ORCID: {member.orcid}
+            </a>
+        )}
       </div>
     </CardContent>
   </Card>
