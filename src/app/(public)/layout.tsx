@@ -4,6 +4,7 @@ import { PublicFooter } from '@/components/public-footer';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Wrench } from 'lucide-react';
+import Link from 'next/link';
 
 async function getJournalSettings() {
     try {
@@ -27,6 +28,11 @@ const MaintenanceComponent = () => (
         <p className="text-muted-foreground mt-2 max-w-md">
             Our site is currently undergoing scheduled maintenance. We should be back online shortly. Thank you for your patience.
         </p>
+        <div className="mt-8">
+            <Link href="/login" className="text-sm text-muted-foreground hover:underline">
+                Admin Login
+            </Link>
+        </div>
     </div>
 );
 
