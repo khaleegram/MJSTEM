@@ -12,7 +12,6 @@ export default async function HomePage() {
   const latestIssue = await getLatestIssue();
   const featuredArticles = await getFeaturedArticles();
   let journalInfo: { coverLetterUrl?: string, submissionTemplateUrl?: string } = {};
-  let branding: { logoUrl?: string } = {};
   let indexingServices: IndexingService[] = [];
 
   try {
@@ -21,11 +20,7 @@ export default async function HomePage() {
     if (journalInfoSnap.exists()) {
       journalInfo = journalInfoSnap.data();
     }
-    const brandingRef = doc(db, 'settings', 'branding');
-    const brandingSnap = await getDoc(brandingRef);
-    if (brandingSnap.exists()) {
-      branding = brandingSnap.data();
-    }
+    
     const indexingQuery = query(collection(db, 'indexingServices'), orderBy('order'));
     const indexingSnapshot = await getDocs(indexingQuery);
     indexingServices = indexingSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as IndexingService);
@@ -38,7 +33,6 @@ export default async function HomePage() {
       latestIssue={latestIssue}
       featuredArticles={featuredArticles}
       journalInfo={journalInfo}
-      branding={branding}
       indexingServices={indexingServices}
     />
   );

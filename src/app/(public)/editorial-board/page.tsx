@@ -91,52 +91,43 @@ export default function EditorialBoardPage() {
 
 
   return (
-    <div className="flex flex-col min-h-screen bg-background">
-      <PublicHeader />
-      <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="mb-12 text-center">
-          <h1 className="text-4xl font-bold font-headline text-foreground">Editorial Board</h1>
-          <p className="text-muted-foreground mt-2 max-w-3xl mx-auto">
-            Our journal is guided by a distinguished board of international experts committed to academic excellence.
-          </p>
-        </div>
+    <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div className="mb-12 text-center">
+        <h1 className="text-4xl font-bold font-headline text-foreground">Editorial Board</h1>
+        <p className="text-muted-foreground mt-2 max-w-3xl mx-auto">
+          Our journal is guided by a distinguished board of international experts committed to academic excellence.
+        </p>
+      </div>
 
-        <div className="max-w-5xl mx-auto space-y-12">
-            {loading ? (
-                <>
-                    <section><h2 className="text-3xl font-bold font-headline text-center mb-8"><Skeleton className="h-9 w-64 mx-auto" /></h2><div className="max-w-sm mx-auto"><BoardMemberSkeleton /></div></section>
-                    <section><h2 className="text-3xl font-bold font-headline text-center mb-8"><Skeleton className="h-9 w-64 mx-auto" /></h2><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">{Array.from({length: 3}).map((_, i) => <BoardMemberSkeleton key={i} />)}</div></section>
-                </>
-            ) : sectionOrder.map(title => {
-                const sectionMembers = boardSections[title];
-                if (!sectionMembers || sectionMembers.length === 0) return null;
-                
-                const gridCols = title === 'Editor-in-Chief' ? 'lg:grid-cols-1' : title === 'Founding Editor' ? 'lg:grid-cols-2' : 'lg:grid-cols-3';
+      <div className="max-w-5xl mx-auto space-y-12">
+          {loading ? (
+              <>
+                  <section><h2 className="text-3xl font-bold font-headline text-center mb-8"><Skeleton className="h-9 w-64 mx-auto" /></h2><div className="max-w-sm mx-auto"><BoardMemberSkeleton /></div></section>
+                  <section><h2 className="text-3xl font-bold font-headline text-center mb-8"><Skeleton className="h-9 w-64 mx-auto" /></h2><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">{Array.from({length: 3}).map((_, i) => <BoardMemberSkeleton key={i} />)}</div></section>
+              </>
+          ) : sectionOrder.map(title => {
+              const sectionMembers = boardSections[title];
+              if (!sectionMembers || sectionMembers.length === 0) return null;
+              
+              const gridCols = title === 'Editor-in-Chief' ? 'lg:grid-cols-1' : title === 'Founding Editor' ? 'lg:grid-cols-2' : 'lg:grid-cols-3';
 
-                return (
-                    <section key={title}>
-                        <h2 className="text-3xl font-bold font-headline text-center mb-8">{title}</h2>
-                        <div className={`grid grid-cols-1 sm:grid-cols-2 ${gridCols} gap-8 ${title === 'Editor-in-Chief' ? 'max-w-sm mx-auto' : ''}`}>
-                            {sectionMembers.map((member) => (
-                                <BoardMemberCard key={member.id} member={member} />
-                            ))}
-                        </div>
-                    </section>
-                )
-            })}
-             {!loading && members.length === 0 && (
-                <div className="text-center py-20 text-muted-foreground">
-                    <p>The editorial board is currently being assembled.</p>
-                </div>
-            )}
-        </div>
-      </main>
-      <footer className="bg-background border-t">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 text-center text-sm text-muted-foreground">
-          <p className="mb-2">ISSN (Print): 3121-6552 | EISSN: 3121-9292</p>
-          © {new Date().getFullYear()} MJSTEM. All Rights Reserved.
-        </div>
-      </footer>
-    </div>
+              return (
+                  <section key={title}>
+                      <h2 className="text-3xl font-bold font-headline text-center mb-8">{title}</h2>
+                      <div className={`grid grid-cols-1 sm:grid-cols-2 ${gridCols} gap-8 ${title === 'Editor-in-Chief' ? 'max-w-sm mx-auto' : ''}`}>
+                          {sectionMembers.map((member) => (
+                              <BoardMemberCard key={member.id} member={member} />
+                          ))}
+                      </div>
+                  </section>
+              )
+          })}
+            {!loading && members.length === 0 && (
+              <div className="text-center py-20 text-muted-foreground">
+                  <p>The editorial board is currently being assembled.</p>
+              </div>
+          )}
+      </div>
+    </main>
   );
 }

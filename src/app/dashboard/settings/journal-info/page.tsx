@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useForm } from 'react-hook-form';
@@ -22,15 +23,18 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormDescription,
 } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { FileUploader } from '@/components/file-uploader';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Switch } from '@/components/ui/switch';
 import Image from 'next/image';
 
 const journalInfoFormSchema = z.object({
   coverLetterUrl: z.string().url().optional().or(z.literal('')),
   submissionTemplateUrl: z.string().url().optional().or(z.literal('')),
+  maintenanceMode: z.boolean().optional(),
 });
 
 export default function JournalInfoSettingsPage() {
@@ -43,6 +47,7 @@ export default function JournalInfoSettingsPage() {
     defaultValues: {
       coverLetterUrl: '',
       submissionTemplateUrl: '',
+      maintenanceMode: false,
     },
   });
 
@@ -53,7 +58,10 @@ export default function JournalInfoSettingsPage() {
         const docRef = doc(db, 'settings', 'journalInfo');
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
-          form.reset(docSnap.data());
+          form.reset({
+            ...docSnap.data(),
+            maintenanceMode: docSnap.data().maintenanceMode || false,
+          });
         }
       } catch (error) {
         console.error("Error fetching journal info:", error);
@@ -75,7 +83,7 @@ export default function JournalInfoSettingsPage() {
       
       toast({
         title: 'Settings Saved',
-        description: 'Your journal information has been updated. The homepage may take a moment to reflect changes.',
+        description: 'Your journal information has been updated. Public pages may take a moment to reflect changes.',
       });
 
     } catch (error) {
@@ -93,7 +101,7 @@ export default function JournalInfoSettingsPage() {
   return (
     <div className="max-w-2xl mx-auto">
       <h1 className="text-3xl font-bold font-headline mb-2">Journal Information</h1>
-      <p className="text-muted-foreground mb-8">Set the cover letter image and submission template for authors.</p>
+      <p className="text-muted-foreground mb-8">Manage global settings for the journal.</p>
       
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
@@ -163,6 +171,39 @@ export default function JournalInfoSettingsPage() {
               )}
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader>
+                <CardTitle className="font-headline">Maintenance Mode</CardTitle>
+                <CardDescription>
+                    When enabled, all public pages will be unavailable and show a maintenance notice. The dashboard will remain accessible to admins.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <FormField
+                    control={form.control}
+                    name="maintenanceMode"
+                    render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                        <div className="space-y-0.5">
+                        <FormLabel className="text-base">
+                            Enable Maintenance Mode
+                        </FormLabel>
+                        <FormDescription>
+                            {field.value ? "The site is currently IN MAINTENANCE." : "The site is currently LIVE."}
+                        </FormDescription>
+                        </div>
+                        <FormControl>
+                        <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                        />
+                        </FormControl>
+                    </FormItem>
+                    )}
+                />
+            </CardContent>
+        </Card>
            <CardFooter className="border-t px-6 py-4">
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting ? 'Saving...' : 'Save Settings'}
