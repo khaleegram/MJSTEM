@@ -45,13 +45,7 @@ export default async function PublicLayout({
   const { maintenanceMode } = await getJournalSettings();
 
   if (maintenanceMode) {
-    return (
-        <html lang="en" suppressHydrationWarning>
-            <body>
-                 <MaintenanceComponent />
-            </body>
-        </html>
-    );
+    return <MaintenanceComponent />;
   }
 
   return (
