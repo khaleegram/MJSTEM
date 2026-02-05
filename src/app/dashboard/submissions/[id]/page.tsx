@@ -1,3 +1,4 @@
+
 'use client';
 
 import { notFound, useParams, useRouter } from 'next/navigation';
@@ -19,15 +20,6 @@ import { format } from 'date-fns';
 import { SubmissionStatus, Reviewer, Submission, UserProfile, Volume } from '@/types';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-} from "@/components/ui/dialog"
 import React from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
@@ -48,6 +40,15 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from "@/components/ui/dialog"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { sendReviewerAssignmentEmail } from '@/ai/flows/send-reviewer-assignment-email';
 import { sendDecisionEmail } from '@/ai/flows/send-decision-email';
@@ -478,6 +479,46 @@ const AuthorEditForm = ({ submission, onUpdate, onCancel }: { submission: Submis
     );
 };
 
+const PageCountDialog = ({ submission, onUpdate }: { submission: Submission; onUpdate: () => void; }) => {
+    const [pageCount, setPageCount] = React.useState(submission.pageCount || '');
+    const [isSaving, setIsSaving] = React.useState(false);
+    const { toast } = useToast();
+
+    const handleSave = async () => {
+        setIsSaving(true);
+        const submissionRef = doc(db, 'submissions', submission.id);
+        try {
+            await updateDoc(submissionRef, { pageCount: Number(pageCount) || null });
+            toast({ title: 'Page Count Updated' });
+            onUpdate();
+        } catch (e) {
+            toast({ title: 'Error', description: 'Could not update page count.', variant: 'destructive'});
+        } finally {
+            setIsSaving(false);
+        }
+    }
+
+    return (
+        <Dialog>
+            <DialogTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-auto px-2 py-1"><Edit className="w-3 h-3" /></Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-xs">
+                <DialogHeader>
+                    <DialogTitle>Edit Page Count</DialogTitle>
+                </DialogHeader>
+                <div className="py-4">
+                    <Label htmlFor="page-count">Pages</Label>
+                    <Input id="page-count" type="number" value={pageCount} onChange={(e) => setPageCount(e.target.value)} />
+                </div>
+                <DialogFooter>
+                    <Button onClick={handleSave} disabled={isSaving}>{isSaving ? 'Saving...' : 'Save'}</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
 
 export default function SubmissionDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -854,7 +895,10 @@ export default function SubmissionDetailPage() {
                     </div>
                     <Separator className="my-6" />
                     <div className="space-y-1">
-                        <h3 className="font-semibold mb-2 font-headline">Page Count</h3>
+                         <div className="font-semibold mb-2 font-headline flex items-center gap-2">
+                            <span>Page Count</span>
+                            {isEditor && <PageCountDialog submission={submission} onUpdate={() => setRefetchTrigger(p => p+1)} />}
+                         </div>
                         {submission.pageCount ? <p className="text-sm text-muted-foreground">{submission.pageCount} pages</p> : <p className="text-sm text-muted-foreground italic">Not set.</p>}
                     </div>
                 </CardContent>

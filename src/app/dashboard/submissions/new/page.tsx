@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -6,7 +7,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useRouter } from 'next/navigation';
 import { collection, addDoc, serverTimestamp, getDoc, doc, runTransaction, Timestamp } from 'firebase/firestore';
-import { PDFDocument } from 'pdf-lib';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -22,7 +22,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Trash2, PlusCircle, Download, Sigma, Bot, Scale, Paperclip } from 'lucide-react';
+import { Trash2, PlusCircle, Download, Paperclip } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/auth-context';
 import { ContributorSchema, NewSubmissionSchema } from '@/lib/data-schemas';
@@ -33,7 +33,6 @@ import { logSubmissionEvent } from '@/ai/flows/log-submission-event';
 import Link from 'next/link';
 import { generateNotification } from '@/ai/flows/generate-notification';
 import { sendConfirmationEmail } from '@/ai/flows/send-confirmation-email';
-import { Submission } from '@/types';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 const formSchema = NewSubmissionSchema;
@@ -132,28 +131,6 @@ export default function NewSubmissionPage() {
         });
     });
   }
-
-  const handleFileUploadComplete = useCallback(async (url: string) => {
-    form.setValue('manuscriptUrl', url);
-    // Try to count pages if it's a PDF
-    if (url.endsWith('.pdf') || url.includes('.pdf?')) {
-      try {
-        const existingPdfBytes = await fetch(url).then(res => res.arrayBuffer());
-        const pdfDoc = await PDFDocument.load(existingPdfBytes);
-        const count = pdfDoc.getPageCount();
-        form.setValue('pageCount', count);
-        toast({ title: 'Page Count Detected', description: `Detected ${count} pages in the PDF.` });
-      } catch (e) {
-        console.error("Failed to count PDF pages", e);
-        // Don't fail the whole submission, just inform the user.
-        toast({ title: 'Could not count pages', description: 'Could not automatically count pages in the PDF. This can be added later by an editor.', variant: 'default' });
-      }
-    } else {
-        // Clear page count if not a PDF
-        form.setValue('pageCount', undefined);
-    }
-  }, [form, toast]);
-
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     if (!user || !user.displayName || !user.email) {
@@ -363,7 +340,7 @@ export default function NewSubmissionPage() {
                                 <FormControl>
                                     <FileUploader
                                         endpoint="documentUploader"
-                                        onUploadComplete={handleFileUploadComplete}
+                                        onUploadComplete={(url) => form.setValue('manuscriptUrl', url || '')}
                                         onUploadError={(error) => {
                                             toast({
                                                 title: 'Upload Failed',
@@ -371,7 +348,7 @@ export default function NewSubmissionPage() {
                                                 variant: 'destructive'
                                             })
                                         }}
-                                        description="Upload your manuscript in Word (.doc, .docx) or PDF format."
+                                        description="Upload your manuscript in Word format (.doc, .docx)."
                                     />
                                 </FormControl>
                                 <FormMessage />
@@ -399,7 +376,7 @@ export default function NewSubmissionPage() {
                                                 variant: 'destructive'
                                             })
                                         }}
-                                        description="You can attach a single supplementary file (.doc, .docx, .pdf)."
+                                        description="You can attach a single supplementary file (.doc, .docx)."
                                     />
                                 </FormControl>
                                 <FormMessage />

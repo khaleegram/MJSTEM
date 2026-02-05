@@ -37,7 +37,6 @@ export const ourFileRouter = {
   documentUploader: f({
     "application/msword": { maxFileSize: "16MB", maxFileCount: 1 },
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": { maxFileSize: "16MB", maxFileCount: 1 },
-    "application/pdf": { maxFileSize: "16MB", maxFileCount: 1 },
   })
     .middleware(handleAuth)
     .onUploadComplete(async ({ metadata, file }) => {
