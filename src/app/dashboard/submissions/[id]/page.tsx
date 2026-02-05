@@ -345,7 +345,7 @@ const AuthorRevisionForm = ({ submission, onRevisionSubmit }: { submission: Subm
                         endpoint="documentUploader" 
                         onUploadComplete={handleFileUploadComplete} 
                         onUploadError={(err) => toast({ title: "Upload Error", description: err.message, variant: "destructive"})}
-                        description="Upload your revised manuscript (.doc or .docx)."
+                        description="Upload your revised manuscript (.doc, .docx)."
                     />
                 </CardContent>
                 <CardFooter>
@@ -639,16 +639,39 @@ export default function SubmissionDetailPage() {
   
   const handleDeleteSubmission = async () => {
     if (!submission) return;
-    
-    const submissionRef = doc(db, 'submissions', submission.id);
-    
+
     try {
-        await deleteDoc(submissionRef);
+        await runTransaction(db, async (transaction) => {
+            const submissionRef = doc(db, 'submissions', submission.id);
+            
+            // Inefficient, but required by data model. Find and remove from volume.
+            const volumesQuery = query(collection(db, 'volumes'));
+            const volumesSnapshot = await getDocs(volumesQuery);
+            for (const volDoc of volumesSnapshot.docs) {
+                const volume = volDoc.data() as Volume;
+                let volumeUpdated = false;
+                const updatedIssues = volume.issues?.map(issue => {
+                    const articleIndex = issue.articles?.findIndex(a => a.id === submission.id);
+                    if (articleIndex !== -1 && issue.articles) {
+                        issue.articles.splice(articleIndex, 1);
+                        volumeUpdated = true;
+                    }
+                    return issue;
+                });
+                if (volumeUpdated) {
+                    transaction.update(doc(db, 'volumes', volDoc.id), { issues: updatedIssues });
+                    break; 
+                }
+            }
+            // Delete submission
+            transaction.delete(submissionRef);
+        });
+
         toast({ title: "Submission Deleted", description: "The submission has been permanently removed." });
         router.push('/dashboard/author');
     } catch (serverError) {
         const permissionError = new FirestorePermissionError({
-            path: submissionRef.path,
+            path: `submissions/${submission.id}`,
             operation: 'delete',
         });
         errorEmitter.emit('permission-error', permissionError);
@@ -870,7 +893,7 @@ export default function SubmissionDetailPage() {
                         <p className="text-sm font-mono text-muted-foreground">{submission.uniqueId}</p>
                     )}
                     </div>
-                    <CardTitle className="font-headline text-3xl break-words">{submission.title}</CardTitle>
+                    <CardTitle className="font-headline text-3xl break-words min-w-0">{submission.title}</CardTitle>
                     <div className="text-sm text-muted-foreground flex items-center flex-wrap gap-x-4 gap-y-2 pt-2">
                         <div className="flex items-center gap-2">
                             <User className="h-4 w-4" />
@@ -884,7 +907,7 @@ export default function SubmissionDetailPage() {
                 </CardHeader>
                 <CardContent>
                     <h3 className="font-semibold mb-2 font-headline">Abstract</h3>
-                    <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap break-words">{submission.abstract}</p>
+                    <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap break-words min-w-0">{submission.abstract}</p>
                     <Separator className="my-6" />
                     <h3 className="font-semibold mb-2 font-headline">Keywords</h3>
                     <div className="flex flex-wrap gap-2">

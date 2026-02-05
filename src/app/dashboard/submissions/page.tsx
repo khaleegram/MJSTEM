@@ -21,10 +21,10 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
-import { SubmissionStatus, Submission } from '@/types';
+import { SubmissionStatus, Submission, Volume } from '@/types';
 import { cn } from '@/lib/utils';
 import { useEffect, useState, useMemo } from 'react';
-import { collection, getDocs, orderBy, query, writeBatch, doc } from 'firebase/firestore';
+import { collection, getDocs, orderBy, query, runTransaction, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
@@ -74,6 +74,7 @@ export default function AllSubmissionsPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
     const { toast } = useToast();
+    const [isDeleting, setIsDeleting] = useState(false);
 
     const fetchSubmissions = async () => {
         setLoading(true);
@@ -135,14 +136,36 @@ export default function AllSubmissionsPage() {
     };
 
     const handleDeleteSelected = async () => {
-        const batch = writeBatch(db);
-        selectedRows.forEach(id => {
-            const docRef = doc(db, 'submissions', id);
-            batch.delete(docRef);
-        });
-
+        setIsDeleting(true);
         try {
-            await batch.commit();
+            const volumesQuery = query(collection(db, 'volumes'));
+            const volumesSnapshot = await getDocs(volumesQuery);
+            const allVolumes = volumesSnapshot.docs.map(d => ({ id: d.id, ...d.data() as Volume }));
+
+            for (const submissionId of selectedRows) {
+                 await runTransaction(db, async (transaction) => {
+                    const submissionRef = doc(db, 'submissions', submissionId);
+                    
+                    for (const volume of allVolumes) {
+                        let volumeUpdated = false;
+                        const updatedIssues = volume.issues?.map(issue => {
+                            const articleIndex = issue.articles?.findIndex(a => a.id === submissionId);
+                            if (articleIndex !== -1 && issue.articles) {
+                                issue.articles.splice(articleIndex, 1);
+                                volumeUpdated = true;
+                            }
+                            return issue;
+                        });
+                        if (volumeUpdated) {
+                            const volumeRef = doc(db, 'volumes', volume.id);
+                            transaction.update(volumeRef, { issues: updatedIssues });
+                            break;
+                        }
+                    }
+                    transaction.delete(submissionRef);
+                });
+            }
+
             toast({
                 title: 'Submissions Deleted',
                 description: `${selectedRows.size} submission(s) have been permanently removed.`,
@@ -156,6 +179,8 @@ export default function AllSubmissionsPage() {
                 description: 'Could not delete the selected submissions.',
                 variant: 'destructive',
             });
+        } finally {
+            setIsDeleting(false);
         }
     }
 
@@ -196,9 +221,9 @@ export default function AllSubmissionsPage() {
                 {selectedRows.size > 0 && (
                     <AlertDialog>
                         <AlertDialogTrigger asChild>
-                            <Button variant="destructive" className="shrink-0">
+                            <Button variant="destructive" className="shrink-0" disabled={isDeleting}>
                                 <Trash2 className="mr-2 h-4 w-4" />
-                                Delete ({selectedRows.size})
+                                {isDeleting ? 'Deleting...' : `Delete (${selectedRows.size})`}
                             </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent>
@@ -224,7 +249,7 @@ export default function AllSubmissionsPage() {
               <TableRow>
                 <TableHead padding="checkbox" className="w-12">
                   <Checkbox
-                    checked={selectedRows.size > 0 && selectedRows.size === filteredSubmissions.length}
+                    checked={selectedRows.size > 0 && selectedRows.size === filteredSubmissions.length && filteredSubmissions.length > 0}
                     onCheckedChange={handleSelectAll}
                     aria-label="Select all rows"
                   />

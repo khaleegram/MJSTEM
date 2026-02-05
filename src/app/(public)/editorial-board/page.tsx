@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import Image from 'next/image';
 import { EditorialBoardMember } from '@/types';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { useEffect, useState, useMemo } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -51,20 +51,19 @@ export default function EditorialBoardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchMembers = async () => {
-        setLoading(true);
-        try {
-            const q = query(collection(db, 'editorialBoard'), orderBy('order'));
-            const querySnapshot = await getDocs(q);
-            const membersList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as EditorialBoardMember));
-            setMembers(membersList);
-        } catch (error) {
-            console.error("Error fetching editorial board members: ", error);
-        } finally {
-            setLoading(false);
-        }
-    };
-    fetchMembers();
+    setLoading(true);
+    const q = query(collection(db, 'editorialBoard'), orderBy('order'));
+    
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const membersList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as EditorialBoardMember));
+        setMembers(membersList);
+        setLoading(false);
+    }, (error) => {
+        console.error("Error fetching editorial board members: ", error);
+        setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const boardSections = useMemo(() => {

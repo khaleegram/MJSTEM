@@ -1,10 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, query, getDocs, orderBy } from 'firebase/firestore';
+import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Volume, Article } from '@/types';
-import { PublicHeader } from '@/components/public-header';
 import {
   Accordion,
   AccordionContent,
@@ -20,21 +19,19 @@ export default function ArchivePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchVolumes = async () => {
-      setLoading(true);
-      try {
-        const volsQuery = query(collection(db, 'volumes'), orderBy('year', 'desc'));
-        const volsSnapshot = await getDocs(volsQuery);
-        const vols: Volume[] = volsSnapshot.docs.map((doc) => ({
+    setLoading(true);
+    const volsQuery = query(collection(db, 'volumes'), orderBy('year', 'desc'));
+    
+    const unsubscribe = onSnapshot(volsQuery, (snapshot) => {
+        const vols: Volume[] = snapshot.docs.map((doc) => ({
           id: doc.id,
           ...(doc.data() as Omit<Volume, 'id'>),
-          // Ensure nested articles have all fields
           issues: doc.data().issues?.map((issue: any) => ({
             ...issue,
             articles: issue.articles?.map((article: any) => ({
               id: article.id,
               title: article.title,
-              contributors: article.contributors || [{ name: article.authorName }], // Fallback for old data
+              contributors: article.contributors || [{ name: article.authorName }],
               manuscriptUrl: article.manuscriptUrl || '',
               pageCount: article.pageCount || null,
               uniqueId: article.uniqueId,
@@ -42,14 +39,13 @@ export default function ArchivePage() {
           })) || [],
         }));
         setVolumes(vols);
-      } catch (error) {
-        console.error('Error fetching volumes: ', error);
-        // Handle error display if needed
-      } finally {
         setLoading(false);
-      }
-    };
-    fetchVolumes();
+    }, (error) => {
+        console.error('Error fetching volumes: ', error);
+        setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   return (
@@ -88,7 +84,7 @@ export default function ArchivePage() {
                                                   <li key={article.id} className="flex items-start justify-between gap-3 p-4 border rounded-lg">
                                                       <div className="flex items-start gap-3 flex-1 min-w-0">
                                                           <FileText className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
-                                                          <div>
+                                                          <div className="min-w-0">
                                                               <h4 className="font-semibold text-foreground break-words">
                                                                   <Link href={`/article/${article.id}`} className="hover:underline">
                                                                       {article.title}
