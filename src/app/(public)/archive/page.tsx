@@ -87,7 +87,7 @@ export default function ArchivePage() {
                                           {issue.articles && issue.articles.length > 0 ? (
                                               issue.articles.map(article => (
                                                   <li key={article.id} className="flex items-start justify-between gap-3 p-4 border rounded-lg">
-                                                      <div className="flex items-start gap-3">
+                                                      <div className="flex items-start gap-3 flex-1 min-w-0">
                                                           <FileText className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
                                                           <div>
                                                               <h4 className="font-semibold text-foreground break-words">
@@ -102,7 +102,7 @@ export default function ArchivePage() {
                                                       </div>
                                                       <div className='text-right'>
                                                             <Link href={article.manuscriptUrl || '#'} target='_blank' rel='noopener noreferrer' className='text-sm text-primary hover:underline'>
-                                                              PDF
+                                                              DOCX
                                                           </Link>
                                                           {article.pageCount && <p className="text-sm text-muted-foreground">{article.pageCount} Pages</p>}
                                                       </div>

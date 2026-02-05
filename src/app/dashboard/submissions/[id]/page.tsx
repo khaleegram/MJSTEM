@@ -846,7 +846,7 @@ export default function SubmissionDetailPage() {
 
   return (
     <div className="grid gap-8 lg:grid-cols-3">
-      <div className="lg:col-span-2 space-y-8">
+      <div className="lg:col-span-2 space-y-8 min-w-0">
         <Card>
             {isAuthorEditing ? (
                  <CardContent className="p-6">

@@ -132,7 +132,7 @@ export default async function ArticlePage({ params }: { params: { id: string } }
   return (
     <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
       <div className="grid lg:grid-cols-4 gap-12">
-          <article className="lg:col-span-3">
+          <article className="lg:col-span-3 min-w-0">
               <Card>
                   <CardHeader>
                       {submission.uniqueId && (
@@ -159,7 +159,7 @@ export default async function ArticlePage({ params }: { params: { id: string } }
                           <Button asChild>
                               <Link href={submission.manuscriptUrl} target="_blank" rel="noopener noreferrer">
                                   <Download className="mr-2 h-4 w-4" />
-                                  Download PDF
+                                  Download DOCX
                               </Link>
                           </Button>
                           <CitationExporter submission={submission} />
@@ -202,7 +202,7 @@ export default async function ArticlePage({ params }: { params: { id: string } }
                               {relatedArticles.map(article => (
                                   <li key={article.id}>
                                       <Link href={`/article/${article.id}`} className="group">
-                                          <h4 className="font-semibold text-foreground group-hover:underline group-hover:text-primary transition-colors">
+                                          <h4 className="font-semibold text-foreground group-hover:underline group-hover:text-primary transition-colors break-words">
                                               {article.title}
                                           </h4>
                                           <p className="text-sm text-muted-foreground">

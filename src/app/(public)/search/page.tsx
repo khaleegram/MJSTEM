@@ -77,7 +77,7 @@ function SearchResultsPage() {
                                             <p className="text-sm text-muted-foreground mt-1">
                                                 By {article.contributors?.map(c => c.name).join(', ') || article.author.name}
                                             </p>
-                                             <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{article.abstract}</p>
+                                             <p className="text-sm text-muted-foreground mt-2 line-clamp-2 break-words">{article.abstract}</p>
                                         </Link>
                                     </li>
                                 ))}
