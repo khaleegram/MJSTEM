@@ -41,7 +41,10 @@ export function PublicFooter() {
                             MJSTEM
                         </h2>
                     </Link>
-                    <p className="text-sm text-muted-foreground">EISSN: 3121-9292</p>
+                    <div className="text-sm text-muted-foreground space-y-1">
+                        <p>EISSN: 3121-9292</p>
+                        <p>ISSN (Print): 3121-6552</p>
+                    </div>
                 </div>
                 <div className="md:col-span-4">
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-8">

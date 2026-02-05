@@ -42,7 +42,7 @@ export async function generateMetadata(
       title: submission.title,
       description: submission.abstract,
       type: 'article',
-      publishedTime: submission.submittedAt.toISOString(),
+      publishedTime: new Date(submission.submittedAt).toISOString(),
       authors: submission.contributors?.map(c => c.name || ''),
       images: [...previousImages],
     },
@@ -50,7 +50,7 @@ export async function generateMetadata(
     other: {
         'citation_title': submission.title,
         'citation_author': submission.contributors?.map(c => c.name).join(', ') || '',
-        'citation_publication_date': format(submission.submittedAt, 'yyyy/MM/dd'),
+        'citation_publication_date': format(new Date(submission.submittedAt), 'yyyy/MM/dd'),
         'citation_journal_title': 'Multidisciplinary Journal of Science, Technology, Education and Management (MJSTEM)',
         'citation_pdf_url': submission.manuscriptUrl,
         'citation_keywords': submission.keywords,
@@ -140,11 +140,6 @@ export default async function ArticlePage({ params }: { params: { id: string } }
           <article className="lg:col-span-3 min-w-0">
               <Card>
                   <CardHeader>
-                      {submission.uniqueId && (
-                          <Badge variant="secondary" className="w-fit mb-4">
-                              DOI: {submission.uniqueId}
-                          </Badge>
-                      )}
                       <CardTitle className="text-3xl lg:text-4xl font-headline font-bold text-foreground break-words">
                           {submission.title}
                       </CardTitle>
@@ -160,8 +155,14 @@ export default async function ArticlePage({ params }: { params: { id: string } }
                       </div>
                   </CardHeader>
                   <CardContent>
-                      <div className="my-6 flex items-center gap-2">
+                      <div className="my-6 flex flex-wrap items-center gap-2">
                           <Button asChild>
+                              <Link href={`https://docs.google.com/gview?url=${submission.manuscriptUrl}&embedded=true`} target="_blank" rel="noopener noreferrer">
+                                  <BookText className="mr-2 h-4 w-4" />
+                                  Read Online
+                              </Link>
+                          </Button>
+                           <Button asChild variant="outline">
                               <Link href={submission.manuscriptUrl} target="_blank" rel="noopener noreferrer">
                                   <Download className="mr-2 h-4 w-4" />
                                   Download DOCX
@@ -207,12 +208,14 @@ export default async function ArticlePage({ params }: { params: { id: string } }
                               {relatedArticles.map(article => (
                                   <li key={article.id}>
                                       <Link href={`/article/${article.id}`} className="group">
-                                          <h4 className="font-semibold text-foreground group-hover:underline group-hover:text-primary transition-colors break-words">
-                                              {article.title}
-                                          </h4>
-                                          <p className="text-sm text-muted-foreground">
-                                              By {article.contributors?.map(c => c.name).join(', ') || article.authorName}
-                                          </p>
+                                          <div className="min-w-0">
+                                            <h4 className="font-semibold text-foreground group-hover:underline group-hover:text-primary transition-colors break-words">
+                                                {article.title}
+                                            </h4>
+                                            <p className="text-sm text-muted-foreground">
+                                                By {article.contributors?.map(c => c.name).join(', ') || article.authorName}
+                                            </p>
+                                          </div>
                                       </Link>
                                   </li>
                               ))}
