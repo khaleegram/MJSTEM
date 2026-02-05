@@ -61,10 +61,15 @@ const getNextSubmissionId = async (): Promise<string> => {
 
         const paddedCount = newCount.toString().padStart(3, '0');
         return `MJSTEM-S-${year}-${paddedCount}`;
-    } catch (error) {
-        console.error("Error generating submission ID:", error);
-        // Throw a new error to be caught by the calling function
-        throw new Error("Could not generate a submission ID. Please try again.");
+    } catch (serverError) {
+        const permissionError = new FirestorePermissionError({
+            path: counterRef.path,
+            operation: 'write',
+            requestResourceData: { info: "Failed to get new submission ID." },
+        });
+        errorEmitter.emit('permission-error', permissionError);
+        // Throw a new error to be caught by the calling function's UI
+        throw new Error("Could not generate a submission ID. Please check your connection and try again.");
     }
 };
 
