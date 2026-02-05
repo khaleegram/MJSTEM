@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -203,7 +204,7 @@ export default function NewSubmissionPage() {
         manuscriptUrl: values.manuscriptUrl,
         supplementaryFileUrl: values.supplementaryFileUrl || '',
         contributors: values.contributors,
-        pageCount: values.pageCount,
+        pageCount: values.pageCount || null,
         reviewers: [],
         reviewerIds: [],
         uniqueId: uniqueId,

@@ -53,6 +53,7 @@ const importSchema = z.object({
   })).optional(),
   status: z.enum(statusOptions),
   originalSubmissionDate: z.date().optional(),
+  pageCount: z.number().optional(),
 });
 
 export default function ImportSubmissionPage() {
@@ -115,6 +116,7 @@ export default function ImportSubmissionPage() {
         keywords: values.keywords || '',
         manuscriptUrl: values.manuscriptUrl || '',
         contributors: values.contributors || [],
+        pageCount: values.pageCount || null,
         reviewers: [],
         reviewerIds: [],
         originalSubmissionDate: values.originalSubmissionDate || null,
