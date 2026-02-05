@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
@@ -32,6 +33,8 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  SelectGroup,
+  SelectLabel,
 } from "@/components/ui/select"
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -278,13 +281,14 @@ const AddToIssueDialog = ({ article, volumes, onActionComplete }: { article: Sub
                         </SelectTrigger>
                         <SelectContent>
                             {volumes.map(volume => (
-                                <optgroup label={volume.title} key={volume.id}>
+                                <SelectGroup key={volume.id}>
+                                    <SelectLabel>{volume.title}</SelectLabel>
                                     {volume.issues?.map(issue => (
                                         <SelectItem key={`${volume.id}/${issue.id}`} value={`${volume.id}/${issue.id}`}>
                                             {issue.title}
                                         </SelectItem>
                                     ))}
-                                </optgroup>
+                                </SelectGroup>
                             ))}
                         </SelectContent>
                     </Select>
