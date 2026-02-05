@@ -52,6 +52,7 @@ import {
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { sendReviewerAssignmentEmail } from '@/ai/flows/send-reviewer-assignment-email';
 import { sendDecisionEmail } from '@/ai/flows/send-decision-email';
+import { Label } from '@/components/ui/label';
 
 
 async function getNextSubmissionId(): Promise<string> {
@@ -883,9 +884,7 @@ export default function SubmissionDetailPage() {
                 </CardHeader>
                 <CardContent>
                     <h3 className="font-semibold mb-2 font-headline">Abstract</h3>
-                    <p className="text-muted-foreground leading-relaxed break-words">
-                    {submission.abstract}
-                    </p>
+                    <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap break-words">{submission.abstract}</p>
                     <Separator className="my-6" />
                     <h3 className="font-semibold mb-2 font-headline">Keywords</h3>
                     <div className="flex flex-wrap gap-2">
