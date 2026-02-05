@@ -73,7 +73,7 @@ function SearchResultsPage() {
                                 {filteredArticles.map(article => (
                                     <li key={article.id} className="p-4 border rounded-lg hover:bg-muted/50">
                                         <Link href={`/article/${article.id}`}>
-                                            <h3 className="font-headline font-semibold text-lg text-primary">{article.title}</h3>
+                                            <h3 className="font-headline font-semibold text-lg text-primary break-words">{article.title}</h3>
                                             <p className="text-sm text-muted-foreground mt-1">
                                                 By {article.contributors?.map(c => c.name).join(', ') || article.author.name}
                                             </p>

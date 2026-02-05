@@ -186,7 +186,7 @@ export function HomePageClient({ latestIssue, featuredArticles, journalInfo, ind
                 {featuredArticles.map((article) => (
                     <li key={article.id} className="p-4 rounded-lg border bg-card hover:border-primary/50 hover:shadow-lg transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                       <div className="flex-1">
-                          <h3 className="font-headline font-semibold text-lg text-foreground">{article.title}</h3>
+                          <h3 className="font-headline font-semibold text-lg text-foreground break-words">{article.title}</h3>
                             <p className="text-sm text-muted-foreground mt-1">
                               By {article.contributors?.map(c => c.name).join(', ') || article.authorName}
                           </p>

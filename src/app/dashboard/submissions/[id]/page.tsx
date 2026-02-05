@@ -869,7 +869,7 @@ export default function SubmissionDetailPage() {
                         <p className="text-sm font-mono text-muted-foreground">{submission.uniqueId}</p>
                     )}
                     </div>
-                    <CardTitle className="font-headline text-3xl">{submission.title}</CardTitle>
+                    <CardTitle className="font-headline text-3xl break-words">{submission.title}</CardTitle>
                     <div className="text-sm text-muted-foreground flex items-center flex-wrap gap-x-4 gap-y-2 pt-2">
                         <div className="flex items-center gap-2">
                             <User className="h-4 w-4" />

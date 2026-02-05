@@ -140,7 +140,7 @@ export default async function ArticlePage({ params }: { params: { id: string } }
                               DOI: {submission.uniqueId}
                           </Badge>
                       )}
-                      <CardTitle className="text-3xl lg:text-4xl font-headline font-bold text-foreground">
+                      <CardTitle className="text-3xl lg:text-4xl font-headline font-bold text-foreground break-words">
                           {submission.title}
                       </CardTitle>
                       <div className="mt-4 text-muted-foreground text-sm space-y-2">
@@ -168,7 +168,7 @@ export default async function ArticlePage({ params }: { params: { id: string } }
                       <Separator className="my-6" />
                       
                       <h2 className="text-2xl font-headline font-bold mb-4">Abstract</h2>
-                      <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">{submission.abstract}</p>
+                      <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap break-words">{submission.abstract}</p>
 
                         <Separator className="my-6" />
 

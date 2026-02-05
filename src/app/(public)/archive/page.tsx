@@ -90,7 +90,7 @@ export default function ArchivePage() {
                                                       <div className="flex items-start gap-3">
                                                           <FileText className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
                                                           <div>
-                                                              <h4 className="font-semibold text-foreground">
+                                                              <h4 className="font-semibold text-foreground break-words">
                                                                   <Link href={`/article/${article.id}`} className="hover:underline">
                                                                       {article.title}
                                                                   </Link>
