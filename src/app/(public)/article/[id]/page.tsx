@@ -1,4 +1,3 @@
-
 import { doc, getDoc, collection, query, where, limit, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { notFound } from 'next/navigation';
