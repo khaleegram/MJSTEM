@@ -68,10 +68,12 @@ async function getSubmission(id: string): Promise<Submission | null> {
             const data = docSnap.data();
             // Only return if it's an accepted article
             if (data.status === 'Accepted') {
+                const { submittedAt, originalSubmissionDate, ...rest } = data;
                 return {
                     id: docSnap.id,
-                    ...data,
-                    submittedAt: data.submittedAt.toDate(),
+                    ...rest,
+                    submittedAt: submittedAt.toDate(),
+                    originalSubmissionDate: originalSubmissionDate ? originalSubmissionDate.toDate() : null,
                 } as Submission;
             }
         }
@@ -128,6 +130,10 @@ export default async function ArticlePage({ params }: { params: { id: string } }
   
   const relatedArticles = submission ? await getRelatedArticles(submission.keywords, submission.id) : [];
 
+  // Create a plain, serializable object to pass to Client Components.
+  // This avoids the "Only plain objects can be passed" error with Date objects.
+  const serializableSubmission = JSON.parse(JSON.stringify(submission));
+
   return (
     <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
       <div className="grid lg:grid-cols-4 gap-12">
@@ -161,7 +167,7 @@ export default async function ArticlePage({ params }: { params: { id: string } }
                                   Download DOCX
                               </Link>
                           </Button>
-                          <CitationExporter submission={submission} />
+                          <CitationExporter submission={serializableSubmission} />
                       </div>
 
                       <Separator className="my-6" />

@@ -21,7 +21,7 @@ export function CitationExporter({ submission }: CitationExporterProps) {
 
   const generateBibtex = () => {
     const authors = submission.contributors?.map(c => c.name).join(' and ') || submission.author.name;
-    const year = format(submission.submittedAt, 'yyyy');
+    const year = format(new Date(submission.submittedAt), 'yyyy');
 
     const bibtex = `@article{mjstem_${submission.uniqueId || submission.id},
   author    = {${authors}},
@@ -36,7 +36,7 @@ export function CitationExporter({ submission }: CitationExporterProps) {
 
   const generateRis = () => {
     const authors = submission.contributors?.map(c => `AU  - ${c.name}`).join('\n') || `AU  - ${submission.author.name}`;
-    const year = format(submission.submittedAt, 'yyyy');
+    const year = format(new Date(submission.submittedAt), 'yyyy');
 
     const ris = `TY  - JOUR
 ${authors}
