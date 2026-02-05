@@ -44,7 +44,6 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { FileUploader } from '@/components/file-uploader';
 import { generateNotification } from '@/ai/flows/generate-notification';
 import { Input } from '@/components/ui/input';
-import { PDFDocument } from 'pdf-lib';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -248,8 +247,8 @@ const ReviewSubmissionForm = ({ submission, onReviewSubmit }: { submission: Subm
                                 setAttachmentName(name || 'attachment');
                             }}
                             onUploadError={(err) => toast({ title: "Upload Error", description: err.message, variant: "destructive"})}
+                            description="Upload your annotated manuscript (.doc or .docx)."
                         />
-                        <p className="text-xs text-muted-foreground">You can optionally upload a version of the manuscript with your comments.</p>
                     </div>
                 </CardContent>
                 <CardFooter>
@@ -266,31 +265,13 @@ const AuthorRevisionForm = ({ submission, onRevisionSubmit }: { submission: Subm
     const { toast } = useToast();
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const [fileUrl, setFileUrl] = React.useState<string | null>(null);
-    const [pageCount, setPageCount] = React.useState<number>(0);
     const { userProfile } = useAuth();
 
 
     const handleFileUploadComplete = React.useCallback(async (url: string) => {
         if (!url) return;
         setFileUrl(url);
-
-        if (url.toLowerCase().endsWith('.pdf')) {
-          try {
-            const response = await fetch(`https://cors-anywhere.herokuapp.com/${url}`);
-            if (!response.ok) throw new Error(`Failed to fetch PDF with status: ${response.status}`);
-            const fileBytes = await response.arrayBuffer();
-            const pdfDoc = await PDFDocument.load(fileBytes);
-            setPageCount(pdfDoc.getPageCount());
-          } catch (error) {
-            console.error("Failed to count PDF pages:", error);
-            toast({
-              title: "Could not count pages",
-              description: "The file might be corrupted or not a valid PDF.",
-              variant: "destructive"
-            })
-          }
-        }
-      }, [toast]);
+      }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -310,7 +291,6 @@ const AuthorRevisionForm = ({ submission, onRevisionSubmit }: { submission: Subm
             manuscriptUrl: fileUrl,
             status: newStatus,
             revision: newRevision,
-            pageCount: pageCount,
         };
 
         if (!submission.originalManuscriptUrl) {
@@ -363,6 +343,7 @@ const AuthorRevisionForm = ({ submission, onRevisionSubmit }: { submission: Subm
                         endpoint="documentUploader" 
                         onUploadComplete={handleFileUploadComplete} 
                         onUploadError={(err) => toast({ title: "Upload Error", description: err.message, variant: "destructive"})}
+                        description="Upload your revised manuscript (.doc or .docx)."
                     />
                 </CardContent>
                 <CardFooter>
@@ -1015,6 +996,7 @@ export default function SubmissionDetailPage() {
                         endpoint="documentUploader"
                         onUploadComplete={handleEditorFileUpload}
                         onUploadError={(err) => toast({ title: "Upload Failed", description: err.message, variant: "destructive"})}
+                        description="Upload files for the author (.doc, .docx)."
                     />
                 </CardContent>
             </Card>

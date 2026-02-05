@@ -138,6 +138,7 @@ const MemberForm = ({ member, onSave, onCancel, allUsers }: { member?: Editorial
                             endpoint="imageUploader"
                             onUploadComplete={(url) => field.onChange(url)}
                             onUploadError={(err) => toast({title: "Upload Error", description: err.message, variant: "destructive"})}
+                            description="Upload a profile photo for the member."
                         />
                     </FormControl>
                     <FormMessage />

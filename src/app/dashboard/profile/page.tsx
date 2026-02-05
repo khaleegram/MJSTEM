@@ -177,6 +177,7 @@ export default function ProfilePage() {
                                 endpoint="imageUploader"
                                 onUploadComplete={(url) => field.onChange(url)}
                                 onUploadError={(error) => toast({ title: 'Upload Failed', description: error.message, variant: 'destructive' })}
+                                description="Upload a profile photo (PNG, JPG)."
                             />
                         </FormControl>
                       </div>

@@ -35,7 +35,6 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
-import { PDFDocument } from 'pdf-lib';
 
 const statusOptions: SubmissionStatus[] = [
     'Submitted', 'Under Initial Review', 'Under Peer Review', 
@@ -54,7 +53,6 @@ const importSchema = z.object({
   })).optional(),
   status: z.enum(statusOptions),
   originalSubmissionDate: z.date().optional(),
-  pageCount: z.number().optional(),
 });
 
 export default function ImportSubmissionPage() {
@@ -72,7 +70,6 @@ export default function ImportSubmissionPage() {
       contributors: [{ name: '', email: '', institution: '', isPrimaryContact: true, role: 'Author' }],
       manuscriptUrl: '',
       status: 'Submitted',
-      pageCount: 0,
     },
   });
 
@@ -90,35 +87,9 @@ export default function ImportSubmissionPage() {
     });
   }
 
-  const handleFileUploadComplete = useCallback(async (url: string) => {
+  const handleFileUploadComplete = useCallback((url: string) => {
     form.setValue('manuscriptUrl', url);
-    if (!url || !url.toLowerCase().endsWith('.pdf')) {
-        form.setValue('pageCount', 0);
-        return;
-    }
-  
-    try {
-      // Using a CORS proxy to fetch the file if direct fetch fails
-      const response = await fetch(`https://cors-anywhere.herokuapp.com/${url}`);
-      if (!response.ok) throw new Error(`CORS proxy failed: ${response.statusText}`);
-      
-      const fileBytes = await response.arrayBuffer();
-      const pdfDoc = await PDFDocument.load(fileBytes);
-      form.setValue('pageCount', pdfDoc.getPageCount());
-       toast({
-        title: "PDF Analyzed",
-        description: `Successfully counted ${pdfDoc.getPageCount()} pages.`,
-      });
-    } catch (error) {
-      console.error("Failed to count PDF pages:", error);
-      toast({
-        title: "Could Not Count Pages",
-        description: "Could not automatically count pages. You can set it manually if needed.",
-        variant: "destructive",
-      });
-      form.setValue('pageCount', 0);
-    }
-  }, [form, toast]);
+  }, [form]);
 
 
   async function onSubmit(values: z.infer<typeof importSchema>) {
@@ -147,7 +118,7 @@ export default function ImportSubmissionPage() {
         reviewers: [],
         reviewerIds: [],
         originalSubmissionDate: values.originalSubmissionDate || null,
-        pageCount: values.pageCount || 0,
+        revision: 0,
     };
     
     const submissionsCollectionRef = collection(db, 'submissions');
@@ -205,7 +176,7 @@ export default function ImportSubmissionPage() {
                         <FormItem><FormLabel>Keywords</FormLabel><FormControl><Input placeholder="e.g., Quantum Physics, AI, Climate Change" {...field} disabled={isSubmitting}/></FormControl><FormDescription>Separate keywords with commas.</FormDescription><FormMessage /></FormItem>
                     )}/>
                     <FormField control={form.control} name="manuscriptUrl" render={({ field }) => (
-                        <FormItem><FormLabel>Manuscript File</FormLabel><FormControl><FileUploader endpoint="documentUploader" onUploadComplete={handleFileUploadComplete} onUploadError={(error) => toast({title: 'Upload Failed', description: error.message, variant: 'destructive'})}/></FormControl><FormDescription>Upload the .docx or .pdf file. Page count will be determined automatically for PDFs.</FormDescription><FormMessage /></FormItem>
+                        <FormItem><FormLabel>Manuscript File</FormLabel><FormControl><FileUploader endpoint="documentUploader" onUploadComplete={handleFileUploadComplete} onUploadError={(error) => toast({title: 'Upload Failed', description: error.message, variant: 'destructive'})} description="Upload the manuscript file (.doc, .docx)."/></FormControl><FormMessage /></FormItem>
                     )}/>
                 </CardContent>
             </Card>

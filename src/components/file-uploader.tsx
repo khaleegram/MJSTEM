@@ -16,9 +16,10 @@ interface FileUploaderProps {
   onUploadComplete: (url: string, name?: string) => void;
   onUploadError: (error: Error) => void;
   value?: string;
+  description?: string;
 }
 
-export function FileUploader({ endpoint, onUploadComplete, onUploadError, value }: FileUploaderProps) {
+export function FileUploader({ endpoint, onUploadComplete, onUploadError, value, description }: FileUploaderProps) {
   const { user } = useAuth();
   const [uploadProgress, setUploadProgress] = useState(0);
   const [localValue, setLocalValue] = useState(value);
@@ -66,7 +67,8 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, value 
 
   const isImageUploader = endpoint === 'imageUploader';
   const Icon = isImageUploader ? ImageIcon : FileIcon;
-  const description = isImageUploader ? 'PNG, JPG, GIF up to 4MB' : 'PDF, DOCX up to 16MB.';
+  const finalDescription = description || (isImageUploader ? 'PNG, JPG, GIF up to 4MB' : 'Allowed file types and sizes.');
+
 
   if (isUploading) {
     return (
@@ -116,7 +118,7 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, value 
       <div className="flex flex-col items-center gap-2 text-muted-foreground">
         <UploadCloud className={cn('h-10 w-10', isDragActive && 'text-primary')} />
         <p className="font-medium">{isDragActive ? 'Drop the file here...' : 'Drag & drop file or click to select'}</p>
-        <p className="text-xs">{description}</p>
+        <p className="text-xs">{finalDescription}</p>
       </div>
     </div>
   );

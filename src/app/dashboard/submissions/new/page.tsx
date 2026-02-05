@@ -32,7 +32,6 @@ import { FirestorePermissionError } from '@/firebase/errors';
 import { logSubmissionEvent } from '@/ai/flows/log-submission-event';
 import Link from 'next/link';
 import { generateNotification } from '@/ai/flows/generate-notification';
-import { PDFDocument } from 'pdf-lib';
 import { sendConfirmationEmail } from '@/ai/flows/send-confirmation-email';
 import { getNextSubmissionIdAction } from './actions';
 import { Submission } from '@/types';
@@ -45,7 +44,6 @@ const NewSubmissionSchema = z.object({
   manuscriptUrl: z.string().url('Manuscript file is required.'),
   supplementaryFileUrl: z.string().url().optional().or(z.literal('')),
   contributors: z.array(ContributorSchema).min(1, 'At least one contributor is required.'),
-  pageCount: z.number().optional(),
 });
 
 const formSchema = NewSubmissionSchema;
@@ -81,7 +79,6 @@ export default function NewSubmissionPage() {
       manuscriptUrl: '',
       supplementaryFileUrl: '',
       contributors: [],
-      pageCount: 0,
     },
   });
 
@@ -113,35 +110,9 @@ export default function NewSubmissionPage() {
     });
   }
 
-  const handleFileUploadComplete = useCallback(async (url: string) => {
+  const handleFileUploadComplete = useCallback((url: string) => {
     form.setValue('manuscriptUrl', url);
-    if (!url || !url.toLowerCase().endsWith('.pdf')) {
-        form.setValue('pageCount', 0);
-        return;
-    }
-  
-    try {
-      // Using a CORS proxy to fetch the file if direct fetch fails
-      const response = await fetch(`https://cors-anywhere.herokuapp.com/${url}`);
-      if (!response.ok) throw new Error(`CORS proxy failed: ${response.statusText}`);
-      
-      const fileBytes = await response.arrayBuffer();
-      const pdfDoc = await PDFDocument.load(fileBytes);
-      form.setValue('pageCount', pdfDoc.getPageCount());
-      toast({
-        title: "PDF Analyzed",
-        description: `Successfully counted ${pdfDoc.getPageCount()} pages.`,
-      });
-    } catch (error) {
-      console.error("Failed to count PDF pages:", error);
-      toast({
-        title: "Could Not Count Pages",
-        description: "Could not automatically count pages. This is optional and can be set later.",
-        variant: "destructive",
-      });
-      form.setValue('pageCount', 0);
-    }
-  }, [form, toast]);
+  }, [form]);
 
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
@@ -198,7 +169,6 @@ export default function NewSubmissionPage() {
         contributors: values.contributors,
         reviewers: [],
         reviewerIds: [],
-        pageCount: values.pageCount || 0,
         uniqueId: uniqueId,
         revision: 0,
     };
@@ -361,9 +331,9 @@ export default function NewSubmissionPage() {
                                                 variant: 'destructive'
                                             })
                                         }}
+                                        description="Upload your manuscript in Word format (.doc or .docx)."
                                     />
                                 </FormControl>
-                                <FormDescription>Upload your manuscript in Word format (.doc or .docx).</FormDescription>
                                 <FormMessage />
                             </FormItem>
                         )}
@@ -389,9 +359,9 @@ export default function NewSubmissionPage() {
                                                 variant: 'destructive'
                                             })
                                         }}
+                                        description="You can attach a single supplementary file (.doc, .docx)."
                                     />
                                 </FormControl>
-                                <FormDescription>You can attach a single supplementary file if needed (e.g., dataset, appendix).</FormDescription>
                                 <FormMessage />
                             </FormItem>
                         )}

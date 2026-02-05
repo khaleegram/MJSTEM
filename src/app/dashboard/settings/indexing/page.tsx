@@ -74,6 +74,7 @@ const ServiceForm = ({ service, onSave, onCancel }: { service?: IndexingService,
                         value={field.value}
                         onUploadComplete={(url) => field.onChange(url)}
                         onUploadError={(err) => toast({title: "Upload Error", description: err.message, variant: "destructive"})}
+                        description="Upload the service's logo (PNG, JPG)."
                     />
                 </FormControl>
                 <FormMessage />

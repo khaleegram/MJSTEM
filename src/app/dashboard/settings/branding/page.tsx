@@ -117,6 +117,7 @@ export default function BrandingSettingsPage() {
                             value={field.value}
                             onUploadComplete={(url) => field.onChange(url)}
                             onUploadError={(error) => toast({ title: 'Upload Failed', description: error.message, variant: 'destructive' })}
+                            description="Recommended size: 128x128px. Max 4MB."
                           />
                         </FormControl>
                       <FormMessage />

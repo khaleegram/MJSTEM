@@ -131,6 +131,7 @@ export default function JournalInfoSettingsPage() {
                             value={field.value}
                             onUploadComplete={(url) => field.onChange(url)}
                             onUploadError={(error) => toast({ title: 'Upload Failed', description: error.message, variant: 'destructive' })}
+                            description="Upload the cover image (PNG, JPG)."
                           />
                         </FormControl>
                       <FormMessage />
@@ -162,6 +163,7 @@ export default function JournalInfoSettingsPage() {
                           value={field.value}
                           onUploadComplete={(url) => field.onChange(url)}
                           onUploadError={(error) => toast({ title: 'Upload Failed', description: error.message, variant: 'destructive' })}
+                          description="Upload the submission template (.doc, .docx)."
                         />
                       </FormControl>
                       <FormMessage />
