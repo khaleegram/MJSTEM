@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useForm, useFieldArray } from 'react-hook-form';
@@ -71,6 +70,7 @@ export default function ImportSubmissionPage() {
       contributors: [{ name: '', email: '', institution: '', isPrimaryContact: true, role: 'Author' }],
       manuscriptUrl: '',
       status: 'Submitted',
+      pageCount: undefined,
     },
   });
 
@@ -252,6 +252,14 @@ export default function ImportSubmissionPage() {
                                 <Calendar mode="single" selected={field.value} onSelect={field.onChange} disabled={(date) => date > new Date() || date < new Date("1900-01-01")} initialFocus />
                             </PopoverContent></Popover>
                         <FormDescription>The date the paper was originally received.</FormDescription><FormMessage /></FormItem>
+                    )}/>
+                    <FormField control={form.control} name="pageCount" render={({ field }) => (
+                        <FormItem><FormLabel>Page Count (Optional)</FormLabel>
+                            <FormControl>
+                                <Input type="number" {...field} onChange={event => field.onChange(+event.target.value)} disabled={isSubmitting} placeholder="e.g., 15" />
+                            </FormControl>
+                            <FormDescription>The total number of pages in the manuscript.</FormDescription>
+                        <FormMessage /></FormItem>
                     )}/>
                 </CardContent>
             </Card>

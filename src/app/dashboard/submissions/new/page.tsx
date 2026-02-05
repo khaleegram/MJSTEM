@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -136,7 +135,8 @@ export default function NewSubmissionPage() {
 
   const handleFileUploadComplete = useCallback(async (url: string) => {
     form.setValue('manuscriptUrl', url);
-    if (url.endsWith('.pdf')) {
+    // Try to count pages if it's a PDF
+    if (url.endsWith('.pdf') || url.includes('.pdf?')) {
       try {
         const existingPdfBytes = await fetch(url).then(res => res.arrayBuffer());
         const pdfDoc = await PDFDocument.load(existingPdfBytes);
@@ -145,10 +145,12 @@ export default function NewSubmissionPage() {
         toast({ title: 'Page Count Detected', description: `Detected ${count} pages in the PDF.` });
       } catch (e) {
         console.error("Failed to count PDF pages", e);
-        toast({ title: 'Could not count pages', description: 'Could not automatically count pages in the PDF.', variant: 'destructive' });
+        // Don't fail the whole submission, just inform the user.
+        toast({ title: 'Could not count pages', description: 'Could not automatically count pages in the PDF. This can be added later by an editor.', variant: 'default' });
       }
     } else {
-        form.setValue('pageCount', undefined); // Clear page count if not a PDF
+        // Clear page count if not a PDF
+        form.setValue('pageCount', undefined);
     }
   }, [form, toast]);
 
