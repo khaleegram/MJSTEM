@@ -5,7 +5,7 @@ import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useRouter } from 'next/navigation';
-import { collection, addDoc, serverTimestamp, getDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, getDoc, doc, runTransaction, Timestamp } from 'firebase/firestore';
 import { PDFDocument } from 'pdf-lib';
 
 import { Button } from '@/components/ui/button';
@@ -33,11 +33,42 @@ import { logSubmissionEvent } from '@/ai/flows/log-submission-event';
 import Link from 'next/link';
 import { generateNotification } from '@/ai/flows/generate-notification';
 import { sendConfirmationEmail } from '@/ai/flows/send-confirmation-email';
-import { getNextSubmissionIdAction } from './actions';
 import { Submission } from '@/types';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 const formSchema = NewSubmissionSchema;
+
+
+const getNextSubmissionId = async (): Promise<string> => {
+    const counterRef = doc(db, 'settings', 'submissionCounter');
+    const year = new Date().getFullYear().toString().slice(-2); // e.g., 24
+
+    try {
+        const newCount = await runTransaction(db, async (transaction) => {
+            const counterDoc = await transaction.get(counterRef);
+            if (!counterDoc.exists() || !counterDoc.data().counts || !counterDoc.data().counts[year]) {
+                const initialCounts = counterDoc.exists() ? counterDoc.data().counts || {} : {};
+                initialCounts[year] = 1;
+                transaction.set(counterRef, { counts: initialCounts }, { merge: true });
+                return 1;
+            } else {
+                const currentCount = counterDoc.data().counts[year];
+                const newCount = currentCount + 1;
+                const newCounts = { ...counterDoc.data().counts, [year]: newCount };
+                transaction.update(counterRef, { counts: newCounts });
+                return newCount;
+            }
+        });
+
+        const paddedCount = newCount.toString().padStart(3, '0');
+        return `MJSTEM-S-${year}-${paddedCount}`;
+    } catch (error) {
+        console.error("Error generating submission ID:", error);
+        // Throw a new error to be caught by the calling function
+        throw new Error("Could not generate a submission ID. Please try again.");
+    }
+};
+
 
 export default function NewSubmissionPage() {
   const router = useRouter();
@@ -150,15 +181,14 @@ export default function NewSubmissionPage() {
     let uniqueId;
     
     try {
-        uniqueId = await getNextSubmissionIdAction();
-    } catch(serverError) {
-        console.error('ID Generation Error:', serverError);
-        const permissionError = new FirestorePermissionError({
-            path: 'settings/submissionCounter',
-            operation: 'write',
-            requestResourceData: {info: "Failed to get new submission ID."}
+        uniqueId = await getNextSubmissionId();
+    } catch(error: any) {
+        console.error('ID Generation Error:', error);
+        toast({
+            title: 'Submission Failed',
+            description: error.message || "Could not generate a submission ID. Please check your connection and try again.",
+            variant: 'destructive',
         });
-        errorEmitter.emit('permission-error', permissionError);
         setIsSubmitting(false);
         return;
     }
