@@ -12,10 +12,11 @@ import { db } from '@/lib/firebase';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { z } from 'zod';
+import { Mail } from 'lucide-react';
 
 const LogEventInputSchema = z.object({
   submissionId: z.string(),
-  eventType: z.enum(['SUBMISSION_CREATED', 'STATUS_CHANGED', 'REVIEWER_ASSIGNED', 'REVIEW_SUBMITTED']),
+  eventType: z.enum(['SUBMISSION_CREATED', 'STATUS_CHANGED', 'REVIEWER_ASSIGNED', 'REVIEW_SUBMITTED', 'REVIEWER_INVITED']),
   context: z.record(z.string()).optional().describe("Additional context for the event, like the new status or reviewer name."),
 });
 export type LogEventInput = z.infer<typeof LogEventInputSchema>;
@@ -23,7 +24,7 @@ export type LogEventInput = z.infer<typeof LogEventInputSchema>;
 
 function generateLogDetails(input: LogEventInput): { message: string, icon: string } {
     const { eventType, context = {} } = input;
-    const { actorName, status, reviewerName, authorName } = context;
+    const { actorName, status, reviewerName, authorName, reviewerEmail } = context;
 
     switch (eventType) {
         case 'SUBMISSION_CREATED':
@@ -40,6 +41,11 @@ function generateLogDetails(input: LogEventInput): { message: string, icon: stri
             return {
                 message: `Reviewer assigned: ${reviewerName || 'N/A'}.`,
                 icon: 'UserCheck',
+            };
+        case 'REVIEWER_INVITED':
+            return {
+                message: `Invited ${reviewerName || 'a new reviewer'} (${reviewerEmail}).`,
+                icon: 'Mail',
             };
         case 'REVIEW_SUBMITTED':
              return {

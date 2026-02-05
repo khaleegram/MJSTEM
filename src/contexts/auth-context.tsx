@@ -15,8 +15,8 @@ import {
   sendPasswordResetEmail,
 } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { UserProfile } from '@/types';
+import { doc, setDoc, getDoc, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
+import { UserProfile, Submission } from '@/types';
 
 
 interface AuthContextType {
@@ -50,16 +50,67 @@ const ensureUserDocument = async (user: FirebaseUser): Promise<UserProfile> => {
   if (snap.exists()) {
     return snap.data() as UserProfile;
   } else {
+    // Create the initial profile for the new user
     const newProfile: UserProfile = {
       uid: user.uid,
       email: user.email!,
       displayName: user.displayName || 'New User',
       photoURL: user.photoURL || '',
       role: 'Author', // Default role
-      specialization: '', // Default specialization
+      specialization: '',
       fcmTokens: [],
     };
     await setDoc(userRef, newProfile);
+
+    // After creating the profile, check for pending invitations
+    const invitationsRef = collection(db, 'invitations');
+    const q = query(invitationsRef, where('email', '==', user.email));
+    const invitationsSnapshot = await getDocs(q);
+
+    if (!invitationsSnapshot.empty) {
+        const batch = writeBatch(db);
+        let needsRoleUpdate = false;
+
+        for (const invitationDoc of invitationsSnapshot.docs) {
+            const invitation = invitationDoc.data();
+            const submissionRef = doc(db, 'submissions', invitation.submissionId);
+            
+            // We need to get the submission to update its internal `reviewers` array
+            const submissionSnap = await getDoc(submissionRef);
+
+            if (submissionSnap.exists()) {
+                const submissionData = submissionSnap.data() as Submission;
+                const updatedReviewers = submissionData.reviewers?.map(r => {
+                    // Find the invited reviewer placeholder and update it
+                    if (r.email === user.email && r.id === null) {
+                        needsRoleUpdate = true;
+                        return { ...r, id: user.uid, status: 'Pending' as const };
+                    }
+                    return r;
+                });
+
+                if(needsRoleUpdate) {
+                    batch.update(submissionRef, { reviewers: updatedReviewers });
+                    batch.delete(invitationDoc.ref); // Clean up the processed invitation
+                }
+            }
+        }
+        
+        if (needsRoleUpdate) {
+            // Only update role if it's the default 'Author'
+            if (newProfile.role === 'Author') {
+              batch.update(userRef, { role: 'Reviewer' });
+            }
+            await batch.commit();
+            // Refetch the profile to return the updated one with the correct role
+            const updatedSnap = await getDoc(userRef);
+            return updatedSnap.data() as UserProfile;
+        } else {
+            // If for some reason no updates were needed, just commit any deletions
+            await batch.commit();
+        }
+    }
+
     return newProfile;
   }
 };

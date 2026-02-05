@@ -4,7 +4,7 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 
@@ -22,7 +22,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { useToast } from '@/hooks/use-toast';
 import { Icons } from '@/components/ui/icons';
 import { useAuth } from '@/contexts/auth-context';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { Separator } from '@/components/ui/separator';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -34,8 +34,9 @@ const formSchema = z.object({
   password: z.string().min(6, 'Password must be at least 6 characters long.'),
 });
 
-export default function SignUpPage() {
+function SignUpFormComponent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const { signup, signInWithGoogle } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
@@ -65,7 +66,7 @@ export default function SignUpPage() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       displayName: '',
-      email: '',
+      email: searchParams.get('email') || '',
       password: '',
     },
   });
@@ -99,7 +100,8 @@ export default function SignUpPage() {
             title: 'Sign Up Successful!',
             description: "You've been successfully signed up with Google.",
         });
-        router.push('/dashboard');
+        const redirectTo = searchParams.get('redirectTo');
+        router.push(redirectTo || '/dashboard');
     } catch (error: any) {
          toast({
             title: 'Sign Up Failed',
@@ -194,4 +196,12 @@ export default function SignUpPage() {
       </Card>
     </div>
   );
+}
+
+export default function SignUpPage() {
+    return (
+        <Suspense fallback={<div>Loading...</div>}>
+            <SignUpFormComponent />
+        </Suspense>
+    )
 }

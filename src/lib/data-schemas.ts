@@ -42,9 +42,10 @@ export const UserProfileSchema = z.object({
 });
 
 export const AssignedReviewerSchema = z.object({
-  id: z.string(),
+  id: z.string().nullable(),
   name: z.string(),
-  status: z.enum(['Pending', 'Review Submitted']),
+  email: z.string().email(),
+  status: z.enum(['Pending', 'Review Submitted', 'Invited']),
 });
 
 export const SubmissionSchema = z.object({

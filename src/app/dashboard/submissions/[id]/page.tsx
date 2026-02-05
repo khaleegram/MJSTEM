@@ -15,7 +15,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { File, Calendar, User, Mail, PlusCircle, Download, BookCopy, Edit, Sparkles, UserCheck, MessageSquare, Shield, Upload, Clock, CheckCircle2, FileSearch, Info, Trash2, Paperclip } from 'lucide-react';
+import { File, Calendar, User, Mail, PlusCircle, Download, BookText, Edit, Sparkles, UserCheck, MessageSquare, Shield, Upload, Clock, CheckCircle2, FileSearch, Info, Trash2, Paperclip } from 'lucide-react';
 import { format } from 'date-fns';
 import { SubmissionStatus, Reviewer, Submission, UserProfile, Volume } from '@/types';
 import { cn } from '@/lib/utils';
@@ -55,6 +55,8 @@ import { sendDecisionEmail } from '@/ai/flows/send-decision-email';
 import { Label } from '@/components/ui/label';
 import { screenAbstract } from '@/ai/flows/screen-abstract';
 import { screenManuscript } from '@/ai/flows/screen-manuscript';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { sendReviewerInvitationEmail } from '@/ai/flows/send-reviewer-invitation-email';
 
 
 async function getNextSubmissionId(): Promise<string> {
@@ -620,6 +622,12 @@ const AIScreeningCard = ({ submission, reviewers }: { submission: Submission, re
     )
 }
 
+const inviteReviewerSchema = z.object({
+    name: z.string().min(2, 'Reviewer name is required.'),
+    email: z.string().email('A valid email is required.'),
+});
+
+
 export default function SubmissionDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [submission, setSubmission] = React.useState<Submission | null>(null);
@@ -631,6 +639,11 @@ export default function SubmissionDetailPage() {
   const [refetchTrigger, setRefetchTrigger] = React.useState(0);
   const [isAuthorEditing, setIsAuthorEditing] = React.useState(false);
   const router = useRouter();
+
+  const inviteForm = useForm<z.infer<typeof inviteReviewerSchema>>({
+    resolver: zodResolver(inviteReviewerSchema),
+    defaultValues: { name: '', email: ''},
+  });
 
 
   const isEditor = userProfile?.role === 'Editor' || userProfile?.role === 'Admin' || userProfile?.role === 'Managing Editor';
@@ -780,7 +793,7 @@ export default function SubmissionDetailPage() {
   const handleAssignReviewer = async (reviewer: UserProfile) => {
       if(!submission || !userProfile) return;
 
-      if (submission.reviewerIds?.includes(reviewer.uid)) {
+      if (submission.reviewers?.some(r => r.id === reviewer.uid)) {
           toast({
               title: "Already Assigned",
               description: `${reviewer.displayName} is already a reviewer for this manuscript.`,
@@ -796,6 +809,7 @@ export default function SubmissionDetailPage() {
       const newReviewer = {
           id: reviewer.uid,
           name: reviewer.displayName,
+          email: reviewer.email,
           status: 'Pending' as const,
       };
 
@@ -868,6 +882,75 @@ export default function SubmissionDetailPage() {
              setIsUpdating(false);
       }
   }
+
+  const handleInviteReviewer = async (values: z.infer<typeof inviteReviewerSchema>) => {
+    if(!submission || !userProfile) return;
+
+    if (submission.reviewers?.some(r => r.email === values.email)) {
+        toast({ title: "Already Invited/Assigned", description: `A reviewer with the email ${values.email} is already associated with this manuscript.`, variant: "destructive" });
+        return;
+    }
+    
+    setIsUpdating(true);
+
+    const newReviewer = {
+        id: null,
+        name: values.name,
+        email: values.email,
+        status: 'Invited' as const,
+    };
+
+    const submissionRef = doc(db, 'submissions', submission.id);
+    const invitationRef = doc(db, 'invitations', `${values.email}_${submission.id}`);
+    
+    const updateData: any = {
+        reviewers: arrayUnion(newReviewer),
+    };
+     if (submission.status === 'Submitted' || submission.status === 'Under Initial Review' || submission.status === 'With Editor') {
+        updateData.status = 'Under Peer Review';
+    }
+
+    try {
+        await runTransaction(db, async (transaction) => {
+            transaction.update(submissionRef, updateData);
+            transaction.set(invitationRef, {
+                email: values.email,
+                submissionId: submission.id,
+                submissionTitle: submission.title,
+                inviterName: userProfile.displayName,
+                createdAt: serverTimestamp(),
+            });
+        });
+
+        // Fire-and-forget background tasks
+        logSubmissionEvent({
+            submissionId: submission.id,
+            eventType: 'REVIEWER_INVITED',
+            context: { reviewerName: values.name, reviewerEmail: values.email, actorName: userProfile.displayName }
+        }).catch(e => console.error("Failed to log event:", e));
+        
+        sendReviewerInvitationEmail({
+            reviewerEmail: values.email,
+            reviewerName: values.name,
+            manuscriptTitle: submission.title,
+            submissionId: submission.id,
+        }).catch(e => console.error("Failed to send invitation email:", e));
+
+        toast({ title: "Invitation Sent", description: `${values.name} has been invited to review this manuscript.` });
+        inviteForm.reset();
+        setRefetchTrigger(prev => prev + 1);
+
+    } catch (serverError) {
+        const permissionError = new FirestorePermissionError({
+            path: `invitations or submissions/${submission.id}`,
+            operation: 'write',
+        });
+        errorEmitter.emit('permission-error', permissionError);
+    } finally {
+        setIsUpdating(false);
+    }
+  }
+
 
   const handleAssignId = async () => {
     if (!submission) return;
@@ -1028,6 +1111,11 @@ export default function SubmissionDetailPage() {
 
           <CardFooter className="flex-wrap gap-2 justify-between">
              <div className="flex-wrap gap-2 flex">
+                <Button asChild>
+                    <Link href={`https://docs.google.com/gview?url=${submission.manuscriptUrl}&embedded=true`} target="_blank" rel="noopener noreferrer">
+                        <BookText className="mr-2 h-4 w-4" /> Read Online
+                    </Link>
+                </Button>
                 {submission.originalManuscriptUrl && submission.manuscriptUrl && (
                     <>
                         <Button variant="outline" asChild>
@@ -1048,7 +1136,7 @@ export default function SubmissionDetailPage() {
                     <Button variant="outline" asChild>
                         <Link href={submission.manuscriptUrl} target="_blank" rel="noopener noreferrer">
                             <Download className="mr-2 h-4 w-4" />
-                            Download Manuscript
+                            Download DOCX
                         </Link>
                     </Button>
                 )}
@@ -1180,10 +1268,11 @@ export default function SubmissionDetailPage() {
                 <ul className="space-y-4">
                     {submission.reviewers.map((reviewer, index) => {
                         const isSubmitted = reviewer.status === 'Review Submitted';
+                        const isInvited = reviewer.status === 'Invited';
                         const displayName = isEditor ? reviewer.name : `Reviewer ${index + 1}`;
                         
                         return (
-                         <li key={reviewer.id} className="flex items-center justify-between">
+                         <li key={reviewer.id || reviewer.email} className="flex items-center justify-between">
                            <div className="flex items-center gap-4">
                                 <Avatar>
                                     {isEditor ? <AvatarImage src={availableReviewers.find(r => r.uid === reviewer.id)?.photoURL || ''} alt={reviewer.name} /> : null}
@@ -1192,7 +1281,7 @@ export default function SubmissionDetailPage() {
                                 <div>
                                     <p className="font-medium">{displayName}</p>
                                     <div className={cn("flex items-center gap-1.5 text-xs", isSubmitted ? "text-green-600" : "text-muted-foreground")}>
-                                      {isSubmitted ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
+                                      {isSubmitted ? <CheckCircle2 className="w-3.5 h-3.5" /> : isInvited ? <Mail className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
                                       <span>{reviewer.status}</span>
                                     </div>
                                 </div>
@@ -1210,37 +1299,55 @@ export default function SubmissionDetailPage() {
               <DialogTrigger asChild>
                 <Button variant="outline" className="w-full" disabled={isUpdating}>
                     <PlusCircle className="mr-2 h-4 w-4" />
-                    Assign Reviewer
+                    Assign/Invite Reviewer
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-[425px]">
+              <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                  <DialogTitle>Assign Reviewer</DialogTitle>
-                  <DialogDescription>
-                    Select a qualified user to review this manuscript.
-                  </DialogDescription>
+                  <DialogTitle>Assign or Invite Reviewer</DialogTitle>
                 </DialogHeader>
-                <div className="grid gap-4 py-4">
-                  <ul className="space-y-3 max-h-80 overflow-y-auto">
-                    {availableReviewers.map(reviewer => (
-                      <li key={reviewer.uid} className='flex justify-between items-center p-3 rounded-lg border hover:bg-secondary/50'>
-                         <div className="flex items-center gap-4">
-                            <Avatar>
-                                <AvatarImage src={reviewer.photoURL || ''} alt={reviewer.displayName || 'Reviewer'} />
-                                <AvatarFallback>{getInitials(reviewer.displayName || 'R')}</AvatarFallback>
-                            </Avatar>
-                            <div>
-                                <p className="font-medium">{reviewer.displayName}</p>
-                                <p className="text-sm text-muted-foreground truncate max-w-48">{reviewer.specialization || 'No specialization listed'}</p>
-                            </div>
-                        </div>
-                        <Button variant="ghost" size="icon" onClick={() => handleAssignReviewer(reviewer)} disabled={isUpdating || submission.reviewerIds?.includes(reviewer.uid)}>
-                          <PlusCircle className='h-5 w-5' />
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                 <Tabs defaultValue="existing" className="w-full">
+                    <TabsList className="grid w-full grid-cols-2">
+                        <TabsTrigger value="existing">Find Existing User</TabsTrigger>
+                        <TabsTrigger value="invite">Invite by Email</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="existing" className="pt-4">
+                        <ul className="space-y-3 max-h-80 overflow-y-auto">
+                            {availableReviewers.map(reviewer => (
+                            <li key={reviewer.uid} className='flex justify-between items-center p-3 rounded-lg border hover:bg-secondary/50'>
+                                <div className="flex items-center gap-4">
+                                    <Avatar>
+                                        <AvatarImage src={reviewer.photoURL || ''} alt={reviewer.displayName || 'Reviewer'} />
+                                        <AvatarFallback>{getInitials(reviewer.displayName || 'R')}</AvatarFallback>
+                                    </Avatar>
+                                    <div>
+                                        <p className="font-medium">{reviewer.displayName}</p>
+                                        <p className="text-sm text-muted-foreground truncate max-w-48">{reviewer.specialization || 'No specialization listed'}</p>
+                                    </div>
+                                </div>
+                                <Button variant="ghost" size="icon" onClick={() => handleAssignReviewer(reviewer)} disabled={isUpdating || !!submission.reviewers?.some(r => r.id === reviewer.uid)}>
+                                <PlusCircle className='h-5 w-5' />
+                                </Button>
+                            </li>
+                            ))}
+                        </ul>
+                    </TabsContent>
+                    <TabsContent value="invite" className="pt-4">
+                        <Form {...inviteForm}>
+                            <form onSubmit={inviteForm.handleSubmit(handleInviteReviewer)} className="space-y-4">
+                                <FormField control={inviteForm.control} name="name" render={({ field }) => (
+                                    <FormItem><FormLabel>Reviewer Name</FormLabel><FormControl><Input placeholder="Dr. Jane Doe" {...field} /></FormControl><FormMessage /></FormItem>
+                                )}/>
+                                <FormField control={inviteForm.control} name="email" render={({ field }) => (
+                                    <FormItem><FormLabel>Reviewer Email</FormLabel><FormControl><Input type="email" placeholder="invite@example.com" {...field} /></FormControl><FormMessage /></FormItem>
+                                )}/>
+                                <DialogFooter>
+                                    <Button type="submit" disabled={isUpdating}>Send Invitation</Button>
+                                </DialogFooter>
+                            </form>
+                        </Form>
+                    </TabsContent>
+                </Tabs>
               </DialogContent>
             </Dialog>
           </CardFooter>
