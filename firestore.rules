@@ -1,3 +1,4 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -84,15 +85,19 @@ service cloud.firestore {
     // ===========================
     match /submissions/{submissionId} {
 
-      allow list: if isSignedIn();
+      // Allow public list for querying accepted articles.
+      // Individual document access is still protected by the 'get' rule.
+      allow list: if true;
 
-      allow get: if isSignedIn() && (
+      // Allow public read for 'Accepted' articles.
+      // For all other statuses, user must be signed in and involved.
+      allow get: if resource.data.status == 'Accepted' || (isSignedIn() && (
         resource.data.author.id == request.auth.uid ||
         (resource.data.reviewerIds != null &&
          request.auth.uid in resource.data.reviewerIds) ||
         isEditorialMember() ||
         isAdmin()
-      );
+      ));
 
       // Allow any authenticated user to create a submission for themselves.
       // The role check is removed to prevent race conditions on user creation.
