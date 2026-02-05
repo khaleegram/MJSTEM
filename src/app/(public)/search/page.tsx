@@ -1,8 +1,7 @@
-
 'use client';
 
 import { useSearchParams } from 'next/navigation';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, Suspense } from 'react';
 import { Submission } from '@/types';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -86,7 +85,7 @@ function SearchResultsPage() {
                             <div className="text-center py-16 text-muted-foreground">
                                 <SearchIcon className="mx-auto h-12 w-12" />
                                 <h3 className="mt-4 text-lg font-medium">No Results Found</h3>
-                                <p className="mt-1 text-sm">We couldn't find any articles matching your search.</p>
+                                <p className="mt-1 text-sm">We can't find any articles matching your search.</p>
                             </div>
                         )}
                     </CardContent>
@@ -103,6 +102,8 @@ export default function SearchPageWrapper() {
     return (
         // React's Suspense can be used here if needed for data fetching libraries
         // that integrate with it. For now, the internal loading state is sufficient.
-        <SearchResultsPage />
+        <Suspense>
+            <SearchResultsPage />
+        </Suspense>
     );
 }
