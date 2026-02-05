@@ -68,7 +68,7 @@ service cloud.firestore {
       allow update: if 
         (request.auth.uid == userId && request.resource.data.diff(resource.data)
           .changedKeys().hasOnly(['displayName', 'photoURL', 'specialization', 'fcmTokens']))
-        || (isManagingEditor() || isAdmin());
+        || isEditorialMember();
         
       allow delete: if false; // Do not allow users to be deleted.
     }
@@ -86,14 +86,13 @@ service cloud.firestore {
       ));
 
       // Allow list for anyone for public search, but GET rules protect document content.
-      // Dashboard queries are secured by client-side "where" clauses.
       allow list: if true;
 
       // Authors can create submissions.
       allow create: if isAuthor() && request.resource.data.author.id == request.auth.uid;
 
       allow update: if 
-        // Editorial members have broad update powers, including adding attachments and uniqueId.
+        // Editorial members have broad update powers
         isEditorialMember() || 
         
         // Authors can update their submission under specific conditions.
