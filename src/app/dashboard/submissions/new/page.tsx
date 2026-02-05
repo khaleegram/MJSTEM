@@ -1,6 +1,6 @@
-
 'use client';
 
+import React, { useState, useEffect, useCallback } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -25,7 +25,6 @@ import { useToast } from '@/hooks/use-toast';
 import { Trash2, PlusCircle, Download, Sigma, Bot, Scale, Paperclip } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/auth-context';
-import { useState, useEffect, useCallback } from 'react';
 import { ContributorSchema, NewSubmissionSchema } from '@/lib/data-schemas';
 import { FileUploader } from '@/components/file-uploader';
 import { errorEmitter } from '@/firebase/error-emitter';
@@ -483,5 +482,3 @@ export default function NewSubmissionPage() {
     </div>
   );
 }
-
-    
