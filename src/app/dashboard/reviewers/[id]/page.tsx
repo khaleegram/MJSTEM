@@ -1,7 +1,6 @@
-
 'use client';
 
-import { notFound, useParams } from 'next/navigation';
+import { notFound, useParams, useRouter } from 'next/navigation';
 import {
   Card,
   CardContent,
@@ -13,7 +12,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Mail, Star, User as UserIcon, GraduationCap, ArrowUpRight, ShieldCheck } from 'lucide-react';
+import { Mail, Star, User as UserIcon, GraduationCap, ArrowUpRight, ShieldCheck, Trash2 } from 'lucide-react';
 import Image from 'next/image';
 import {
     Table,
@@ -34,6 +33,9 @@ import { useAuth } from '@/contexts/auth-context';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { deleteUser } from '@/ai/flows/delete-user';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+
 
 const RoleManagementCard = ({ user, onRoleUpdate }: { user: UserProfile, onRoleUpdate: () => void }) => {
     const [newRole, setNewRole] = useState<UserRole>(user.role);
@@ -82,6 +84,62 @@ const RoleManagementCard = ({ user, onRoleUpdate }: { user: UserProfile, onRoleU
                     {isUpdating ? 'Saving...' : 'Save Role'}
                 </Button>
             </CardFooter>
+        </Card>
+    );
+};
+
+const DangerZoneCard = ({ user, onUserDeleted }: { user: UserProfile; onUserDeleted: () => void }) => {
+    const [isDeleting, setIsDeleting] = useState(false);
+    const { toast } = useToast();
+
+    const handleDelete = async () => {
+        setIsDeleting(true);
+        try {
+            const result = await deleteUser({ userId: user.uid });
+            if (result.success) {
+                toast({ title: 'User Deleted', description: `${user.displayName} has been permanently removed.` });
+                onUserDeleted();
+            } else {
+                 toast({ title: 'Deletion Blocked', description: result.message, variant: 'destructive', duration: 8000 });
+            }
+        } catch (error: any) {
+            toast({ title: 'Deletion Failed', description: error.message, variant: 'destructive' });
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
+    return (
+        <Card className="border-destructive">
+            <CardHeader>
+                <CardTitle className="font-headline text-lg flex items-center gap-2 text-destructive">
+                    <Trash2 className="w-5 h-5" /> Danger Zone
+                </CardTitle>
+            </CardHeader>
+            <CardContent>
+                <p className="text-sm text-muted-foreground mb-4">
+                    Deleting a user is permanent and cannot be undone. This will remove their authentication record and profile.
+                </p>
+                <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <Button variant="destructive" disabled={isDeleting}>
+                            {isDeleting ? 'Deleting...' : 'Delete User'}
+                        </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Are you sure you want to delete this user?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                This will permanently delete <strong>{user.displayName}</strong>. This action cannot be undone.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleDelete}>Delete User</AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            </CardContent>
         </Card>
     );
 };
@@ -139,6 +197,7 @@ export default function ReviewerProfilePage() {
   const [loading, setLoading] = useState(true);
   const { userProfile: adminProfile } = useAuth();
   const [refetchTrigger, setRefetchTrigger] = useState(0);
+  const router = useRouter();
   
   const fetchReviewerData = React.useCallback(async () => {
     if (!id) return;
@@ -242,6 +301,7 @@ export default function ReviewerProfilePage() {
             </Card>
 
             {isAdmin && <RoleManagementCard user={userProfile} onRoleUpdate={() => setRefetchTrigger(t => t + 1)} />}
+            {isAdmin && <DangerZoneCard user={userProfile} onUserDeleted={() => router.push('/dashboard/reviewers')} />}
         </div>
         <div className="lg:col-span-2 space-y-8">
             <Card>

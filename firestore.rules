@@ -70,7 +70,7 @@ service cloud.firestore {
           .changedKeys().hasOnly(['displayName', 'photoURL', 'specialization', 'fcmTokens']))
         || isEditorialMember();
         
-      allow delete: if false; // Do not allow users to be deleted.
+      allow delete: if isAdmin();
     }
 
     // ===========================
