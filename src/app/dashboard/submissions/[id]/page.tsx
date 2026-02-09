@@ -15,7 +15,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { File, Calendar, User, Mail, PlusCircle, Download, BookText, Edit, Sparkles, UserCheck, MessageSquare, Shield, Upload, Clock, CheckCircle2, FileSearch, Info, Trash2, Paperclip } from 'lucide-react';
+import { File, Calendar, User, Mail, PlusCircle, Download, BookText, Edit, UserCheck, MessageSquare, Shield, Upload, Clock, CheckCircle2, Info, Trash2, Paperclip } from 'lucide-react';
 import { format } from 'date-fns';
 import { SubmissionStatus, Reviewer, Submission, UserProfile, Volume } from '@/types';
 import { cn } from '@/lib/utils';
@@ -53,8 +53,6 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { sendReviewerAssignmentEmail } from '@/ai/flows/send-reviewer-assignment-email';
 import { sendDecisionEmail } from '@/ai/flows/send-decision-email';
 import { Label } from '@/components/ui/label';
-import { screenAbstract } from '@/ai/flows/screen-abstract';
-import { screenManuscript } from '@/ai/flows/screen-manuscript';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { sendReviewerInvitationEmail } from '@/ai/flows/send-reviewer-invitation-email';
 
@@ -523,104 +521,6 @@ const PageCountDialog = ({ submission, onUpdate }: { submission: Submission; onU
         </Dialog>
     )
 };
-
-const AIScreeningCard = ({ submission, reviewers }: { submission: Submission, reviewers: UserProfile[] }) => {
-    const [isScreening, setIsScreening] = React.useState(false);
-    const [screeningResult, setScreeningResult] = React.useState<{
-        originalityScore: string;
-        noveltySummary: string;
-        suggestedReviewers: { id: string, name: string, reason: string }[];
-        recommendation: string;
-    } | null>(null);
-    const { toast } = useToast();
-
-    const handleScreenSubmission = async () => {
-        setIsScreening(true);
-        setScreeningResult(null);
-        try {
-            // Run both screenings in parallel
-            const [abstractScreen, manuscriptScreen] = await Promise.all([
-                screenAbstract({ abstract: submission.abstract }),
-                screenManuscript({
-                    abstract: submission.abstract,
-                    keywords: submission.keywords,
-                    reviewers: reviewers.map(r => ({ id: r.uid, name: r.displayName, specialization: r.specialization || '' }))
-                })
-            ]);
-            
-            setScreeningResult({
-                originalityScore: abstractScreen.originalityScore,
-                noveltySummary: abstractScreen.noveltySummary,
-                suggestedReviewers: manuscriptScreen.suggestedReviewers,
-                recommendation: manuscriptScreen.recommendation,
-            });
-
-        } catch (error) {
-            console.error("AI screening failed:", error);
-            toast({ title: 'AI Screening Failed', description: 'Could not get a response from the AI.', variant: 'destructive' });
-        } finally {
-            setIsScreening(false);
-        }
-    };
-    
-    return (
-        <Card>
-            <CardHeader>
-                <CardTitle className="font-headline flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-primary" />
-                    AI-Powered Initial Screening
-                </CardTitle>
-                <CardDescription>
-                    Use AI to get a quick analysis of the abstract and suggestions for reviewers.
-                </CardDescription>
-            </CardHeader>
-            <CardContent>
-                {isScreening ? (
-                     <div className="flex flex-col items-center justify-center text-center space-y-4 py-8">
-                        <Sparkles className="w-10 h-10 animate-pulse text-primary" />
-                        <p className="text-muted-foreground">Analyzing manuscript...</p>
-                    </div>
-                ) : screeningResult ? (
-                    <div className="space-y-6 text-sm">
-                         <div className="space-y-2">
-                            <h4 className="font-semibold flex items-center gap-2"><FileSearch className="w-4 h-4" /> Originality & Novelty</h4>
-                            <div className="p-3 border rounded-md bg-secondary/50 space-y-3">
-                                <p><strong>Similarity Score:</strong> <Badge variant="secondary">{screeningResult.originalityScore}</Badge></p>
-                                <p><strong>Novelty Summary:</strong> {screeningResult.noveltySummary}</p>
-                            </div>
-                        </div>
-
-                         <div className="space-y-2">
-                             <h4 className="font-semibold flex items-center gap-2"><UserCheck className="w-4 h-4" /> Suggested Reviewers</h4>
-                             <ul className="space-y-2">
-                                 {screeningResult.suggestedReviewers.map(reviewer => (
-                                     <li key={reviewer.id} className="p-3 border rounded-md">
-                                         <p className="font-semibold">{reviewer.name}</p>
-                                         <p className="text-muted-foreground text-xs">{reviewer.reason}</p>
-                                     </li>
-                                 ))}
-                            </ul>
-                        </div>
-                        
-                        <div className="space-y-2">
-                            <h4 className="font-semibold flex items-center gap-2"><MessageSquare className="w-4 h-4" /> Recommendation</h4>
-                            <p className="text-muted-foreground p-3 border rounded-md bg-secondary/50">{screeningResult.recommendation}</p>
-                        </div>
-                    </div>
-                ) : (
-                    <div className="text-center py-8">
-                        <p className="text-sm text-muted-foreground">Click the button to start the AI analysis.</p>
-                    </div>
-                )}
-            </CardContent>
-            <CardFooter>
-                 <Button onClick={handleScreenSubmission} disabled={isScreening}>
-                    {isScreening ? 'Screening...' : screeningResult ? 'Re-screen Submission' : 'Screen Submission'}
-                </Button>
-            </CardFooter>
-        </Card>
-    )
-}
 
 const inviteReviewerSchema = z.object({
     name: z.string().min(2, 'Reviewer name is required.'),
@@ -1194,10 +1094,6 @@ export default function SubmissionDetailPage() {
 
       <div className="space-y-8 lg:col-span-1">
         
-        {isEditor && (submission.status === 'Submitted' || submission.status === 'Under Initial Review') && (
-            <AIScreeningCard submission={submission} reviewers={availableReviewers} />
-        )}
-
         {isEditor && !submission.uniqueId && submission.status === 'Accepted' && (
             <Card>
                 <CardHeader>
