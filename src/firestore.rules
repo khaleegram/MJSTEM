@@ -34,7 +34,7 @@ service cloud.firestore {
       allow read: if isSignedIn() && (request.auth.uid == userId || isEditorial());
       allow create: if isSignedIn() && request.auth.uid == userId;
       allow update: if isSignedIn() && (request.auth.uid == userId || isEditorial());
-      allow delete: if false;
+      allow delete: if isAdmin() || isManagingEditor();
       allow list: if isEditorial();
     }
 
@@ -52,6 +52,7 @@ service cloud.firestore {
           resource.data.author.id == request.auth.uid
           || (resource.data.reviewerIds != null && request.auth.uid in resource.data.reviewerIds)
           || isEditorial()
+          || exists(/databases/$(database)/documents/invitations/$(request.auth.token.email + '_' + submissionId))
         ));
 
       // Minimal create: any signed-in user can create for themselves

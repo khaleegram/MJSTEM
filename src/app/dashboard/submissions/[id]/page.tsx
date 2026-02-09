@@ -606,6 +606,65 @@ export default function SubmissionDetailPage() {
     fetchSubmission();
   }, [fetchSubmission, refetchTrigger]);
 
+  React.useEffect(() => {
+    const claimInvitation = async () => {
+      if (!user?.email || !submission || !userProfile) return;
+
+      const myInvite = submission.reviewers?.find(
+        (r) => r.email === user.email && r.status === 'Invited' && r.id === null
+      );
+
+      if (myInvite) {
+        setIsUpdating(true);
+        
+        const submissionRef = doc(db, 'submissions', submission.id);
+        const userRef = doc(db, 'users', user.uid);
+        const invitationRef = doc(db, 'invitations', `${user.email}_${submission.id}`);
+
+        try {
+          await runTransaction(db, async (transaction) => {
+            const subDoc = await transaction.get(submissionRef);
+            if (!subDoc.exists()) throw new Error("Submission does not exist.");
+
+            const currentSubmission = subDoc.data() as Submission;
+            
+            const updatedReviewers = currentSubmission.reviewers?.map(r => 
+              (r.email === user.email && r.status === 'Invited') 
+                ? { ...r, id: user.uid, status: 'Pending' as const } 
+                : r
+            ) || [];
+
+            transaction.update(submissionRef, {
+              reviewers: updatedReviewers,
+              reviewerIds: arrayUnion(user.uid)
+            });
+
+            if (userProfile.role === 'Author') {
+              transaction.update(userRef, { role: 'Reviewer' });
+            }
+
+            transaction.delete(invitationRef);
+          });
+          
+          toast({
+            title: "Invitation Accepted",
+            description: "This manuscript is now in your review dashboard."
+          });
+
+          setRefetchTrigger(p => p + 1);
+
+        } catch (e: any) {
+          console.error("Error claiming invitation:", e);
+          toast({ title: "Failed to claim invitation", description: e.message, variant: 'destructive' });
+        } finally {
+          setIsUpdating(false);
+        }
+      }
+    };
+    
+    claimInvitation();
+  }, [submission, user, userProfile, toast, router, refetchTrigger]);
+
 
   const handleDecision = async (status: SubmissionStatus) => {
     if(!submission || !userProfile || !submission.uniqueId) return;
