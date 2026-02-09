@@ -15,7 +15,7 @@ import {
   sendPasswordResetEmail,
 } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
-import { doc, setDoc, getDoc, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, query, where, getDocs, writeBatch, arrayUnion } from 'firebase/firestore';
 import { UserProfile, Submission } from '@/types';
 
 
@@ -75,22 +75,27 @@ const ensureUserDocument = async (user: FirebaseUser): Promise<UserProfile> => {
             const invitation = invitationDoc.data();
             const submissionRef = doc(db, 'submissions', invitation.submissionId);
             
-            // We need to get the submission to update its internal `reviewers` array
             const submissionSnap = await getDoc(submissionRef);
 
             if (submissionSnap.exists()) {
                 const submissionData = submissionSnap.data() as Submission;
+                let wasUpdated = false;
                 const updatedReviewers = submissionData.reviewers?.map(r => {
                     // Find the invited reviewer placeholder and update it
                     if (r.email === user.email && r.id === null) {
                         needsRoleUpdate = true;
+                        wasUpdated = true;
                         return { ...r, id: user.uid, status: 'Pending' as const };
                     }
                     return r;
                 });
 
-                if(needsRoleUpdate) {
-                    batch.update(submissionRef, { reviewers: updatedReviewers });
+                if(wasUpdated) {
+                    // THE FIX: Also update the reviewerIds array for security rule access
+                    batch.update(submissionRef, { 
+                        reviewers: updatedReviewers,
+                        reviewerIds: arrayUnion(user.uid) 
+                    });
                     batch.delete(invitationDoc.ref); // Clean up the processed invitation
                 }
             }
@@ -176,13 +181,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return result;
   }
 
-  const sendPasswordReset = (email: string) => {
-    return sendPasswordResetEmail(auth, email);
-  }
-
   const logout = () => {
     return signOut(auth);
   };
+
+  const sendPasswordReset = (email: string) => {
+    return sendPasswordResetEmail(auth, email);
+  }
 
   const refetchUserProfile = async () => {
     if (auth.currentUser) {
