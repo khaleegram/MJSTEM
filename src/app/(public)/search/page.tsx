@@ -10,6 +10,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import { FileText, Search as SearchIcon } from 'lucide-react';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 function SearchResultsPage() {
     const searchParams = useSearchParams();
@@ -20,8 +22,9 @@ function SearchResultsPage() {
     useEffect(() => {
         const fetchArticles = async () => {
             setLoading(true);
+            const articlesCollectionRef = collection(db, 'submissions');
             try {
-                const articlesQuery = query(collection(db, 'submissions'), where('status', '==', 'Accepted'));
+                const articlesQuery = query(articlesCollectionRef, where('status', '==', 'Accepted'));
                 const querySnapshot = await getDocs(articlesQuery);
                 const articles = querySnapshot.docs.map(doc => ({
                     id: doc.id,
@@ -29,8 +32,12 @@ function SearchResultsPage() {
                     submittedAt: doc.data().submittedAt.toDate(),
                 } as Submission));
                 setAllArticles(articles);
-            } catch (error) {
-                console.error("Error fetching articles for search:", error);
+            } catch (serverError) {
+                const permissionError = new FirestorePermissionError({
+                    path: articlesCollectionRef.path,
+                    operation: 'list',
+                });
+                errorEmitter.emit('permission-error', permissionError);
             } finally {
                 setLoading(false);
             }
@@ -100,8 +107,6 @@ function SearchResultsPage() {
 // A wrapper can provide the Suspense for the component tree.
 export default function SearchPageWrapper() {
     return (
-        // React's Suspense can be used here if needed for data fetching libraries
-        // that integrate with it. For now, the internal loading state is sufficient.
         <Suspense>
             <SearchResultsPage />
         </Suspense>

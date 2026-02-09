@@ -35,6 +35,8 @@ import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { deleteUser } from '@/ai/flows/delete-user';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { FirestorePermissionError } from '@/firebase/errors';
+import { errorEmitter } from '@/firebase/error-emitter';
 
 
 const RoleManagementCard = ({ user, onRoleUpdate }: { user: UserProfile, onRoleUpdate: () => void }) => {
@@ -233,8 +235,12 @@ export default function ReviewerProfilePage() {
         
         setReviewHistory(history);
 
-    } catch (error) {
-        console.error("Error fetching reviewer data: ", error);
+    } catch (serverError) {
+        const permissionError = new FirestorePermissionError({
+            path: `users/${id} or submissions`,
+            operation: 'get',
+        });
+        errorEmitter.emit('permission-error', permissionError);
     } finally {
         setLoading(false);
     }

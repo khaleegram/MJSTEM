@@ -28,6 +28,8 @@ import { useToast } from '@/hooks/use-toast';
 import { FileUploader } from '@/components/file-uploader';
 import Image from 'next/image';
 import { Skeleton } from '@/components/ui/skeleton';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 const brandingFormSchema = z.object({
   logoUrl: z.string().url().optional().or(z.literal('')),
@@ -48,14 +50,18 @@ export default function BrandingSettingsPage() {
   useEffect(() => {
     const fetchBrandingSettings = async () => {
       setLoading(true);
+      const docRef = doc(db, 'settings', 'branding');
       try {
-        const docRef = doc(db, 'settings', 'branding');
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           form.reset(docSnap.data());
         }
-      } catch (error) {
-        console.error("Error fetching branding settings:", error);
+      } catch (serverError) {
+        const permissionError = new FirestorePermissionError({
+            path: docRef.path,
+            operation: 'get',
+        });
+        errorEmitter.emit('permission-error', permissionError);
       } finally {
         setLoading(false);
       }

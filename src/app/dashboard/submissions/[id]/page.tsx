@@ -553,17 +553,21 @@ export default function SubmissionDetailPage() {
   React.useEffect(() => {
     const fetchReviewers = async () => {
         if (!isEditor) return;
+        const reviewersCollection = collection(db, 'users');
         try {
             const q = query(
-                collection(db, 'users'), 
+                reviewersCollection, 
                 where('role', 'in', ['Reviewer', 'Editor', 'Admin', 'Managing Editor'])
             );
             const querySnapshot = await getDocs(q);
             const users = querySnapshot.docs.map(doc => doc.data() as UserProfile);
             setAvailableReviewers(users);
-        } catch (error) {
-            console.error("Error fetching reviewers:", error);
-            // This error is handled gracefully by not showing the assign reviewer button
+        } catch (serverError) {
+            const permissionError = new FirestorePermissionError({
+                path: reviewersCollection.path,
+                operation: 'list',
+            });
+            errorEmitter.emit('permission-error', permissionError);
         }
     }
     fetchReviewers();
@@ -571,8 +575,8 @@ export default function SubmissionDetailPage() {
 
   const fetchSubmission = React.useCallback(async () => {
     if (!id) return;
+    const docRef = doc(db, 'submissions', id);
     try {
-        const docRef = doc(db, 'submissions', id);
         const docSnap = await getDoc(docRef);
 
         if (docSnap.exists()) {
@@ -585,8 +589,12 @@ export default function SubmissionDetailPage() {
         } else {
             notFound();
         }
-    } catch (error) {
-        console.error("Error fetching submission: ", error);
+    } catch (serverError) {
+        const permissionError = new FirestorePermissionError({
+            path: docRef.path,
+            operation: 'get',
+        });
+        errorEmitter.emit('permission-error', permissionError);
         notFound();
     } finally {
         setLoading(false);

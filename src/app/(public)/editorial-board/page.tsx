@@ -10,6 +10,8 @@ import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { useEffect, useState, useMemo } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 const BoardMemberCard = ({ member }: { member: EditorialBoardMember }) => (
   <Card className="text-center">
@@ -58,8 +60,12 @@ export default function EditorialBoardPage() {
         const membersList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as EditorialBoardMember));
         setMembers(membersList);
         setLoading(false);
-    }, (error) => {
-        console.error("Error fetching editorial board members: ", error);
+    }, (serverError) => {
+        const permissionError = new FirestorePermissionError({
+            path: 'editorialBoard',
+            operation: 'list',
+        });
+        errorEmitter.emit('permission-error', permissionError);
         setLoading(false);
     });
 

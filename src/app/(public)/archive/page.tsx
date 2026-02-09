@@ -13,6 +13,8 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Book, BookCopy, FileText } from 'lucide-react';
 import Link from 'next/link';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 export default function ArchivePage() {
   const [volumes, setVolumes] = useState<Volume[]>([]);
@@ -40,8 +42,12 @@ export default function ArchivePage() {
         }));
         setVolumes(vols);
         setLoading(false);
-    }, (error) => {
-        console.error('Error fetching volumes: ', error);
+    }, (serverError) => {
+        const permissionError = new FirestorePermissionError({
+            path: 'volumes',
+            operation: 'list',
+        });
+        errorEmitter.emit('permission-error', permissionError);
         setLoading(false);
     });
 

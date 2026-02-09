@@ -30,6 +30,8 @@ import { FileUploader } from '@/components/file-uploader';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import Image from 'next/image';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 const journalInfoFormSchema = z.object({
   coverLetterUrl: z.string().url().optional().or(z.literal('')),
@@ -54,8 +56,8 @@ export default function JournalInfoSettingsPage() {
   useEffect(() => {
     const fetchJournalInfo = async () => {
       setLoading(true);
+      const docRef = doc(db, 'settings', 'journalInfo');
       try {
-        const docRef = doc(db, 'settings', 'journalInfo');
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           form.reset({
@@ -63,8 +65,12 @@ export default function JournalInfoSettingsPage() {
             maintenanceMode: docSnap.data().maintenanceMode || false,
           });
         }
-      } catch (error) {
-        console.error("Error fetching journal info:", error);
+      } catch (serverError) {
+        const permissionError = new FirestorePermissionError({
+            path: docRef.path,
+            operation: 'get',
+        });
+        errorEmitter.emit('permission-error', permissionError);
       } finally {
         setLoading(false);
       }

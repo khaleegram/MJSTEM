@@ -23,6 +23,8 @@ import Image from 'next/image';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { FileUploader } from '@/components/file-uploader';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 
 const MemberForm = ({ member, onSave, onCancel, allUsers }: { member?: EditorialBoardMember, onSave: () => void, onCancel: () => void, allUsers: UserProfile[] }) => {
@@ -217,9 +219,12 @@ export default function EditorialBoardSettingsPage() {
       const usersList = usersSnapshot.docs.map(doc => doc.data() as UserProfile);
       setAllUsers(usersList);
 
-    } catch (error) {
-      console.error('Error fetching data:', error);
-      toast({ title: 'Error', description: 'Could not fetch required data.', variant: 'destructive' });
+    } catch (serverError) {
+      const permissionError = new FirestorePermissionError({
+          path: 'editorialBoard or users',
+          operation: 'list',
+      });
+      errorEmitter.emit('permission-error', permissionError);
     } finally {
       setLoading(false);
     }

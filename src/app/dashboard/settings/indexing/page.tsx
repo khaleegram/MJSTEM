@@ -21,6 +21,8 @@ import Image from 'next/image';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { FileUploader } from '@/components/file-uploader';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 
 const ServiceForm = ({ service, onSave, onCancel }: { service?: IndexingService, onSave: () => void, onCancel: () => void }) => {
@@ -105,9 +107,12 @@ export default function IndexingSettingsPage() {
       const servicesSnapshot = await getDocs(servicesQuery);
       const servicesList = servicesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as IndexingService));
       setServices(servicesList);
-    } catch (error) {
-      console.error('Error fetching data:', error);
-      toast({ title: 'Error', description: 'Could not fetch indexing services.', variant: 'destructive' });
+    } catch (serverError) {
+      const permissionError = new FirestorePermissionError({
+          path: 'indexingServices',
+          operation: 'list',
+      });
+      errorEmitter.emit('permission-error', permissionError);
     } finally {
       setLoading(false);
     }
