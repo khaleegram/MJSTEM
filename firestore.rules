@@ -70,7 +70,7 @@ service cloud.firestore {
           .changedKeys().hasOnly(['displayName', 'photoURL', 'specialization', 'fcmTokens']))
         || isEditorialMember();
         
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() || isManagingEditor();
     }
 
     // ===========================
@@ -83,6 +83,7 @@ service cloud.firestore {
         resource.data.author.id == request.auth.uid 
         || (resource.data.reviewerIds != null && request.auth.uid in resource.data.reviewerIds) 
         || isEditorialMember()
+        || exists(/databases/$(database)/documents/invitations/$(request.auth.token.email + '_' + submissionId))
       ));
 
       // Allow list for anyone for public search, but GET rules protect document content.
@@ -91,9 +92,12 @@ service cloud.firestore {
       // Authors can create submissions.
       allow create: if isAuthor() && request.resource.data.author.id == request.auth.uid;
 
-      allow update: if 
-        // Editorial members have broad update powers
-        isEditorialMember() || 
+      allow update: if
+        // Editorial members can update specific, necessary fields.
+        (isEditorialMember() &&
+          request.resource.data.diff(resource.data).changedKeys().hasAny([
+            'status', 'reviewers', 'reviewerIds', 'uniqueId', 'pageCount', 'editorAttachments'
+          ])) ||
         
         // Authors can update their submission under specific conditions.
         (isAuthor() && request.auth.uid == resource.data.author.id && (
@@ -150,10 +154,9 @@ service cloud.firestore {
     // INVITATIONS COLLECTION
     // ===========================
     match /invitations/{invitationId} {
-      // Only editorial members can create invitations to new reviewers
-      allow create: if isEditorialMember();
-      // Only an authenticated user can read/delete their own invitation during the signup flow
-      allow read, delete: if isSignedIn() && request.auth.uid != null;
+      allow list: if false; // Never allow listing invitations
+      allow get: if true; // Allow anyone to GET a single invitation by ID (link-only access)
+      allow create, update, delete: if isEditorialMember();
     }
 
     // ===========================
