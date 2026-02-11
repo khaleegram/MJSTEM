@@ -372,7 +372,7 @@ export default function NewSubmissionPage() {
                                 </FormLabel>
                                 <FormControl>
                                     <FileUploader
-                                        endpoint="documentUploader"
+                                        endpoint="generalDocumentUploader"
                                         onUploadComplete={(url) => field.onChange(url)}
                                         onUploadError={(error) => {
                                             toast({
@@ -381,7 +381,7 @@ export default function NewSubmissionPage() {
                                                 variant: 'destructive'
                                             })
                                         }}
-                                        description="You can attach a single supplementary file (.doc, .docx)."
+                                        description="You can attach a single supplementary file of any document type."
                                     />
                                 </FormControl>
                                 <FormMessage />

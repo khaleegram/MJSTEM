@@ -55,6 +55,7 @@ import { sendDecisionEmail } from '@/ai/flows/send-decision-email';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { sendReviewerInvitationEmail } from '@/ai/flows/send-reviewer-invitation-email';
+import { sendAttachmentNotificationEmail } from '@/ai/flows/send-attachment-notification-email';
 
 
 async function getNextSubmissionId(): Promise<string> {
@@ -966,7 +967,7 @@ export default function SubmissionDetailPage() {
   }
   
   const handleEditorFileUpload = async (url: string, name?: string) => {
-    if (!submission) return;
+    if (!submission || !userProfile) return;
     setIsUpdating(true);
 
     const newAttachment = {
@@ -983,6 +984,17 @@ export default function SubmissionDetailPage() {
     try {
         await updateDoc(submissionRef, updateData);
         toast({ title: "File Uploaded", description: "The file has been attached and is visible to the author." });
+        
+        // Send email notification
+        sendAttachmentNotificationEmail({
+            authorEmail: submission.author.email,
+            authorName: submission.author.name,
+            editorName: userProfile.displayName,
+            submissionId: submission.id,
+            manuscriptTitle: submission.title,
+            fileName: newAttachment.name,
+        }).catch(e => console.error("Failed to send attachment email:", e));
+
         setRefetchTrigger(p => p + 1); // refetch
     } catch (serverError) {
         const permissionError = new FirestorePermissionError({
@@ -1213,10 +1225,10 @@ export default function SubmissionDetailPage() {
                         </div>
                     )}
                     <FileUploader
-                        endpoint="documentUploader"
+                        endpoint="generalDocumentUploader"
                         onUploadComplete={handleEditorFileUpload}
                         onUploadError={(err) => toast({ title: "Upload Failed", description: err.message, variant: "destructive"})}
-                        description="Upload files for the author (.doc, .docx)."
+                        description="Upload files for the author (.doc, .pdf, etc.)."
                     />
                 </CardContent>
             </Card>
@@ -1340,7 +1352,7 @@ export default function SubmissionDetailPage() {
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={handleDeleteSubmission}>Delete</AlertDialogAction>
+                                <AlertDialogAction onClick={handleDeleteSubmission}>Delete Submission</AlertDialogAction>
                             </AlertDialogFooter>
                         </AlertDialogContent>
                     </AlertDialog>

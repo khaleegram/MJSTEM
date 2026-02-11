@@ -44,6 +44,21 @@ export const ourFileRouter = {
       return { uploadedBy: metadata.userId, url: file.url };
     }),
 
+  generalDocumentUploader: f({
+    "application/pdf": { maxFileSize: "16MB", maxFileCount: 1 },
+    "application/msword": { maxFileSize: "16MB", maxFileCount: 1 },
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": { maxFileSize: "16MB", maxFileCount: 1 },
+    "text/plain": { maxFileSize: "16MB", maxFileCount: 1 },
+    "application/rtf": { maxFileSize: "16MB", maxFileCount: 1 },
+    "application/vnd.ms-powerpoint": { maxFileSize: "16MB", maxFileCount: 1 },
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": { maxFileSize: "16MB", maxFileCount: 1 },
+  })
+    .middleware(handleAuth)
+    .onUploadComplete(async ({ metadata, file }) => {
+        console.log("General doc upload complete for userId:", metadata.userId);
+        return { uploadedBy: metadata.userId, url: file.url };
+    }),
+
   imageUploader: f({
     image: { maxFileSize: "4MB", maxFileCount: 1 },
   })
