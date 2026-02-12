@@ -56,6 +56,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { sendReviewerInvitationEmail } from '@/ai/flows/send-reviewer-invitation-email';
 import { sendAttachmentNotificationEmail } from '@/ai/flows/send-attachment-notification-email';
+import { claimReviewInvitation } from '@/ai/flows/claim-review-invitation';
 
 
 async function getNextSubmissionId(): Promise<string> {
@@ -608,44 +609,36 @@ export default function SubmissionDetailPage() {
   }, [fetchSubmission, refetchTrigger]);
 
   React.useEffect(() => {
-    const claimInvitation = async () => {
-      if (!user?.email || !submission || !userProfile || !submission.invitedReviewerEmails?.includes(user.email)) {
+    const tryToClaimInvitation = async () => {
+      // Check if user is logged in, has a profile, has an email, and there's a submission loaded.
+      if (!user?.email || !submission || !userProfile) {
+        return;
+      }
+      
+      // Check if this user was invited via email for this submission.
+      if (!submission.invitedReviewerEmails?.includes(user.email)) {
         return;
       }
       
       setIsUpdating(true);
-      const submissionRef = doc(db, 'submissions', submission.id);
 
       try {
-        await runTransaction(db, async (transaction) => {
-          const subDoc = await transaction.get(submissionRef);
-          if (!subDoc.exists()) throw new Error("Submission does not exist.");
-          
-          const currentSubmission = subDoc.data() as Submission;
+        const result = await claimReviewInvitation({
+          userId: user.uid,
+          userEmail: user.email,
+          submissionId: submission.id,
+        });
 
-          const updatedReviewers = currentSubmission.reviewers?.map(r => 
-            (r.email === user.email && r.status === 'Invited') 
-              ? { ...r, id: user.uid, status: 'Pending' as const } 
-              : r
-          ) || [];
-          
-          transaction.update(submissionRef, {
-            reviewers: updatedReviewers,
-            reviewerIds: arrayUnion(user.uid),
-            invitedReviewerEmails: arrayRemove(user.email)
-          });
-          
-          if (userProfile.role === 'Author') {
-            const userDocRef = doc(db, 'users', user.uid);
-            transaction.update(userDocRef, { role: 'Reviewer' });
-          }
-        });
-        
-        toast({
-          title: "Invitation Accepted",
-          description: "This manuscript is now in your review dashboard."
-        });
-        setRefetchTrigger(p => p + 1);
+        if (result.success) {
+            toast({
+              title: "Invitation Accepted",
+              description: "This manuscript is now in your review dashboard."
+            });
+            // Trigger a refetch of data to show the updated state
+            setRefetchTrigger(p => p + 1);
+        } else {
+            throw new Error(result.message);
+        }
 
       } catch (e: any) {
         console.error("Error claiming invitation:", e);
@@ -655,11 +648,12 @@ export default function SubmissionDetailPage() {
       }
     };
     
+    // Only run the claim logic once the submission and user data are available.
     if (submission && user && userProfile) {
-        claimInvitation();
+        tryToClaimInvitation();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [submission, user, userProfile, toast]);
+  }, [submission, user, userProfile]);
 
 
   const handleDecision = async (status: SubmissionStatus) => {
@@ -968,7 +962,7 @@ export default function SubmissionDetailPage() {
 
     try {
         await updateDoc(submissionRef, updateData);
-        toast({ title: "File Uploaded", description: "The file is now visible to the author, and an email notification has been sent." });
+        toast({ title: "File Uploaded", description: "The file is now visible to the author. An email notification has been sent." });
         
         sendAttachmentNotificationEmail({
             authorEmail: submission.author.email,
