@@ -78,7 +78,8 @@ export const SubmissionSchema = z.object({
   originalManuscriptUrl: z.string().url().optional(),
   supplementaryFileUrl: z.string().url().optional(),
   reviewers: z.array(AssignedReviewerSchema).optional(),
-  reviewerIds: z.array(z.string()).optional(), // For querying
+  reviewerIds: z.array(z.string()).optional(), // For querying claimed reviews
+  invitedReviewerEmails: z.array(z.string()).optional(), // For querying pending invites
   originalSubmissionDate: z.date().optional().nullable(),
   pageCount: z.number().optional(),
   revision: z.number().default(0),

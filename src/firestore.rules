@@ -82,7 +82,7 @@ service cloud.firestore {
         resource.data.author.id == request.auth.uid
         || (resource.data.reviewerIds != null && request.auth.uid in resource.data.reviewerIds)
         || isEditorialMember()
-        || exists(/databases/$(database)/documents/invitations/$(request.auth.token.email + '_' + submissionId))
+        || (resource.data.invitedReviewerEmails != null && request.auth.token.email in resource.data.invitedReviewerEmails)
       ));
 
       // Allow list for anyone for public search, but GET rules protect document content.
@@ -158,15 +158,6 @@ service cloud.firestore {
         allow create: if isServer() || isEditorialMember();
         allow update, delete: if false; // History is immutable.
       }
-    }
-
-    // ===========================
-    // INVITATIONS COLLECTION
-    // ===========================
-    match /invitations/{invitationId} {
-      allow list: if false; // Never allow listing invitations
-      allow get: if true;   // Allow anyone to GET a single invitation by ID (link-only access)
-      allow create, update, delete: if isEditorialMember();
     }
 
     // ===========================

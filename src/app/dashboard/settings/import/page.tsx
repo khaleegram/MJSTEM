@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useForm, useFieldArray } from 'react-hook-form';
+import React, { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useRouter } from 'next/navigation';
@@ -119,6 +120,7 @@ export default function ImportSubmissionPage() {
         pageCount: values.pageCount || null,
         reviewers: [],
         reviewerIds: [],
+        invitedReviewerEmails: [],
         originalSubmissionDate: values.originalSubmissionDate || null,
         revision: 0,
     };

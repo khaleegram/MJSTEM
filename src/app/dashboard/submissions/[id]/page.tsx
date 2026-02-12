@@ -1,7 +1,8 @@
+
 'use client';
 
 import { notFound, useParams, useRouter } from 'next/navigation';
-import { doc, getDoc, updateDoc, arrayUnion, collection, getDocs, addDoc, serverTimestamp, query, where, runTransaction, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, arrayUnion, collection, getDocs, addDoc, serverTimestamp, query, where, runTransaction, deleteDoc, arrayRemove } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
   Card,
@@ -608,62 +609,57 @@ export default function SubmissionDetailPage() {
 
   React.useEffect(() => {
     const claimInvitation = async () => {
-      if (!user?.email || !submission || !userProfile) return;
+      if (!user?.email || !submission || !userProfile || !submission.invitedReviewerEmails?.includes(user.email)) {
+        return;
+      }
+      
+      setIsUpdating(true);
+      const submissionRef = doc(db, 'submissions', submission.id);
 
-      const myInvite = submission.reviewers?.find(
-        (r) => r.email === user.email && r.status === 'Invited'
-      );
+      try {
+        await runTransaction(db, async (transaction) => {
+          const subDoc = await transaction.get(submissionRef);
+          if (!subDoc.exists()) throw new Error("Submission does not exist.");
+          
+          const currentSubmission = subDoc.data() as Submission;
 
-      if (myInvite) {
-        setIsUpdating(true);
-        
-        const submissionRef = doc(db, 'submissions', submission.id);
-        const userRef = doc(db, 'users', user.uid);
-        const invitationRef = doc(db, 'invitations', `${user.email}_${submission.id}`);
-
-        try {
-          await runTransaction(db, async (transaction) => {
-            const subDoc = await transaction.get(submissionRef);
-            if (!subDoc.exists()) throw new Error("Submission does not exist.");
-
-            const currentSubmission = subDoc.data() as Submission;
-            
-            const updatedReviewers = currentSubmission.reviewers?.map(r => 
-              (r.email === user.email && r.status === 'Invited') 
-                ? { ...r, id: user.uid, status: 'Pending' as const } 
-                : r
-            ) || [];
-
-            transaction.update(submissionRef, {
-              reviewers: updatedReviewers,
-              reviewerIds: arrayUnion(user.uid)
-            });
-
-            if (userProfile.role === 'Author') {
-              transaction.update(userRef, { role: 'Reviewer' });
-            }
-
-            transaction.delete(invitationRef);
+          const updatedReviewers = currentSubmission.reviewers?.map(r => 
+            (r.email === user.email && r.status === 'Invited') 
+              ? { ...r, id: user.uid, status: 'Pending' as const } 
+              : r
+          ) || [];
+          
+          transaction.update(submissionRef, {
+            reviewers: updatedReviewers,
+            reviewerIds: arrayUnion(user.uid),
+            invitedReviewerEmails: arrayRemove(user.email)
           });
           
-          toast({
-            title: "Invitation Accepted",
-            description: "This manuscript is now in your review dashboard."
-          });
+          if (userProfile.role === 'Author') {
+            const userDocRef = doc(db, 'users', user.uid);
+            transaction.update(userDocRef, { role: 'Reviewer' });
+          }
+        });
+        
+        toast({
+          title: "Invitation Accepted",
+          description: "This manuscript is now in your review dashboard."
+        });
+        setRefetchTrigger(p => p + 1);
 
-          setRefetchTrigger(p => p + 1);
-
-        } catch (e: any) {
-          console.error("Error claiming invitation:", e);
-          toast({ title: "Failed to claim invitation", description: e.message, variant: 'destructive' });
-        } finally {
-          setIsUpdating(false);
-        }
+      } catch (e: any) {
+        console.error("Error claiming invitation:", e);
+        toast({ title: "Failed to claim invitation", description: e.message, variant: 'destructive' });
+      } finally {
+        setIsUpdating(false);
       }
     };
     
-    claimInvitation();
-  }, [submission, user, userProfile, toast, router, refetchTrigger]);
+    if (submission && user && userProfile) {
+        claimInvitation();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [submission, user, userProfile, toast]);
 
 
   const handleDecision = async (status: SubmissionStatus) => {
@@ -853,7 +849,7 @@ export default function SubmissionDetailPage() {
   const handleInviteReviewer = async (values: z.infer<typeof inviteReviewerSchema>) => {
     if(!submission || !userProfile) return;
 
-    if (submission.reviewers?.some(r => r.email === values.email)) {
+    if (submission.reviewers?.some(r => r.email === values.email) || submission.invitedReviewerEmails?.includes(values.email)) {
         toast({ title: "Already Invited/Assigned", description: `A reviewer with the email ${values.email} is already associated with this manuscript.`, variant: "destructive" });
         return;
     }
@@ -868,26 +864,17 @@ export default function SubmissionDetailPage() {
     };
 
     const submissionRef = doc(db, 'submissions', submission.id);
-    const invitationRef = doc(db, 'invitations', `${values.email}_${submission.id}`);
     
     const updateData: any = {
         reviewers: arrayUnion(newReviewer),
+        invitedReviewerEmails: arrayUnion(values.email),
     };
      if (submission.status === 'Submitted' || submission.status === 'Under Initial Review' || submission.status === 'With Editor') {
         updateData.status = 'Under Peer Review';
     }
 
     try {
-        await runTransaction(db, async (transaction) => {
-            transaction.update(submissionRef, updateData);
-            transaction.set(invitationRef, {
-                email: values.email,
-                submissionId: submission.id,
-                submissionTitle: submission.title,
-                inviterName: userProfile.displayName,
-                createdAt: serverTimestamp(),
-            });
-        });
+        await updateDoc(submissionRef, updateData);
 
         // Fire-and-forget background tasks
         logSubmissionEvent({
@@ -909,8 +896,8 @@ export default function SubmissionDetailPage() {
 
     } catch (serverError) {
         const permissionError = new FirestorePermissionError({
-            path: `invitations or submissions/${submission.id}`,
-            operation: 'write',
+            path: submissionRef.path,
+            operation: 'update'
         });
         errorEmitter.emit('permission-error', permissionError);
     } finally {
@@ -968,7 +955,6 @@ export default function SubmissionDetailPage() {
   const handleEditorFileUpload = async (url: string, name?: string) => {
     if (!submission || !userProfile) return;
     setIsUpdating(true);
-
     const newAttachment = {
         url,
         name: name || url.split('/').pop() || 'Uploaded File',

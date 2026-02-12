@@ -13,11 +13,10 @@ import {
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
-import { formatDistanceToNow } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/auth-context';
-import { useEffect, useState } from 'react';
-import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
+import { useEffect, useState, useMemo } from 'react';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { Submission } from '@/types';
@@ -27,7 +26,8 @@ import { FirestorePermissionError } from '@/firebase/errors';
 
 export default function ReviewerPage() {
     const { user } = useAuth();
-    const [assignedSubmissions, setAssignedSubmissions] = useState<Submission[]>([]);
+    const [assignedById, setAssignedById] = useState<Submission[]>([]);
+    const [invitedByEmail, setInvitedByEmail] = useState<Submission[]>([]);
     const [loading, setLoading] = useState(true);
     const { toast } = useToast();
 
@@ -44,34 +44,72 @@ export default function ReviewerPage() {
         );
 
         const unsubscribe = onSnapshot(q, (querySnapshot) => {
-            const myAssignments: Submission[] = querySnapshot.docs.map(doc => {
+            const subs: Submission[] = querySnapshot.docs.map(doc => {
                  const data = doc.data();
                 return {
                     id: doc.id,
-                    title: data.title || 'Untitled',
-                    author: data.author || { name: 'Unknown Author' },
-                    status: data.status || 'Submitted',
-                    submittedAt: data.submittedAt ? data.submittedAt.toDate() : new Date(),
-                    abstract: data.abstract || '',
-                    keywords: data.keywords || '',
-                    manuscriptUrl: data.manuscriptUrl || '',
-                    reviewers: data.reviewers || [],
+                    ...data,
+                    submittedAt: data.submittedAt.toDate(),
                 } as Submission;
             });
-            setAssignedSubmissions(myAssignments);
+            setAssignedById(subs);
             setLoading(false);
         }, (serverError) => {
             const permissionError = new FirestorePermissionError({
                 path: 'submissions',
                 operation: 'list',
+                requestResourceData: { where: `reviewerIds contains ${user.uid}` }
+            });
+            errorEmitter.emit('permission-error', permissionError);
+            setLoading(false);
+        });
+        return () => unsubscribe();
+    }, [user, toast]);
+
+    useEffect(() => {
+         if (!user?.email) {
+            setLoading(false);
+            return;
+        }
+        setLoading(true);
+
+        const q = query(
+            collection(db, 'submissions'),
+            where('invitedReviewerEmails', 'array-contains', user.email)
+        );
+
+        const unsubscribe = onSnapshot(q, (querySnapshot) => {
+            const subs: Submission[] = querySnapshot.docs.map(doc => {
+                 const data = doc.data();
+                return {
+                    id: doc.id,
+                    ...data,
+                    submittedAt: data.submittedAt.toDate(),
+                } as Submission;
+            });
+            setInvitedByEmail(subs);
+            setLoading(false);
+        }, (serverError) => {
+            const permissionError = new FirestorePermissionError({
+                path: 'submissions',
+                operation: 'list',
+                requestResourceData: { where: `invitedReviewerEmails contains ${user.email}` }
             });
             errorEmitter.emit('permission-error', permissionError);
             setLoading(false);
         });
 
-        // Cleanup subscription on unmount
         return () => unsubscribe();
     }, [user, toast]);
+    
+    const assignedSubmissions = useMemo(() => {
+        const combined = new Map<string, Submission>();
+        [...assignedById, ...invitedByEmail].forEach(sub => {
+            combined.set(sub.id, sub);
+        });
+        return Array.from(combined.values()).sort((a,b) => b.submittedAt.getTime() - a.submittedAt.getTime());
+    }, [assignedById, invitedByEmail]);
+
 
   return (
     <div className="space-y-8">
@@ -92,7 +130,6 @@ export default function ReviewerPage() {
                     <TableHeader>
                         <TableRow>
                         <TableHead>Manuscript Title</TableHead>
-                        <TableHead className="hidden sm:table-cell">Assigned</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className="text-right">Action</TableHead>
                         </TableRow>
@@ -102,27 +139,27 @@ export default function ReviewerPage() {
                              Array.from({ length: 2 }).map((_, i) => (
                                 <TableRow key={i}>
                                     <TableCell><Skeleton className="h-5 w-48" /></TableCell>
-                                    <TableCell className="hidden sm:table-cell"><Skeleton className="h-5 w-24" /></TableCell>
                                     <TableCell><Skeleton className="h-6 w-28 rounded-full" /></TableCell>
                                     <TableCell className="text-right"><Skeleton className="h-8 w-32 ml-auto" /></TableCell>
                                 </TableRow>
                             ))
                         ) : assignedSubmissions.length > 0 ? (
                             assignedSubmissions.map((submission) => {
-                                const myReview = submission.reviewers?.find(r => r.id === user?.uid);
-                                const hasReviewed = myReview?.status === 'Review Submitted';
+                                const myReviewAssignment = submission.reviewers?.find(r => r.id === user?.uid || r.email === user?.email);
+                                const status = myReviewAssignment?.status || 'Invited';
+                                const hasReviewed = status === 'Review Submitted';
+                                const isPendingInvite = status === 'Invited';
+
                                 return (
                                 <TableRow key={submission.id}>
                                     <TableCell className="font-medium max-w-xs truncate">{submission.title}</TableCell>
-                                    {/* Ideally, we'd store an 'assignedAt' timestamp for the reviewer */}
-                                    <TableCell className="hidden sm:table-cell">{formatDistanceToNow(submission.submittedAt, { addSuffix: true })}</TableCell>
                                     <TableCell>
-                                        <Badge variant={hasReviewed ? 'success' : 'outline'}>{myReview?.status || 'Pending'}</Badge>
+                                        <Badge variant={isPendingInvite ? 'default' : hasReviewed ? 'success' : 'outline'}>{status}</Badge>
                                     </TableCell>
                                     <TableCell className="text-right">
                                         <Link href={`/dashboard/submissions/${submission.id}`} passHref>
-                                         <Button variant={hasReviewed ? "secondary" : "outline"} size="sm">
-                                            {hasReviewed ? 'View' : 'Review'}
+                                         <Button variant={hasReviewed ? "secondary" : isPendingInvite ? 'default' : "outline"} size="sm">
+                                            {isPendingInvite ? 'Accept Invitation' : hasReviewed ? 'View Submission' : 'Submit Review'}
                                          </Button>
                                         </Link>
                                     </TableCell>

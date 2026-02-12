@@ -191,6 +191,7 @@ export default function NewSubmissionPage() {
         pageCount: values.pageCount || null,
         reviewers: [],
         reviewerIds: [],
+        invitedReviewerEmails: [],
         uniqueId: uniqueId,
         revision: 0,
     };
