@@ -94,10 +94,9 @@ service cloud.firestore {
 
       allow update: if
         // Editorial members can update specific, necessary fields.
-        (isEditorialMember() &&
-          request.resource.data.diff(resource.data).changedKeys().hasAny([
+        (isEditorialMember() && request.resource.data.diff(resource.data).changedKeys().difference([
             'status', 'reviewers', 'reviewerIds', 'uniqueId', 'pageCount', 'editorAttachments'
-          ])) ||
+          ]).size() == 0) ||
         
         // Authors can update their submission under specific conditions.
         (isAuthor() && request.auth.uid == resource.data.author.id && (
