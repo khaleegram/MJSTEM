@@ -612,7 +612,7 @@ export default function SubmissionDetailPage() {
       if (!user?.email || !submission || !userProfile) return;
 
       const myInvite = submission.reviewers?.find(
-        (r) => r.email === user.email && r.status === 'Invited' && r.id === null
+        (r) => r.email === user.email && r.status === 'Invited'
       );
 
       if (myInvite) {
@@ -983,7 +983,7 @@ export default function SubmissionDetailPage() {
 
     try {
         await updateDoc(submissionRef, updateData);
-        toast({ title: "File Uploaded", description: "The file has been attached and is visible to the author." });
+        toast({ title: "File Uploaded", description: "The file is visible to the author and an email notification has been sent." });
         
         // Send email notification
         sendAttachmentNotificationEmail({
@@ -1365,3 +1365,5 @@ export default function SubmissionDetailPage() {
     </div>
   );
 }
+
+    
