@@ -91,10 +91,10 @@ service cloud.firestore {
       // Authors can create submissions.
       allow create: if isAuthor() && request.resource.data.author.id == request.auth.uid;
 
-      // ✅ PATCHED: editorial team can update anything in submissions (including editorAttachments arrayUnion)
+      // ✅ PATCHED: Replaced function call with direct check for robustness.
       allow update: if
         // Admin / Managing Editor / Editor: unrestricted updates
-        isEditorialMember()
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['Admin', 'Managing Editor', 'Editor'])
 
         // Authors can update their submission under specific conditions.
         || (isAuthor() && request.auth.uid == resource.data.author.id && (
