@@ -1,4 +1,3 @@
-
 'use client';
 
 import { notFound, useParams, useRouter } from 'next/navigation';
@@ -971,30 +970,6 @@ export default function SubmissionDetailPage() {
     if (!submission || !userProfile) return;
     setIsUpdating(true);
 
-    const auth = getAuth();
-    console.log("AUTH CHECK", {
-      uid: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-    });
-
-    const uid = auth.currentUser?.uid;
-    if (!uid) {
-        toast({
-            title: "Authentication Error",
-            description: "No authenticated user found. Please log in again.",
-            variant: "destructive",
-        });
-        setIsUpdating(false);
-        return; 
-    }
-
-    try {
-        const userDocForCheck = await getDoc(doc(db, "users", uid));
-        console.log("USER DOC CHECK", { exists: userDocForCheck.exists(), data: userDocForCheck.data() });
-    } catch (debugError) {
-        console.error("DEBUGGING CHECK FAILED:", debugError);
-    }
-
     const newAttachment = {
         url,
         name: name || url.split('/').pop() || 'Uploaded File',
@@ -1008,7 +983,7 @@ export default function SubmissionDetailPage() {
 
     try {
         await updateDoc(submissionRef, updateData);
-        toast({ title: "File Uploaded", description: "The file is visible to the author and an email notification has been sent." });
+        toast({ title: "File Uploaded", description: "The file is now visible to the author, and an email notification has been sent." });
         
         sendAttachmentNotificationEmail({
             authorEmail: submission.author.email,
@@ -1389,4 +1364,3 @@ export default function SubmissionDetailPage() {
     </div>
   );
 }
-
