@@ -1,3 +1,4 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -89,7 +90,7 @@ service cloud.firestore {
       allow list: if true;
 
       // Any signed-in user can create submissions for themselves.
-      allow create: if isSignedIn() && request.resource.data.author.id == request.auth.uid;
+      allow create: if isSignedIn();
 
       // Allow updates based on user role and submission status
       allow update: if

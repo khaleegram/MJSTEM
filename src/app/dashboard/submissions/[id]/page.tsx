@@ -56,8 +56,6 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { sendReviewerInvitationEmail } from '@/ai/flows/send-reviewer-invitation-email';
 import { sendAttachmentNotificationEmail } from '@/ai/flows/send-attachment-notification-email';
-import { claimReviewInvitation } from '@/ai/flows/claim-review-invitation';
-
 
 async function getNextSubmissionId(): Promise<string> {
     const counterRef = doc(db, 'settings', 'submissionCounter');
@@ -607,54 +605,6 @@ export default function SubmissionDetailPage() {
     setLoading(true);
     fetchSubmission();
   }, [fetchSubmission, refetchTrigger]);
-
-  React.useEffect(() => {
-    const tryToClaimInvitation = async () => {
-      // Check if user is logged in, has a profile, has an email, and there's a submission loaded.
-      if (!user?.email || !submission || !userProfile) {
-        return;
-      }
-      
-      // Check if this user was invited via email for this submission.
-      if (!submission.invitedReviewerEmails?.includes(user.email)) {
-        return;
-      }
-      
-      setIsUpdating(true);
-
-      try {
-        const result = await claimReviewInvitation({
-          userId: user.uid,
-          userEmail: user.email,
-          submissionId: submission.id,
-        });
-
-        if (result.success) {
-            toast({
-              title: "Invitation Accepted",
-              description: "This manuscript is now in your review dashboard."
-            });
-            // Trigger a refetch of data to show the updated state
-            setRefetchTrigger(p => p + 1);
-        } else {
-            throw new Error(result.message);
-        }
-
-      } catch (e: any) {
-        console.error("Error claiming invitation:", e);
-        toast({ title: "Failed to claim invitation", description: e.message, variant: 'destructive' });
-      } finally {
-        setIsUpdating(false);
-      }
-    };
-    
-    // Only run the claim logic once the submission and user data are available.
-    if (submission && user && userProfile) {
-        tryToClaimInvitation();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [submission, user, userProfile]);
-
 
   const handleDecision = async (status: SubmissionStatus) => {
     if(!submission || !userProfile || !submission.uniqueId) return;

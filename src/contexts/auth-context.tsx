@@ -15,7 +15,7 @@ import {
   sendPasswordResetEmail,
 } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
-import { doc, setDoc, getDoc, collection, query, where, getDocs, writeBatch, arrayUnion } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, query, where, getDocs, writeBatch, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { UserProfile, Submission } from '@/types';
 
 
@@ -46,12 +46,13 @@ const AuthContext = createContext<AuthContextType>({
 const ensureUserDocument = async (user: FirebaseUser): Promise<UserProfile> => {
   const userRef = doc(db, 'users', user.uid);
   const snap = await getDoc(userRef);
+  let profile: UserProfile;
 
   if (snap.exists()) {
-    return snap.data() as UserProfile;
+    profile = snap.data() as UserProfile;
   } else {
     // Create the initial profile for the new user
-    const newProfile: UserProfile = {
+    profile = {
       uid: user.uid,
       email: user.email!,
       displayName: user.displayName || 'New User',
@@ -60,11 +61,53 @@ const ensureUserDocument = async (user: FirebaseUser): Promise<UserProfile> => {
       specialization: '',
       fcmTokens: [],
     };
-    await setDoc(userRef, newProfile);
-    // The logic to handle invitations is now on the submission page itself,
-    // as it requires the submissionId context.
-    return newProfile;
+    await setDoc(userRef, profile);
   }
+
+  // Automatically claim pending invitations
+  if (user.email) {
+    const submissionsRef = collection(db, 'submissions');
+    const q = query(submissionsRef, where('invitedReviewerEmails', 'array-contains', user.email));
+    
+    // This is a fire-and-forget operation in the background.
+    // It shouldn't block the user's login flow.
+    getDocs(q).then(async (querySnapshot) => {
+      if (!querySnapshot.empty) {
+        const batch = writeBatch(db);
+        let needsRoleUpdate = profile.role === 'Author';
+
+        querySnapshot.forEach(submissionDoc => {
+          const submissionData = submissionDoc.data() as Submission;
+          const submissionRef = doc(db, 'submissions', submissionDoc.id);
+          
+          // Update submission to link the UID
+          const updatedReviewers = submissionData.reviewers?.map(r =>
+            (r.email === user.email && r.status === 'Invited')
+              ? { ...r, id: user.uid, status: 'Pending' as const }
+              : r
+          ) || [];
+
+          batch.update(submissionRef, {
+            reviewers: updatedReviewers,
+            reviewerIds: arrayUnion(user.uid),
+            invitedReviewerEmails: arrayRemove(user.email)
+          });
+        });
+
+        // Update user role to Reviewer if they are just an Author
+        if (needsRoleUpdate) {
+          batch.update(userRef, { role: 'Reviewer' });
+        }
+
+        await batch.commit();
+        console.log(`Claimed ${querySnapshot.size} pending review invitations for ${user.email}.`);
+      }
+    }).catch(error => {
+      console.error("Error auto-claiming review invitations:", error);
+    });
+  }
+
+  return profile;
 };
 
 
