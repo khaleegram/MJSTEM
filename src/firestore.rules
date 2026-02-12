@@ -88,13 +88,13 @@ service cloud.firestore {
       // Allow list for anyone for public search, but GET rules protect document content.
       allow list: if true;
 
-      // Authors can create submissions.
-      allow create: if isAuthor() && request.resource.data.author.id == request.auth.uid;
+      // Any signed-in user can create submissions for themselves.
+      allow create: if isSignedIn() && request.resource.data.author.id == request.auth.uid;
 
-      // ✅ PATCHED: Replaced function call with direct check for robustness.
+      // Allow updates based on user role and submission status
       allow update: if
         // Admin / Managing Editor / Editor: unrestricted updates
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['Admin', 'Managing Editor', 'Editor'])
+        isEditorialMember()
 
         // Authors can update their submission under specific conditions.
         || (isAuthor() && request.auth.uid == resource.data.author.id && (
