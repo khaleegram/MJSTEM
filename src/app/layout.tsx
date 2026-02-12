@@ -13,6 +13,7 @@ import { Icons } from '@/components/icons';
 
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://mjstem.org'),
   title: 'MJSTEM - Multidisciplinary Journal of Science, Technology, Education and Management',
   description: 'A premier, peer-reviewed, open-access journal dedicated to the rapid publication of high-quality research across science, technology, education, and management.',
   applicationName: 'MJSTEM',
@@ -25,7 +26,6 @@ export const metadata: Metadata = {
   },
   openGraph: {
     type: 'website',
-    url: 'https://mjstem.org',
     title: 'MJSTEM - Multidisciplinary Journal',
     description: 'A premier, peer-reviewed, open-access journal.',
     siteName: 'MJSTEM',
