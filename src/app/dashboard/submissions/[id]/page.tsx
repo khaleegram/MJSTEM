@@ -55,7 +55,6 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { sendReviewerInvitationEmail } from '@/ai/flows/send-reviewer-invitation-email';
 import { sendAttachmentNotificationEmail } from '@/ai/flows/send-attachment-notification-email';
-import { getAuth } from 'firebase/auth';
 
 
 async function getNextSubmissionId(): Promise<string> {
@@ -973,7 +972,7 @@ export default function SubmissionDetailPage() {
     const newAttachment = {
         url,
         name: name || url.split('/').pop() || 'Uploaded File',
-        uploadedAt: serverTimestamp(),
+        uploadedAt: new Date(),
     };
 
     const submissionRef = doc(db, 'submissions', submission.id);
