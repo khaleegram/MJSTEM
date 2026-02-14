@@ -64,47 +64,52 @@ const ensureUserDocument = async (user: FirebaseUser): Promise<UserProfile> => {
     await setDoc(userRef, profile);
   }
 
-  // Automatically claim pending invitations
-  if (user.email) {
+  // If the user is just an Author, check if they have pending invitations.
+  // This runs on every login, ensuring invitations are always claimed.
+  if (user.email && profile.role === 'Author') {
     const submissionsRef = collection(db, 'submissions');
     const q = query(submissionsRef, where('invitedReviewerEmails', 'array-contains', user.email));
     
-    // This is a fire-and-forget operation in the background.
-    // It shouldn't block the user's login flow.
-    getDocs(q).then(async (querySnapshot) => {
-      if (!querySnapshot.empty) {
-        const batch = writeBatch(db);
-        let needsRoleUpdate = profile.role === 'Author';
+    try {
+        const querySnapshot = await getDocs(q);
 
-        querySnapshot.forEach(submissionDoc => {
-          const submissionData = submissionDoc.data() as Submission;
-          const submissionRef = doc(db, 'submissions', submissionDoc.id);
-          
-          // Update submission to link the UID
-          const updatedReviewers = submissionData.reviewers?.map(r =>
-            (r.email === user.email && r.status === 'Invited')
-              ? { ...r, id: user.uid, status: 'Pending' as const }
-              : r
-          ) || [];
+        if (!querySnapshot.empty) {
+            const batch = writeBatch(db);
+            
+            querySnapshot.forEach(submissionDoc => {
+                const submissionData = submissionDoc.data() as Submission;
+                const submissionRef = doc(db, 'submissions', submissionDoc.id);
+            
+                // Update submission to link the UID
+                const updatedReviewers = submissionData.reviewers?.map(r =>
+                    (r.email === user.email && r.status === 'Invited')
+                    ? { ...r, id: user.uid, status: 'Pending' as const }
+                    : r
+                ) || [];
 
-          batch.update(submissionRef, {
-            reviewers: updatedReviewers,
-            reviewerIds: arrayUnion(user.uid),
-            invitedReviewerEmails: arrayRemove(user.email)
-          });
-        });
+                batch.update(submissionRef, {
+                    reviewers: updatedReviewers,
+                    reviewerIds: arrayUnion(user.uid),
+                    invitedReviewerEmails: arrayRemove(user.email)
+                });
+            });
 
-        // Update user role to Reviewer if they are just an Author
-        if (needsRoleUpdate) {
-          batch.update(userRef, { role: 'Reviewer' });
+            // Update user role to Reviewer
+            batch.update(userRef, { role: 'Reviewer' });
+            
+            await batch.commit();
+            console.log(`Claimed ${querySnapshot.size} pending review invitations and promoted ${user.email} to Reviewer.`);
+            
+            // Re-fetch the profile to return the updated version immediately
+            const updatedSnap = await getDoc(userRef);
+            if (updatedSnap.exists()) {
+                return updatedSnap.data() as UserProfile;
+            }
         }
-
-        await batch.commit();
-        console.log(`Claimed ${querySnapshot.size} pending review invitations for ${user.email}.`);
-      }
-    }).catch(error => {
-      console.error("Error auto-claiming review invitations:", error);
-    });
+    } catch (error) {
+        console.error("Error auto-claiming review invitations:", error);
+        // Don't block login if this fails, just return the existing profile.
+    }
   }
 
   return profile;
