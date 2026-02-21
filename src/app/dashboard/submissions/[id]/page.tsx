@@ -1,3 +1,4 @@
+
 'use client';
 
 import { notFound, useParams, useRouter } from 'next/navigation';
@@ -141,49 +142,49 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
         const submissionRef = doc(db, 'submissions', submission.id);
         const reviewRef = collection(db, 'submissions', submission.id, 'reviews');
 
-        try {
-            await addDoc(reviewRef, reviewData);
-            
-            const updatedReviewers = submission.reviewers?.map(r => 
-                r.id === user?.uid ? { ...r, status: 'Review Submitted' as const } : r
-            );
-            await updateDoc(submissionRef, { reviewers: updatedReviewers });
+        addDoc(reviewRef, reviewData)
+            .then(async () => {
+                const updatedReviewers = submission.reviewers?.map(r => 
+                    r.id === user?.uid ? { ...r, status: 'Review Submitted' as const } : r
+                );
+                await updateDoc(submissionRef, { reviewers: updatedReviewers });
 
-            await logSubmissionEvent({
-                submissionId: submission.id,
-                eventType: 'REVIEW_SUBMITTED',
-                context: { reviewerName: userProfile?.displayName || 'A reviewer' }
-            });
-            
-            await generateNotification({
-                userId: 'Admins',
-                submissionId: submission.id,
-                eventType: 'REVIEW_SUBMITTED',
-                context: { 
-                    submissionTitle: submission.title,
-                    reviewerName: userProfile?.displayName || 'a reviewer'
-                }
-            });
+                await logSubmissionEvent({
+                    submissionId: submission.id,
+                    eventType: 'REVIEW_SUBMITTED',
+                    context: { reviewerName: userProfile?.displayName || 'A reviewer' }
+                });
+                
+                await generateNotification({
+                    userId: 'Admins',
+                    submissionId: submission.id,
+                    eventType: 'REVIEW_SUBMITTED',
+                    context: { 
+                        submissionTitle: submission.title,
+                        reviewerName: userProfile?.displayName || 'a reviewer'
+                    }
+                });
 
-            await generateNotification({
-                userId: submission.author.id,
-                submissionId: submission.id,
-                eventType: 'REVIEW_SUBMITTED',
-                context: { submissionTitle: submission.title }
+                await generateNotification({
+                    userId: submission.author.id,
+                    submissionId: submission.id,
+                    eventType: 'REVIEW_SUBMITTED',
+                    context: { submissionTitle: submission.title }
+                });
+                
+                toast({ title: "Review Submitted", description: "The editor has been notified." });
+                onReviewSubmit();
+            })
+            .catch(async (serverError) => {
+                errorEmitter.emit('permission-error', new FirestorePermissionError({
+                    path: reviewRef.path,
+                    operation: 'create',
+                    requestResourceData: reviewData
+                }));
+            })
+            .finally(() => {
+                setIsSubmitting(false);
             });
-            
-            toast({ title: "Review Submitted", description: "The editor has been notified." });
-            onReviewSubmit();
-        
-        } catch (serverError: any) {
-             errorEmitter.emit('permission-error', new FirestorePermissionError({
-                path: reviewRef.path,
-                operation: 'create',
-                requestResourceData: reviewData
-            }));
-        } finally {
-            setIsSubmitting(false);
-        }
     }
 
     return (
@@ -312,7 +313,7 @@ function AuthorRevisionForm({ submission, onRevisionSubmit }: { submission: Subm
                 toast({ title: "Revision Submitted", description: "Your updated manuscript has been sent." });
                 onRevisionSubmit();
             })
-            .catch((serverError) => {
+            .catch(async (serverError) => {
                 errorEmitter.emit('permission-error', new FirestorePermissionError({
                     path: submissionRef.path,
                     operation: 'update',
@@ -369,19 +370,21 @@ function AuthorEditForm({ submission, onUpdate, onCancel }: { submission: Submis
             abstract: values.abstract,
         };
 
-        try {
-            await updateDoc(submissionRef, updateData);
-            toast({ title: 'Submission Updated' });
-            onUpdate();
-        } catch (serverError) {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({
-                path: submissionRef.path,
-                operation: 'update',
-                requestResourceData: updateData,
-            }));
-        } finally {
-            setIsSubmitting(false);
-        }
+        updateDoc(submissionRef, updateData)
+            .then(() => {
+                toast({ title: 'Submission Updated' });
+                onUpdate();
+            })
+            .catch(async (serverError) => {
+                errorEmitter.emit('permission-error', new FirestorePermissionError({
+                    path: submissionRef.path,
+                    operation: 'update',
+                    requestResourceData: updateData,
+                }));
+            })
+            .finally(() => {
+                setIsSubmitting(false);
+            });
     };
 
     return (
@@ -410,15 +413,22 @@ function PageCountDialog({ submission, onUpdate }: { submission: Submission; onU
     const handleSave = async () => {
         setIsSaving(true);
         const submissionRef = doc(db, 'submissions', submission.id);
-        try {
-            await updateDoc(submissionRef, { pageCount: Number(pageCount) || null });
-            toast({ title: 'Page Count Updated' });
-            onUpdate();
-        } catch (e) {
-            toast({ title: 'Error', description: 'Could not update page count.', variant: 'destructive'});
-        } finally {
-            setIsSaving(false);
-        }
+        const updateData = { pageCount: Number(pageCount) || null };
+        updateDoc(submissionRef, updateData)
+            .then(() => {
+                toast({ title: 'Page Count Updated' });
+                onUpdate();
+            })
+            .catch(async (serverError) => {
+                errorEmitter.emit('permission-error', new FirestorePermissionError({
+                    path: submissionRef.path,
+                    operation: 'update',
+                    requestResourceData: updateData,
+                }));
+            })
+            .finally(() => {
+                setIsSaving(false);
+            });
     }
 
     return (
@@ -479,19 +489,22 @@ export default function SubmissionDetailPage() {
   const isReviewer = submission?.reviewerIds?.includes(user?.uid || '');
 
   React.useEffect(() => {
-    const fetchReviewers = async () => {
+    const fetchReviewers = () => {
         if (!isEditor) return;
-        const reviewersCollection = collection(db, 'users');
-        try {
-            const q = collection(db, 'users');
-            const querySnapshot = await getDocs(query(q));
-            const list = querySnapshot.docs
-                .map(doc => doc.data() as UserProfile)
-                .filter(u => ['Reviewer', 'Editor', 'Admin', 'Managing Editor'].includes(u.role));
-            setAvailableReviewers(list);
-        } catch (serverError) {
-            // Handle error silently or via emitter
-        }
+        const usersRef = collection(db, 'users');
+        getDocs(query(usersRef))
+            .then((querySnapshot) => {
+                const list = querySnapshot.docs
+                    .map(doc => doc.data() as UserProfile)
+                    .filter(u => ['Reviewer', 'Editor', 'Admin', 'Managing Editor'].includes(u.role));
+                setAvailableReviewers(list);
+            })
+            .catch(async (serverError) => {
+                errorEmitter.emit('permission-error', new FirestorePermissionError({
+                    path: usersRef.path,
+                    operation: 'list',
+                }));
+            });
     }
     fetchReviewers();
   }, [isEditor]);
@@ -499,23 +512,28 @@ export default function SubmissionDetailPage() {
   const fetchSubmission = React.useCallback(async () => {
     if (!id) return;
     const docRef = doc(db, 'submissions', id);
-    try {
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-            const data = docSnap.data();
-            setSubmission({
-                id: docSnap.id,
-                ...data,
-                submittedAt: data.submittedAt ? data.submittedAt.toDate() : new Date(),
-            } as Submission);
-        } else {
-            notFound();
-        }
-    } catch (serverError) {
-        notFound();
-    } finally {
-        setLoading(false);
-    }
+    getDoc(docRef)
+        .then((docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                setSubmission({
+                    id: docSnap.id,
+                    ...data,
+                    submittedAt: data.submittedAt ? data.submittedAt.toDate() : new Date(),
+                } as Submission);
+            } else {
+                notFound();
+            }
+        })
+        .catch(async (serverError) => {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({
+                path: docRef.path,
+                operation: 'get',
+            }));
+        })
+        .finally(() => {
+            setLoading(false);
+        });
   }, [id]);
 
   React.useEffect(() => {
@@ -528,31 +546,36 @@ export default function SubmissionDetailPage() {
     setIsUpdating(true);
     const submissionRef = doc(db, 'submissions', submission.id);
     const updateData = { status };
-    try {
-        await updateDoc(submissionRef, updateData);
-        await logSubmissionEvent({ submissionId: submission.id, eventType: 'STATUS_CHANGED', context: { actorName: userProfile.displayName, status } });
-        await generateNotification({ userId: submission.author.id, submissionId: submission.id, eventType: 'STATUS_CHANGED', context: { status, submissionTitle: submission.title } });
-        await sendDecisionEmail({ authorEmail: submission.author.email, authorName: submission.author.name, manuscriptTitle: submission.title, submissionId: submission.id, uniqueId: submission.uniqueId, decision: status });
-        toast({ title: "Status Updated", description: `Author notified.` });
-        setRefetchTrigger(prev => prev + 1);
-    } catch (serverError) {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: submissionRef.path, operation: 'update', requestResourceData: updateData }));
-    } finally {
-        setIsUpdating(false);
-    }
+    
+    updateDoc(submissionRef, updateData)
+        .then(async () => {
+            await logSubmissionEvent({ submissionId: submission.id, eventType: 'STATUS_CHANGED', context: { actorName: userProfile.displayName, status } });
+            await generateNotification({ userId: submission.author.id, submissionId: submission.id, eventType: 'STATUS_CHANGED', context: { status, submissionTitle: submission.title } });
+            await sendDecisionEmail({ authorEmail: submission.author.email, authorName: submission.author.name, manuscriptTitle: submission.title, submissionId: submission.id, uniqueId: submission.uniqueId, decision: status });
+            toast({ title: "Status Updated", description: `Author notified.` });
+            setRefetchTrigger(prev => prev + 1);
+        })
+        .catch(async (serverError) => {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: submissionRef.path, operation: 'update', requestResourceData: updateData }));
+        })
+        .finally(() => {
+            setIsUpdating(false);
+        });
   }
   
   const handleDeleteSubmission = async () => {
     if (!submission) return;
-    try {
-        await runTransaction(db, async (transaction) => {
-            transaction.delete(doc(db, 'submissions', submission.id));
-        });
+    const submissionRef = doc(db, 'submissions', submission.id);
+    runTransaction(db, async (transaction) => {
+        transaction.delete(submissionRef);
+    })
+    .then(() => {
         toast({ title: "Deleted" });
         router.push('/dashboard/author');
-    } catch (serverError) {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: `submissions/${submission.id}`, operation: 'delete' }));
-    }
+    })
+    .catch(async (serverError) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: submissionRef.path, operation: 'delete' }));
+    });
   };
 
   const handleAssignReviewer = async (reviewer: UserProfile) => {
@@ -568,16 +591,19 @@ export default function SubmissionDetailPage() {
       if (['Submitted', 'Under Initial Review', 'With Editor'].includes(submission.status)) {
           updateData.status = 'Under Peer Review';
       }
-      try {
-        await updateDoc(submissionRef, updateData);
-        logSubmissionEvent({ submissionId: submission.id, eventType: 'REVIEWER_ASSIGNED', context: { reviewerName: reviewer.displayName, actorName: userProfile.displayName } });
-        generateNotification({ userId: reviewer.uid, submissionId: submission.id, eventType: 'REVIEWER_ASSIGNED', context: { submissionTitle: submission.title } });
-        sendReviewerAssignmentEmail({ reviewerEmail: reviewer.email, reviewerName: reviewer.displayName, manuscriptTitle: submission.title, submissionId: submission.id });
-        toast({ title: "Reviewer Assigned" });
-        setRefetchTrigger(prev => prev + 1);
-      } catch (serverError) {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: submissionRef.path, operation: 'update' }));
-      } finally { setIsUpdating(false); }
+      
+      updateDoc(submissionRef, updateData)
+        .then(async () => {
+            logSubmissionEvent({ submissionId: submission.id, eventType: 'REVIEWER_ASSIGNED', context: { reviewerName: reviewer.displayName, actorName: userProfile.displayName } });
+            generateNotification({ userId: reviewer.uid, submissionId: submission.id, eventType: 'REVIEWER_ASSIGNED', context: { submissionTitle: submission.title } });
+            sendReviewerAssignmentEmail({ reviewerEmail: reviewer.email, reviewerName: reviewer.displayName, manuscriptTitle: submission.title, submissionId: submission.id });
+            toast({ title: "Reviewer Assigned" });
+            setRefetchTrigger(prev => prev + 1);
+        })
+        .catch(async (serverError) => {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: submissionRef.path, operation: 'update', requestResourceData: updateData }));
+        })
+        .finally(() => { setIsUpdating(false); });
   }
 
   const handleInviteReviewer = async (values: z.infer<typeof inviteReviewerSchema>) => {
@@ -598,23 +624,27 @@ export default function SubmissionDetailPage() {
         createdAt: serverTimestamp(),
     };
 
-    try {
-        await addDoc(collection(db, 'reviewInvitations'), inviteData);
-        const submissionRef = doc(db, 'submissions', submission.id);
-        const newReviewer = { id: null, name: values.name, email: values.email, status: 'Invited' as const };
-        const updateData: any = { reviewers: arrayUnion(newReviewer), invitedReviewerEmails: arrayUnion(emailNorm) };
-        if (['Submitted', 'Under Initial Review', 'With Editor'].includes(submission.status)) {
-            updateData.status = 'Under Peer Review';
-        }
-        await updateDoc(submissionRef, updateData);
-        await logSubmissionEvent({ submissionId: submission.id, eventType: 'REVIEWER_INVITED', context: { reviewerName: values.name, reviewerEmail: values.email, actorName: userProfile.displayName } });
-        await sendReviewerInvitationEmail({ reviewerEmail: values.email, reviewerName: values.name, manuscriptTitle: submission.title, submissionId: submission.id });
-        toast({ title: "Invitation Sent" });
-        inviteForm.reset();
-        setRefetchTrigger(prev => prev + 1);
-    } catch (serverError) { 
-        toast({ title: "Error sending invite", variant: "destructive" });
-    } finally { setIsUpdating(false); }
+    const invitesRef = collection(db, 'reviewInvitations');
+    const submissionRef = doc(db, 'submissions', submission.id);
+
+    addDoc(invitesRef, inviteData)
+        .then(async () => {
+            const newReviewer = { id: null, name: values.name, email: values.email, status: 'Invited' as const };
+            const updateData: any = { reviewers: arrayUnion(newReviewer), invitedReviewerEmails: arrayUnion(emailNorm) };
+            if (['Submitted', 'Under Initial Review', 'With Editor'].includes(submission.status)) {
+                updateData.status = 'Under Peer Review';
+            }
+            await updateDoc(submissionRef, updateData);
+            await logSubmissionEvent({ submissionId: submission.id, eventType: 'REVIEWER_INVITED', context: { reviewerName: values.name, reviewerEmail: values.email, actorName: userProfile.displayName } });
+            await sendReviewerInvitationEmail({ reviewerEmail: values.email, reviewerName: values.name, manuscriptTitle: submission.title, submissionId: submission.id });
+            toast({ title: "Invitation Sent" });
+            inviteForm.reset();
+            setRefetchTrigger(prev => prev + 1);
+        })
+        .catch(async (serverError) => { 
+            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: invitesRef.path, operation: 'create', requestResourceData: inviteData }));
+        })
+        .finally(() => { setIsUpdating(false); });
   }
 
   const handleRemoveReviewer = async (reviewer: { id: string | null, email: string }) => {
@@ -681,12 +711,15 @@ export default function SubmissionDetailPage() {
   const handleAssignId = async () => {
     if (!submission) return;
     setIsUpdating(true);
+    const submissionRef = doc(db, 'submissions', submission.id);
     try {
         const newId = await getNextSubmissionId();
-        await updateDoc(doc(db, 'submissions', submission.id), { uniqueId: newId });
+        await updateDoc(submissionRef, { uniqueId: newId });
         toast({ title: "ID Assigned", description: newId });
         setRefetchTrigger(prev => prev + 1);
-    } catch (e) { toast({ title: "Error", variant: "destructive" }); }
+    } catch (e) { 
+        toast({ title: "Error", variant: "destructive" }); 
+    }
     finally { setIsUpdating(false); }
   };
 
@@ -695,13 +728,17 @@ export default function SubmissionDetailPage() {
     setIsUpdating(true);
     const newAttachment = { url, name: name || 'Uploaded File', uploadedAt: new Date() };
     const submissionRef = doc(db, 'submissions', submission.id);
-    try {
-        await updateDoc(submissionRef, { editorAttachments: arrayUnion(newAttachment) });
-        toast({ title: "File Shared with Author" });
-        sendAttachmentNotificationEmail({ authorEmail: submission.author.email, authorName: submission.author.name, editorName: userProfile.displayName, submissionId: submission.id, manuscriptTitle: submission.title, fileName: newAttachment.name });
-        setRefetchTrigger(p => p + 1);
-    } catch (serverError) { errorEmitter.emit('permission-error', new FirestorePermissionError({ path: submissionRef.path, operation: 'update' })); }
-    finally { setIsUpdating(false); }
+    
+    updateDoc(submissionRef, { editorAttachments: arrayUnion(newAttachment) })
+        .then(async () => {
+            toast({ title: "File Shared with Author" });
+            sendAttachmentNotificationEmail({ authorEmail: submission.author.email, authorName: submission.author.name, editorName: userProfile.displayName, submissionId: submission.id, manuscriptTitle: submission.title, fileName: newAttachment.name });
+            setRefetchTrigger(p => p + 1);
+        })
+        .catch(async (serverError) => { 
+            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: submissionRef.path, operation: 'update', requestResourceData: { editorAttachments: 'arrayUnion(...)' } })); 
+        })
+        .finally(() => { setIsUpdating(false); });
   }
 
   const getInitials = (name: string) => {
