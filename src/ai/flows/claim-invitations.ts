@@ -1,4 +1,3 @@
-
 'use server';
 /**
  * @fileOverview A server action for claiming reviewer invitations.
@@ -47,6 +46,8 @@ export async function claimReviewerInvitations(input: ClaimInvitationsInput): Pr
       const userDoc = await transaction.get(userRef);
       const userData = userDoc.data();
       
+      // We promote them if they are an Author. 
+      // If they are already a Reviewer/Editor/Admin, we just link the submission.
       const shouldPromote = userData?.role === 'Author';
 
       for (const inviteDoc of invitesSnapshot.docs) {

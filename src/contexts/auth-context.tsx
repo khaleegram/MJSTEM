@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
@@ -18,6 +17,7 @@ import { auth, db } from '@/lib/firebase';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { UserProfile } from '@/types';
 import { claimReviewerInvitations } from '@/ai/flows/claim-invitations';
+import { toast } from '@/hooks/use-toast';
 
 
 interface AuthContextType {
@@ -88,16 +88,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           setUser(user);
           setUserProfile(profile);
           
-          // BOOTSTRAP: Attempt to claim pending invitations every time we have a valid session
-          // This runs in the background and will refresh the profile if anything changes
+          // Attempt to claim pending invitations every time we have a valid session
           if (user.email) {
             console.log("[Auth] Attempting to claim invitations for:", user.email);
             claimReviewerInvitations({ uid: user.uid, email: user.email })
               .then((result) => {
                 if (result.success && result.count > 0) {
                   console.log(`[Auth] Claimed ${result.count} assignment(s). Refreshing profile...`);
-                  // Tiny delay to allow Firestore propagation before refetching
-                  setTimeout(() => refetchUserProfile(), 1000);
+                  toast({
+                    title: "Reviewer Invitations Claimed",
+                    description: `You have been assigned to ${result.count} new manuscript(s) and your account has been promoted to Reviewer.`,
+                  });
+                  // Refetch profile data to reflect new role
+                  refetchUserProfile();
                 }
               })
               .catch(err => console.error("[Auth] Background claim failed:", err));

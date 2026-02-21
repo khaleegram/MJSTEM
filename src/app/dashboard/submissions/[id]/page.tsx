@@ -1,4 +1,3 @@
-
 'use client';
 
 import { notFound, useParams, useRouter } from 'next/navigation';
@@ -634,7 +633,7 @@ export default function SubmissionDetailPage() {
         ) || [];
         
         const updatedReviewerIds = submission.reviewerIds?.filter(id => id !== reviewer.id) || [];
-        const updatedInvitedEmails = submission.invitedReviewerEmails?.filter(e => e === emailNorm) || [];
+        const updatedInvitedEmails = submission.invitedReviewerEmails?.filter(e => e.toLowerCase().trim() !== emailNorm) || [];
 
         batch.update(submissionRef, {
             reviewers: updatedReviewers,
