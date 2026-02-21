@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview A server action for claiming reviewer invitations.
@@ -20,7 +21,11 @@ export async function claimReviewerInvitations(input: ClaimInvitationsInput): Pr
   }
 
   const { uid, email } = input;
-  const emailNorm = email.toLowerCase().trim();
+  const emailNorm = (email || '').toLowerCase().trim();
+
+  if (!emailNorm) {
+      return { success: false, message: 'Email is required.', count: 0 };
+  }
 
   try {
     const invitesQuery = adminDb.collection('reviewInvitations')
@@ -30,8 +35,11 @@ export async function claimReviewerInvitations(input: ClaimInvitationsInput): Pr
     const invitesSnapshot = await invitesQuery.get();
 
     if (invitesSnapshot.empty) {
+      console.log(`[Claim Invitations] No pending invitations for ${emailNorm}.`);
       return { success: true, message: 'No pending invitations found.', count: 0 };
     }
+
+    console.log(`[Claim Invitations] Found ${invitesSnapshot.size} invitations for ${emailNorm}. Processing...`);
 
     await adminDb.runTransaction(async (transaction) => {
       // 1. Fetch user doc to check role
@@ -52,13 +60,25 @@ export async function claimReviewerInvitations(input: ClaimInvitationsInput): Pr
           const reviewers = subData?.reviewers || [];
           
           // Link the UID to the reviewer entry matching this email
+          let foundMatch = false;
           const updatedReviewers = reviewers.map((r: any) => {
             const rEmail = (r.email || '').toLowerCase().trim();
             if (rEmail === emailNorm && (r.status === 'Invited' || !r.id)) {
+              foundMatch = true;
               return { ...r, id: uid, status: 'Pending' };
             }
             return r;
           });
+
+          // If for some reason the email wasn't in the reviewers array but was invited, add it
+          if (!foundMatch) {
+              updatedReviewers.push({
+                  id: uid,
+                  email: emailNorm,
+                  name: userData?.displayName || 'Reviewer',
+                  status: 'Pending'
+              });
+          }
 
           transaction.update(subRef, {
             reviewers: updatedReviewers,
@@ -77,6 +97,7 @@ export async function claimReviewerInvitations(input: ClaimInvitationsInput): Pr
 
       // 2. Promote role if they are currently just an Author
       if (shouldPromote) {
+        console.log(`[Claim Invitations] Promoting user ${uid} to Reviewer.`);
         transaction.update(userRef, { role: 'Reviewer' });
       }
     });

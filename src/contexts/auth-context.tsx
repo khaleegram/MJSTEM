@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
@@ -90,11 +91,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           // BOOTSTRAP: Attempt to claim pending invitations every time we have a valid session
           // This runs in the background and will refresh the profile if anything changes
           if (user.email) {
+            console.log("[Auth] Attempting to claim invitations for:", user.email);
             claimReviewerInvitations({ uid: user.uid, email: user.email })
               .then((result) => {
                 if (result.success && result.count > 0) {
                   console.log(`[Auth] Claimed ${result.count} assignment(s). Refreshing profile...`);
-                  refetchUserProfile();
+                  // Tiny delay to allow Firestore propagation before refetching
+                  setTimeout(() => refetchUserProfile(), 1000);
                 }
               })
               .catch(err => console.error("[Auth] Background claim failed:", err));
