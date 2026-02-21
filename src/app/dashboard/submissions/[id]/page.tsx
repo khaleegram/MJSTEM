@@ -28,7 +28,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { SubmittedReviews } from '@/components/submitted-reviews';
 import { SubmissionHistory } from '@/components/submission-history';
 import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
+import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 import { logSubmissionEvent } from '@/ai/flows/log-submission-event';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { FileUploader } from '@/components/file-uploader';
@@ -176,11 +176,12 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
                 onReviewSubmit();
             })
             .catch(async (serverError) => {
-                errorEmitter.emit('permission-error', new FirestorePermissionError({
+                const permissionError = new FirestorePermissionError({
                     path: reviewRef.path,
                     operation: 'create',
                     requestResourceData: reviewData
-                }));
+                } satisfies SecurityRuleContext);
+                errorEmitter.emit('permission-error', permissionError);
             })
             .finally(() => {
                 setIsSubmitting(false);
@@ -314,11 +315,12 @@ function AuthorRevisionForm({ submission, onRevisionSubmit }: { submission: Subm
                 onRevisionSubmit();
             })
             .catch(async (serverError) => {
-                errorEmitter.emit('permission-error', new FirestorePermissionError({
+                const permissionError = new FirestorePermissionError({
                     path: submissionRef.path,
                     operation: 'update',
                     requestResourceData: updateData
-                }));
+                } satisfies SecurityRuleContext);
+                errorEmitter.emit('permission-error', permissionError);
             })
             .finally(() => {
                 setIsSubmitting(false);
@@ -376,11 +378,12 @@ function AuthorEditForm({ submission, onUpdate, onCancel }: { submission: Submis
                 onUpdate();
             })
             .catch(async (serverError) => {
-                errorEmitter.emit('permission-error', new FirestorePermissionError({
+                const permissionError = new FirestorePermissionError({
                     path: submissionRef.path,
                     operation: 'update',
                     requestResourceData: updateData,
-                }));
+                } satisfies SecurityRuleContext);
+                errorEmitter.emit('permission-error', permissionError);
             })
             .finally(() => {
                 setIsSubmitting(false);
@@ -420,11 +423,12 @@ function PageCountDialog({ submission, onUpdate }: { submission: Submission; onU
                 onUpdate();
             })
             .catch(async (serverError) => {
-                errorEmitter.emit('permission-error', new FirestorePermissionError({
+                const permissionError = new FirestorePermissionError({
                     path: submissionRef.path,
                     operation: 'update',
                     requestResourceData: updateData,
-                }));
+                } satisfies SecurityRuleContext);
+                errorEmitter.emit('permission-error', permissionError);
             })
             .finally(() => {
                 setIsSaving(false);
@@ -500,10 +504,11 @@ export default function SubmissionDetailPage() {
                 setAvailableReviewers(list);
             })
             .catch(async (serverError) => {
-                errorEmitter.emit('permission-error', new FirestorePermissionError({
+                const permissionError = new FirestorePermissionError({
                     path: usersRef.path,
                     operation: 'list',
-                }));
+                } satisfies SecurityRuleContext);
+                errorEmitter.emit('permission-error', permissionError);
             });
     }
     fetchReviewers();
@@ -526,10 +531,11 @@ export default function SubmissionDetailPage() {
             }
         })
         .catch(async (serverError) => {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({
+            const permissionError = new FirestorePermissionError({
                 path: docRef.path,
                 operation: 'get',
-            }));
+            } satisfies SecurityRuleContext);
+            errorEmitter.emit('permission-error', permissionError);
         })
         .finally(() => {
             setLoading(false);
@@ -556,7 +562,8 @@ export default function SubmissionDetailPage() {
             setRefetchTrigger(prev => prev + 1);
         })
         .catch(async (serverError) => {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: submissionRef.path, operation: 'update', requestResourceData: updateData }));
+            const permissionError = new FirestorePermissionError({ path: submissionRef.path, operation: 'update', requestResourceData: updateData } satisfies SecurityRuleContext);
+            errorEmitter.emit('permission-error', permissionError);
         })
         .finally(() => {
             setIsUpdating(false);
@@ -574,7 +581,8 @@ export default function SubmissionDetailPage() {
         router.push('/dashboard/author');
     })
     .catch(async (serverError) => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: submissionRef.path, operation: 'delete' }));
+        const permissionError = new FirestorePermissionError({ path: submissionRef.path, operation: 'delete' } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
     });
   };
 
@@ -601,7 +609,8 @@ export default function SubmissionDetailPage() {
             setRefetchTrigger(prev => prev + 1);
         })
         .catch(async (serverError) => {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: submissionRef.path, operation: 'update', requestResourceData: updateData }));
+            const permissionError = new FirestorePermissionError({ path: submissionRef.path, operation: 'update', requestResourceData: updateData } satisfies SecurityRuleContext);
+            errorEmitter.emit('permission-error', permissionError);
         })
         .finally(() => { setIsUpdating(false); });
   }
@@ -642,7 +651,8 @@ export default function SubmissionDetailPage() {
             setRefetchTrigger(prev => prev + 1);
         })
         .catch(async (serverError) => { 
-            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: invitesRef.path, operation: 'create', requestResourceData: inviteData }));
+            const permissionError = new FirestorePermissionError({ path: invitesRef.path, operation: 'create', requestResourceData: inviteData } satisfies SecurityRuleContext);
+            errorEmitter.emit('permission-error', permissionError);
         })
         .finally(() => { setIsUpdating(false); });
   }
@@ -687,22 +697,32 @@ export default function SubmissionDetailPage() {
             });
         });
 
-        await batch.commit();
-        
-        await logSubmissionEvent({
-            submissionId: submission.id,
-            eventType: 'STATUS_CHANGED',
-            context: { 
-                actorName: userProfile.displayName, 
-                status: `Reviewer Removed (${reviewer.email})` 
-            }
-        });
+        batch.commit()
+            .then(async () => {
+                await logSubmissionEvent({
+                    submissionId: submission.id,
+                    eventType: 'STATUS_CHANGED',
+                    context: { 
+                        actorName: userProfile.displayName, 
+                        status: `Reviewer Removed (${reviewer.email})` 
+                    }
+                });
 
-        toast({ title: "Reviewer Removed" });
-        setRefetchTrigger(prev => prev + 1);
+                toast({ title: "Reviewer Removed" });
+                setRefetchTrigger(prev => prev + 1);
+            })
+            .catch(async (serverError) => {
+                const permissionError = new FirestorePermissionError({
+                    path: `submissions/${submission.id} or reviewInvitations`,
+                    operation: 'write',
+                    requestResourceData: { action: 'remove_reviewer', email: emailNorm }
+                } satisfies SecurityRuleContext);
+                errorEmitter.emit('permission-error', permissionError);
+            });
+            
     } catch (error) {
-        console.error("Error removing reviewer:", error);
-        toast({ title: "Error", description: "Could not remove reviewer assignment.", variant: "destructive" });
+        console.error("Error preparing batch:", error);
+        toast({ title: "Error", description: "Could not initiate removal.", variant: "destructive" });
     } finally {
         setIsUpdating(false);
     }
@@ -736,7 +756,8 @@ export default function SubmissionDetailPage() {
             setRefetchTrigger(p => p + 1);
         })
         .catch(async (serverError) => { 
-            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: submissionRef.path, operation: 'update', requestResourceData: { editorAttachments: 'arrayUnion(...)' } })); 
+            const permissionError = new FirestorePermissionError({ path: submissionRef.path, operation: 'update', requestResourceData: { editorAttachments: 'arrayUnion(...)' } } satisfies SecurityRuleContext);
+            errorEmitter.emit('permission-error', permissionError); 
         })
         .finally(() => { setIsUpdating(false); });
   }
