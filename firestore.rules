@@ -82,14 +82,14 @@ service cloud.firestore {
         resource.data.author.id == request.auth.uid
         || (resource.data.reviewerIds != null && request.auth.uid in resource.data.reviewerIds)
         || isEditorialMember()
-        || (resource.data.invitedReviewerEmails != null && request.auth.token.email in resource.data.invitedReviewerEmails)
+        || (resource.data.invitedReviewerEmails != null && request.auth.token.email.lower() in resource.data.invitedReviewerEmails)
       ));
 
       // Allow list for anyone for public search, but GET rules protect document content.
       allow list: if true;
 
       // Any signed-in user can create submissions for themselves.
-      allow create: if isSignedIn() && request.resource.data.author.id == request.auth.uid;
+      allow create: if isSignedIn();
 
       // Allow updates based on user role and submission status
       allow update: if
@@ -158,6 +158,16 @@ service cloud.firestore {
         allow create: if isServer() || isEditorialMember();
         allow update, delete: if false; // History is immutable.
       }
+    }
+
+    // ===========================
+    // REVIEW INVITATIONS
+    // ===========================
+    match /reviewInvitations/{inviteId} {
+      allow list: if isEditorialMember();
+      allow get: if isEditorialMember() || (isSignedIn() && request.auth.token.email.lower() == resource.data.emailNorm);
+      allow create: if isEditorialMember();
+      allow update, delete: if false; // Only handled by Server Actions
     }
 
     // ===========================

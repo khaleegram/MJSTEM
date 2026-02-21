@@ -140,3 +140,13 @@ export const IndexingServiceSchema = z.object({
   logoUrl: z.string().url("A valid logo URL is required."),
   order: z.number().optional(),
 });
+
+export const ReviewInvitationSchema = z.object({
+  submissionId: z.string(),
+  emailNorm: z.string(),
+  invitedBy: z.string(),
+  status: z.enum(['pending', 'claimed', 'revoked']),
+  claimedByUid: z.string().optional(),
+  createdAt: z.any(),
+  claimedAt: z.any().optional(),
+});

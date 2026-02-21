@@ -1,4 +1,3 @@
-
 'use client';
 
 import { notFound, useParams, useRouter } from 'next/navigation';
@@ -106,7 +105,7 @@ const getStatusVariant = (status: SubmissionStatus) => {
   };
 
 const ReviewSubmissionForm = ({ submission, onReviewSubmit }: { submission: Submission, onReviewSubmit: () => void }) => {
-    const { user, userProfile, refetchUserProfile } = useAuth();
+    const { user, userProfile } = useAuth();
     const { toast } = useToast();
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const [recommendation, setRecommendation] = React.useState('');
@@ -115,63 +114,10 @@ const ReviewSubmissionForm = ({ submission, onReviewSubmit }: { submission: Subm
     const [attachmentUrl, setAttachmentUrl] = React.useState('');
     const [attachmentName, setAttachmentName] = React.useState('');
 
-    const myReviewAssignment = submission.reviewers?.find(r => r.id === user?.uid || r.email === user?.email);
-    const isClaimed = myReviewAssignment?.id === user?.uid;
+    const myReviewAssignment = submission.reviewers?.find(r => r.id === user?.uid);
 
     if (!myReviewAssignment || myReviewAssignment.status === 'Review Submitted') {
         return null;
-    }
-
-    const handleClaimAssignment = async () => {
-        if (!user || !userProfile) return;
-        setIsSubmitting(true);
-        try {
-            const submissionRef = doc(db, 'submissions', submission.id);
-            const userRef = doc(db, 'users', user.uid);
-            
-            await runTransaction(db, async (transaction) => {
-                // Update submission
-                const updatedReviewers = submission.reviewers?.map(r => 
-                    (r.email === user.email) ? { ...r, id: user.uid, status: 'Pending' as const } : r
-                ) || [];
-                
-                transaction.update(submissionRef, {
-                    reviewers: updatedReviewers,
-                    reviewerIds: arrayUnion(user.uid),
-                    invitedReviewerEmails: arrayRemove(user.email)
-                });
-
-                // Promote role if needed
-                if (userProfile.role === 'Author') {
-                    transaction.update(userRef, { role: 'Reviewer' });
-                }
-            });
-
-            await refetchUserProfile();
-            toast({ title: "Invitation Accepted", description: "You can now submit your review report." });
-            onReviewSubmit(); // Trigger refetch
-        } catch (error) {
-            console.error("Error claiming assignment:", error);
-            toast({ title: "Error", description: "Could not accept invitation. Please try again.", variant: "destructive" });
-        } finally {
-            setIsSubmitting(false);
-        }
-    }
-
-    if (!isClaimed) {
-        return (
-            <Card className="border-primary">
-                <CardHeader>
-                    <CardTitle className="font-headline">Review Invitation</CardTitle>
-                    <CardDescription>You have been invited to review this manuscript. Please accept the invitation to proceed.</CardDescription>
-                </CardHeader>
-                <CardFooter>
-                    <Button onClick={handleClaimAssignment} disabled={isSubmitting}>
-                        {isSubmitting ? 'Processing...' : 'Accept Invitation & Start Review'}
-                    </Button>
-                </CardFooter>
-            </Card>
-        )
     }
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -410,7 +356,7 @@ const DetailPageSkeleton = () => (
         <div className="lg:col-span-2 space-y-8">
             <Card><CardHeader><Skeleton className="h-10 w-full" /></CardHeader><CardContent><Skeleton className="h-40 w-full" /></CardContent></Card>
         </div>
-        <div className="lg:col-span-1 space-y-8"><Card><CardHeader><Skeleton className="h-20 w-full" /></CardHeader></Card></div>
+        <div className="lg:col-span-1 space-y-8"><Card><CardHeader><Skeleton className="h-20 w-full" /></CardHeader></div >
     </div>
 )
 
@@ -529,7 +475,7 @@ export default function SubmissionDetailPage() {
 
   const isEditor = userProfile?.role === 'Editor' || userProfile?.role === 'Admin' || userProfile?.role === 'Managing Editor';
   const isAuthor = userProfile?.uid === submission?.author.id;
-  const isReviewer = submission?.reviewerIds?.includes(user?.uid || '') || submission?.invitedReviewerEmails?.includes(user?.email || '');
+  const isReviewer = submission?.reviewerIds?.includes(user?.uid || '');
 
   React.useEffect(() => {
     const fetchReviewers = async () => {
@@ -633,26 +579,49 @@ export default function SubmissionDetailPage() {
 
   const handleInviteReviewer = async (values: z.infer<typeof inviteReviewerSchema>) => {
     if(!submission || !userProfile) return;
-    if (submission.reviewers?.some(r => r.email === values.email)) {
-        toast({ title: "Already Associated", variant: "destructive" });
+    const emailNorm = values.email.toLowerCase().trim();
+    
+    if (submission.invitedReviewerEmails?.includes(emailNorm)) {
+        toast({ title: "Already Invited", variant: "destructive" });
         return;
     }
     setIsUpdating(true);
-    const newReviewer = { id: null, name: values.name, email: values.email, status: 'Invited' as const };
-    const submissionRef = doc(db, 'submissions', submission.id);
-    const updateData: any = { reviewers: arrayUnion(newReviewer), invitedReviewerEmails: arrayUnion(values.email) };
-    if (submission.status === 'Submitted' || submission.status === 'Under Initial Review' || submission.status === 'With Editor') {
-        updateData.status = 'Under Peer Review';
-    }
+
+    const inviteData = {
+        submissionId: submission.id,
+        emailNorm: emailNorm,
+        invitedBy: userProfile.uid,
+        status: 'pending' as const,
+        createdAt: serverTimestamp(),
+    };
+
     try {
+        // 1. Create invitation doc
+        await addDoc(collection(db, 'reviewInvitations'), inviteData);
+
+        // 2. Update submission
+        const submissionRef = doc(db, 'submissions', submission.id);
+        const newReviewer = { id: null, name: values.name, email: values.email, status: 'Invited' as const };
+        const updateData: any = { 
+            reviewers: arrayUnion(newReviewer), 
+            invitedReviewerEmails: arrayUnion(emailNorm) 
+        };
+        if (submission.status === 'Submitted' || submission.status === 'Under Initial Review' || submission.status === 'With Editor') {
+            updateData.status = 'Under Peer Review';
+        }
         await updateDoc(submissionRef, updateData);
-        logSubmissionEvent({ submissionId: submission.id, eventType: 'REVIEWER_INVITED', context: { reviewerName: values.name, reviewerEmail: values.email, actorName: userProfile.displayName } });
-        sendReviewerInvitationEmail({ reviewerEmail: values.email, reviewerName: values.name, manuscriptTitle: submission.title, submissionId: submission.id });
+
+        // 3. Notify
+        await logSubmissionEvent({ submissionId: submission.id, eventType: 'REVIEWER_INVITED', context: { reviewerName: values.name, reviewerEmail: values.email, actorName: userProfile.displayName } });
+        await sendReviewerInvitationEmail({ reviewerEmail: values.email, reviewerName: values.name, manuscriptTitle: submission.title, submissionId: submission.id });
+        
         toast({ title: "Invitation Sent" });
         inviteForm.reset();
         setRefetchTrigger(prev => prev + 1);
-    } catch (serverError) { errorEmitter.emit('permission-error', new FirestorePermissionError({ path: submissionRef.path, operation: 'update' })); }
-    finally { setIsUpdating(false); }
+    } catch (serverError) { 
+        console.error(serverError);
+        toast({ title: "Error sending invite", variant: "destructive" });
+    } finally { setIsUpdating(false); }
   }
 
 
@@ -671,6 +640,7 @@ export default function SubmissionDetailPage() {
   const handleEditorFileUpload = async (url: string, name?: string) => {
     if (!submission || !userProfile) return;
     setIsUpdating(true);
+    // Use new Date() instead of serverTimestamp() to avoid rule evaluation ambiguity
     const newAttachment = { url, name: name || 'Uploaded File', uploadedAt: new Date() };
     const submissionRef = doc(db, 'submissions', submission.id);
     try {

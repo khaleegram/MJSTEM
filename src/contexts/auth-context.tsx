@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
@@ -15,8 +14,9 @@ import {
   sendPasswordResetEmail,
 } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
-import { doc, setDoc, getDoc, collection, query, where, getDocs, writeBatch, arrayUnion, arrayRemove } from 'firebase/firestore';
-import { UserProfile, Submission } from '@/types';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { UserProfile } from '@/types';
+import { claimReviewerInvitations } from '@/ai/flows/claim-invitations';
 
 
 interface AuthContextType {
@@ -46,13 +46,12 @@ const AuthContext = createContext<AuthContextType>({
 const ensureUserDocument = async (user: FirebaseUser): Promise<UserProfile> => {
   const userRef = doc(db, 'users', user.uid);
   const snap = await getDoc(userRef);
-  let profile: UserProfile;
-
+  
   if (snap.exists()) {
-    profile = snap.data() as UserProfile;
+    return snap.data() as UserProfile;
   } else {
     // Create the initial profile for the new user
-    profile = {
+    const profile: UserProfile = {
       uid: user.uid,
       email: user.email!,
       displayName: user.displayName || 'New User',
@@ -62,56 +61,8 @@ const ensureUserDocument = async (user: FirebaseUser): Promise<UserProfile> => {
       fcmTokens: [],
     };
     await setDoc(userRef, profile);
+    return profile;
   }
-
-  // CLAIMING LOGIC: If the user is just an Author, check if they have pending invitations.
-  // This runs on every login, ensuring invitations are always claimed and roles promoted.
-  if (user.email) {
-    const submissionsRef = collection(db, 'submissions');
-    const q = query(submissionsRef, where('invitedReviewerEmails', 'array-contains', user.email));
-    
-    try {
-        const querySnapshot = await getDocs(q);
-
-        if (!querySnapshot.empty) {
-            const batch = writeBatch(db);
-            
-            querySnapshot.forEach(submissionDoc => {
-                const submissionData = submissionDoc.data() as Submission;
-                const submissionRef = doc(db, 'submissions', submissionDoc.id);
-            
-                // Update submission to link the UID permanently
-                const updatedReviewers = submissionData.reviewers?.map(r =>
-                    (r.email === user.email && (r.status === 'Invited' || r.id === null))
-                    ? { ...r, id: user.uid, status: r.status === 'Invited' ? 'Pending' : r.status }
-                    : r
-                ) || [];
-
-                batch.update(submissionRef, {
-                    reviewers: updatedReviewers,
-                    reviewerIds: arrayUnion(user.uid),
-                    invitedReviewerEmails: arrayRemove(user.email)
-                });
-            });
-
-            // Always ensure the user is promoted if they have invitations, even if they were manually promoted before
-            if (profile.role === 'Author') {
-                batch.update(userRef, { role: 'Reviewer' });
-                profile.role = 'Reviewer';
-            }
-            
-            await batch.commit();
-            console.log(`[Auth] Claimed ${querySnapshot.size} pending invitations for ${user.email}.`);
-            
-            // Return the latest local profile
-            return profile;
-        }
-    } catch (error) {
-        console.error("[Auth] Error auto-claiming invitations:", error);
-    }
-  }
-
-  return profile;
 };
 
 
@@ -125,9 +76,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setLoading(true);
       if (user) {
         if (user.emailVerified) {
-          setUser(user);
           const profile = await ensureUserDocument(user);
+          setUser(user);
           setUserProfile(profile);
+          
+          // BOOTSTRAP: Attempt to claim pending invitations every time we have a valid session
+          // This runs in the background and will refresh the profile if anything changes
+          if (user.email) {
+            claimReviewerInvitations({ uid: user.uid, email: user.email })
+              .then((result) => {
+                if (result.success && result.count > 0) {
+                  console.log(`[Auth] Claimed ${result.count} assignment(s). Refreshing profile...`);
+                  refetchUserProfile();
+                }
+              })
+              .catch(err => console.error("[Auth] Background claim failed:", err));
+          }
         } else {
           setUser(user); 
           setUserProfile(null);

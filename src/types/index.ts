@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { UserProfileSchema, AssignedReviewerSchema, SubmissionSchema, VolumeSchema, IssueSchema, ArticleSchema, EditorialBoardMemberSchema, ContributorSchema, NotificationSchema, IndexingServiceSchema, EditorAttachmentSchema } from '@/lib/data-schemas';
+import { UserProfileSchema, AssignedReviewerSchema, SubmissionSchema, VolumeSchema, IssueSchema, ArticleSchema, EditorialBoardMemberSchema, ContributorSchema, NotificationSchema, IndexingServiceSchema, EditorAttachmentSchema, ReviewInvitationSchema } from '@/lib/data-schemas';
 
 
 export type SubmissionStatus = z.infer<typeof SubmissionSchema.shape.status>;
@@ -31,3 +31,5 @@ export type EditorAttachment = z.infer<typeof EditorAttachmentSchema>;
 export type Notification = z.infer<typeof NotificationSchema> & { id: string };
 
 export type IndexingService = z.infer<typeof IndexingServiceSchema>;
+
+export type ReviewInvitation = z.infer<typeof ReviewInvitationSchema>;
