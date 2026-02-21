@@ -1,7 +1,7 @@
 'use client';
 
 import { notFound, useParams, useRouter } from 'next/navigation';
-import { doc, getDoc, updateDoc, arrayUnion, collection, addDoc, serverTimestamp, runTransaction } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, arrayUnion, collection, addDoc, serverTimestamp, runTransaction, getDocs, query, where, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
   Card,
@@ -14,7 +14,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { User, Calendar, PlusCircle, Download, BookText, Edit, MessageSquare, Shield, Clock, CheckCircle2, Info, Paperclip } from 'lucide-react';
+import { User, Calendar, PlusCircle, Download, BookText, Edit, MessageSquare, Shield, Clock, CheckCircle2, Info, Paperclip, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { SubmissionStatus, Submission, UserProfile } from '@/types';
 import React from 'react';
@@ -617,6 +617,67 @@ export default function SubmissionDetailPage() {
     } finally { setIsUpdating(false); }
   }
 
+  const handleRemoveReviewer = async (reviewer: { id: string | null, email: string }) => {
+    if (!submission || !userProfile) return;
+    setIsUpdating(true);
+    
+    const submissionRef = doc(db, 'submissions', submission.id);
+    const emailNorm = (reviewer.email || '').toLowerCase().trim();
+
+    try {
+        const batch = writeBatch(db);
+
+        // 1. Update submission doc: Filter out the reviewer
+        const updatedReviewers = submission.reviewers?.filter(r => 
+            !(r.email.toLowerCase().trim() === emailNorm)
+        ) || [];
+        
+        const updatedReviewerIds = submission.reviewerIds?.filter(id => id !== reviewer.id) || [];
+        const updatedInvitedEmails = submission.invitedReviewerEmails?.filter(e => e !== emailNorm) || [];
+
+        batch.update(submissionRef, {
+            reviewers: updatedReviewers,
+            reviewerIds: updatedReviewerIds,
+            invitedReviewerEmails: updatedInvitedEmails
+        });
+
+        // 2. Revoke pending invitation if it exists
+        const invitesQuery = query(
+            collection(db, 'reviewInvitations'),
+            where('submissionId', '==', submission.id),
+            where('emailNorm', '==', emailNorm),
+            where('status', '==', 'pending')
+        );
+        const inviteSnapshot = await getDocs(invitesQuery);
+        inviteSnapshot.forEach(inviteDoc => {
+            batch.update(inviteDoc.ref, { 
+                status: 'revoked',
+                revokedAt: serverTimestamp(),
+                revokedBy: userProfile.uid
+            });
+        });
+
+        await batch.commit();
+        
+        await logSubmissionEvent({
+            submissionId: submission.id,
+            eventType: 'STATUS_CHANGED',
+            context: { 
+                actorName: userProfile.displayName, 
+                status: `Reviewer Removed (${reviewer.email})` 
+            }
+        });
+
+        toast({ title: "Reviewer Removed" });
+        setRefetchTrigger(prev => prev + 1);
+    } catch (error) {
+        console.error("Error removing reviewer:", error);
+        toast({ title: "Error", description: "Could not remove reviewer assignment.", variant: "destructive" });
+    } finally {
+        setIsUpdating(false);
+    }
+  }
+
   const handleAssignId = async () => {
     if (!submission) return;
     setIsUpdating(true);
@@ -639,7 +700,7 @@ export default function SubmissionDetailPage() {
         toast({ title: "File Shared with Author" });
         sendAttachmentNotificationEmail({ authorEmail: submission.author.email, authorName: submission.author.name, editorName: userProfile.displayName, submissionId: submission.id, manuscriptTitle: submission.title, fileName: newAttachment.name });
         setRefetchTrigger(p => p + 1);
-    } catch (serverError) { errorEmitter.emit('permission-error', new FirestorePermissionError({ path: submissionRef.path, operation: 'update' })); }
+    } catch (serverError) { errorEmitter.emit('permission-error', new FirestorePermissionError({ path: submissionRef.path, operation: 'update', requestResourceData: updateData })); }
     finally { setIsUpdating(false); }
   }
 
@@ -763,7 +824,7 @@ export default function SubmissionDetailPage() {
              {submission.reviewers?.length ? (
                 <ul className="space-y-4">
                     {submission.reviewers.map((r, i) => (
-                         <li key={r.id || r.email} className="flex items-center justify-between">
+                         <li key={r.id || r.email} className="flex items-center justify-between group">
                            <div className="flex items-center gap-4">
                                 <Avatar><AvatarFallback>{isEditor ? getInitials(r.name) : `R${i+1}`}</AvatarFallback></Avatar>
                                 <div>
@@ -774,6 +835,27 @@ export default function SubmissionDetailPage() {
                                     </div>
                                 </div>
                             </div>
+                            {isEditor && !isDecisionMade && (
+                                <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                            <AlertDialogTitle>Remove Reviewer Assignment?</AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                                This will remove <strong>{r.name}</strong> from this submission and revoke any pending invitations. This action cannot be undone.
+                                            </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                            <AlertDialogAction onClick={() => handleRemoveReviewer({ id: r.id, email: r.email })} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Remove Reviewer</AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+                            )}
                          </li>
                     ))}
                 </ul>
