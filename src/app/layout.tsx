@@ -9,7 +9,6 @@ import { ThemeProvider } from '@/components/theme-provider';
 import { FirebaseErrorListener } from '@/components/firebase-error-listener';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Icons } from '@/components/icons';
 
 
 export const metadata: Metadata = {
@@ -18,7 +17,6 @@ export const metadata: Metadata = {
   description: 'A premier, peer-reviewed, open-access journal dedicated to the rapid publication of high-quality research across science, technology, education, and management.',
   applicationName: 'MJSTEM',
   keywords: ['journal', 'academic', 'research', 'science', 'technology', 'education', 'management', 'peer-reviewed'],
-  manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
@@ -37,22 +35,8 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: '/favicon.jpg',
-    apple: '/icons/apple/apple-touch-icon.png',
   }
 };
-
-async function getLogoUrl() {
-    try {
-        const docRef = doc(db, 'settings', 'branding');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists() && docSnap.data().logoUrl) {
-            return docSnap.data().logoUrl;
-        }
-    } catch (e) {
-        console.error("Could not fetch logo for layout", e);
-    }
-    return null;
-}
 
 const fontSans = FontSans({
   subsets: ['latin'],
@@ -64,8 +48,6 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-
-  const logoUrl = await getLogoUrl();
 
   return (
     <html lang="en" suppressHydrationWarning>
