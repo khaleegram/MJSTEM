@@ -54,21 +54,13 @@ service cloud.firestore {
     // USERS COLLECTION
     // ===========================
     match /users/{userId} {
-      // Editorial members can list all users for the directory/assigning reviewers.
       allow list: if isEditorialMember();
-
-      // Users can read their own profile. Editorial members can read any profile.
       allow get: if request.auth.uid == userId || isEditorialMember();
-
-      // A user can create their own user document.
       allow create: if request.auth.uid == userId;
-
-      // A user can update their own non-critical info. Admins/editors can change roles.
       allow update: if
         (request.auth.uid == userId && request.resource.data.diff(resource.data)
           .changedKeys().hasOnly(['displayName', 'photoURL', 'specialization', 'fcmTokens']))
         || isEditorialMember();
-
       allow delete: if isAdmin() || isManagingEditor();
     }
 
@@ -76,8 +68,6 @@ service cloud.firestore {
     // SUBMISSIONS COLLECTION
     // ===========================
     match /submissions/{submissionId} {
-
-      // Public can read accepted articles. Involved users can read their submissions.
       allow get: if resource.data.status == 'Accepted' || (isSignedIn() && (
         resource.data.author.id == request.auth.uid
         || (resource.data.reviewerIds != null && request.auth.uid in resource.data.reviewerIds)
@@ -85,20 +75,12 @@ service cloud.firestore {
         || (resource.data.invitedReviewerEmails != null && request.auth.token.email.lower() in resource.data.invitedReviewerEmails)
       ));
 
-      // Allow list for anyone for public search, but GET rules protect document content.
       allow list: if true;
-
-      // Any signed-in user can create submissions for themselves.
       allow create: if isSignedIn();
 
-      // Allow updates based on user role and submission status
       allow update: if
-        // Admin / Managing Editor / Editor: unrestricted updates
         isEditorialMember()
-
-        // Authors can update their submission under specific conditions.
         || (isAuthor() && request.auth.uid == resource.data.author.id && (
-            // Allow revision uploads when requested.
             (resource.data.status in ['Minor Revision', 'Major Revision', 'Awaiting Revision: Similarity Issues'] &&
              request.resource.data.diff(resource.data).changedKeys().hasOnly([
                'manuscriptUrl',
@@ -108,55 +90,40 @@ service cloud.firestore {
                'pageCount',
                'supplementaryFileUrl'
              ]))
-            // Allow title/abstract edits before a final decision is made.
             || (resource.data.status != 'Accepted' && resource.data.status != 'Rejected' &&
                 request.resource.data.diff(resource.data).changedKeys().hasOnly(['title', 'abstract']))
         ))
-
-        // Reviewers can update the 'reviewers' array (to mark their review as submitted).
         || (isReviewer()
             && resource.data.reviewerIds != null
             && request.auth.uid in resource.data.reviewerIds
             && request.resource.data.diff(resource.data).changedKeys().hasOnly(['reviewers']));
 
-      // Authors can delete their submission only if it's new. Editorial members can always delete.
       allow delete: if
         (isAuthor() && resource.data.author.id == request.auth.uid && resource.data.status == 'Submitted')
         || isEditorialMember();
 
-      // --- REVIEWS SUBCOLLECTION ---
       match /reviews/{reviewId} {
-        // Authors (for their submission) and editorial members can list reviews.
         allow list: if isEditorialMember() || (isAuthor() &&
           get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid);
-
-        // Define who can read a specific review document.
         allow read: if
           isEditorialMember() ||
           (isAuthor() &&
             get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid) ||
           (isReviewer() && resource.data.reviewerId == request.auth.uid);
-
-        // Only assigned reviewers can create a review for that submission.
         allow create: if isReviewer()
           && request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds;
-
-        allow update, delete: if false; // Reviews are immutable once created.
+        allow update, delete: if false;
       }
 
-      // --- HISTORY SUBCOLLECTION ---
       match /history/{historyId} {
-        // Anyone involved in the submission can view its history.
         allow read, list: if isSignedIn() && (
           get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid ||
           (get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds != null
             && request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds) ||
           isEditorialMember()
         );
-
-        // Only the backend (or editorial members) can create history events.
         allow create: if isServer() || isEditorialMember();
-        allow update, delete: if false; // History is immutable.
+        allow update, delete: if false;
       }
     }
 
@@ -175,16 +142,10 @@ service cloud.firestore {
     // NOTIFICATIONS COLLECTION
     // ===========================
     match /notifications/{notificationId} {
-      // Users can only list/read their own notifications. Client query must enforce this.
       allow list, get: if isSignedIn() && resource.data.userId == request.auth.uid;
-
-      // Backend/editorial can create notifications for users.
       allow create: if isServer() || isEditorialMember();
-
-      // Users can only mark their own notifications as read.
       allow update: if isSignedIn() && resource.data.userId == request.auth.uid &&
         request.resource.data.diff(resource.data).changedKeys().hasOnly(['read']);
-
       allow delete: if false;
     }
 
@@ -195,24 +156,18 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isManagingEditor() || isAdmin();
     }
-
     match /editorialBoard/{memberId} {
       allow read: if true;
       allow write: if isManagingEditor() || isAdmin();
     }
-
     match /indexingServices/{serviceId} {
       allow read: if true;
       allow write: if isManagingEditor() || isAdmin();
     }
-
-    // `submissionCounter` needs to be writeable by any signed-in user to allow submission ID generation from the client.
     match /settings/submissionCounter {
       allow read: if true;
       allow write: if isSignedIn();
     }
-
-    // All other settings docs are public-readable, but only writeable by high-level admins.
     match /settings/{settingId} {
       allow read: if true;
       allow write: if (isManagingEditor() || isAdmin()) && settingId != 'submissionCounter';

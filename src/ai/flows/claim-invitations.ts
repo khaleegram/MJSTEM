@@ -30,6 +30,7 @@ export async function claimReviewerInvitations(input: ClaimInvitationsInput): Pr
   try {
     console.log(`[Claim Invitations] Checking invites for: ${emailNorm} (UID: ${uid})`);
     
+    // Find all pending invitations for this email
     const invitesQuery = adminDb.collection('reviewInvitations')
       .where('emailNorm', '==', emailNorm)
       .where('status', '==', 'pending');
@@ -49,9 +50,6 @@ export async function claimReviewerInvitations(input: ClaimInvitationsInput): Pr
       // 1. Fetch user doc to check role
       const userRef = adminDb.collection('users').doc(uid);
       const userDoc = await transaction.get(userRef);
-      
-      // If doc doesn't exist, we'll create it during promotion, 
-      // but usually ensureUserDocument handled it.
       const userData = userDoc.data();
       
       // We promote if they are Author or if the doc doesn't even exist yet.
@@ -80,7 +78,6 @@ export async function claimReviewerInvitations(input: ClaimInvitationsInput): Pr
 
           // If for some reason the email wasn't in the reviewers array but was invited, add it
           if (!foundInArray) {
-              console.log(`[Claim Invitations] UID ${uid} not found in reviewers array for ${submissionId}. Adding entry.`);
               updatedReviewers.push({
                   id: uid,
                   email: emailNorm,
@@ -96,8 +93,6 @@ export async function claimReviewerInvitations(input: ClaimInvitationsInput): Pr
           });
           
           processedCount++;
-        } else {
-            console.warn(`[Claim Invitations] Submission ${submissionId} not found for invite ${inviteDoc.id}`);
         }
 
         // Mark the invitation as claimed
@@ -108,7 +103,7 @@ export async function claimReviewerInvitations(input: ClaimInvitationsInput): Pr
         });
       }
 
-      // 2. Promote role if they are currently just an Author or new
+      // 2. Promote role if they are currently just an Author
       if (isEligibleForPromotion) {
         console.log(`[Claim Invitations] Promoting user ${uid} to Reviewer.`);
         transaction.set(userRef, { role: 'Reviewer' }, { merge: true });

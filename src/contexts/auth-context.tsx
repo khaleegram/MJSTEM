@@ -51,13 +51,12 @@ const ensureUserDocument = async (user: FirebaseUser): Promise<UserProfile> => {
   if (snap.exists()) {
     return snap.data() as UserProfile;
   } else {
-    // Create the initial profile for the new user
     const profile: UserProfile = {
       uid: user.uid,
       email: user.email!,
       displayName: user.displayName || 'New User',
       photoURL: user.photoURL || '',
-      role: 'Author', // Default role
+      role: 'Author',
       specialization: '',
       fcmTokens: [],
     };
@@ -90,16 +89,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           setUser(firebaseUser);
           setUserProfile(profile);
           
-          // Background Claim: Run every time a session is established
+          // Background Idempotent Claim: Trigger on every session establishment
           if (firebaseUser.email) {
-            console.log("[Auth] Attempting to claim invitations for:", firebaseUser.email);
             claimReviewerInvitations({ uid: firebaseUser.uid, email: firebaseUser.email })
               .then(async (result) => {
                 if (result.success && result.count > 0) {
-                  console.log(`[Auth] Claimed ${result.count} assignment(s). Promoting UI...`);
-                  // Immediately refresh local state so the dashboard updates
-                  const updatedProfile = await refetchUserProfile();
-                  
+                  // If assignments were claimed or user promoted, refresh local state
+                  await refetchUserProfile();
                   toast({
                     title: "Account Upgraded",
                     description: `You have been assigned to ${result.count} new manuscript(s) and your account has been promoted to Reviewer.`,
@@ -132,7 +128,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const signup = async (email: string, pass: string, displayName: string) => {
     const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
     const { user } = userCredential;
-    
     if(user) {
         await updateProfile(user, { displayName });
         await sendEmailVerification(user);
@@ -143,17 +138,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   
   const signInWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
-    const result = await signInWithPopup(auth, provider);
-    return result;
+    return await signInWithPopup(auth, provider);
   }
 
-  const logout = () => {
-    return signOut(auth);
-  };
+  const logout = () => signOut(auth);
 
-  const sendPasswordReset = (email: string) => {
-    return sendPasswordResetEmail(auth, email);
-  }
+  const sendPasswordReset = (email: string) => sendPasswordResetEmail(auth, email);
 
   const value = {
     user,
@@ -170,6 +160,4 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-export const useAuth = () => {
-  return useContext(AuthContext);
-};
+export const useAuth = () => useContext(AuthContext);
