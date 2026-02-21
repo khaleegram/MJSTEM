@@ -84,17 +84,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setLoading(true);
       if (firebaseUser) {
+        // Handle verified users (including Google)
         if (firebaseUser.emailVerified) {
           const profile = await ensureUserDocument(firebaseUser);
           setUser(firebaseUser);
           setUserProfile(profile);
           
-          // Background Idempotent Claim: Trigger on every session establishment
+          // Professional Background Claim: Run on every successful login/boot
           if (firebaseUser.email) {
+            console.log(`[Auth] Attempting to claim invitations for: ${firebaseUser.email}`);
             claimReviewerInvitations({ uid: firebaseUser.uid, email: firebaseUser.email })
               .then(async (result) => {
                 if (result.success && result.count > 0) {
-                  // If assignments were claimed or user promoted, refresh local state
+                  console.log(`[Auth] Claim success: ${result.count} invites.`);
+                  // Refresh the profile locally so UI reflects "Reviewer" role immediately
                   await refetchUserProfile();
                   toast({
                     title: "Account Upgraded",
@@ -105,6 +108,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               .catch(err => console.error("[Auth] Background claim failed:", err));
           }
         } else {
+          // If verification is needed, show basic user but null profile to block dashboard access
           setUser(firebaseUser); 
           setUserProfile(null);
         }

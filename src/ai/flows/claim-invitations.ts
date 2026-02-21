@@ -2,7 +2,7 @@
 /**
  * @fileOverview A server action for claiming reviewer invitations.
  * This runs with administrative privileges to securely link users to submissions
- * and promote their roles.
+ * and promote their roles in an atomic transaction.
  */
 
 import { adminDb } from '@/lib/firebase-admin';
@@ -13,6 +13,13 @@ interface ClaimInvitationsInput {
   email: string;
 }
 
+/**
+ * Professional transactional claim logic.
+ * 1. Finds all "pending" invitations for the normalized email.
+ * 2. For each, links UID to submission reviewers array and ID metadata.
+ * 3. Marks invitation as "claimed".
+ * 4. Promotes user role to 'Reviewer' if they are currently an 'Author'.
+ */
 export async function claimReviewerInvitations(input: ClaimInvitationsInput): Promise<{ success: boolean; message: string; count: number }> {
   if (!adminDb) {
     console.error("[Claim Invitations] Admin DB not initialized.");
@@ -23,36 +30,29 @@ export async function claimReviewerInvitations(input: ClaimInvitationsInput): Pr
   const emailNorm = (email || '').toLowerCase().trim();
 
   if (!emailNorm) {
-      console.warn("[Claim Invitations] No email provided for UID:", uid);
       return { success: false, message: 'Email is required.', count: 0 };
   }
 
   try {
-    console.log(`[Claim Invitations] Checking invites for: ${emailNorm} (UID: ${uid})`);
-    
-    // Find all pending invitations for this email
-    const invitesQuery = adminDb.collection('reviewInvitations')
+    // 1. Find all pending invitations for this email
+    const invitesSnapshot = await adminDb.collection('reviewInvitations')
       .where('emailNorm', '==', emailNorm)
-      .where('status', '==', 'pending');
-
-    const invitesSnapshot = await invitesQuery.get();
+      .where('status', '==', 'pending')
+      .get();
 
     if (invitesSnapshot.empty) {
-      console.log(`[Claim Invitations] No pending invitations found for ${emailNorm}.`);
-      return { success: true, message: 'No pending invitations found.', count: 0 };
+      return { success: true, message: 'No pending invitations.', count: 0 };
     }
-
-    console.log(`[Claim Invitations] Found ${invitesSnapshot.size} invitation(s). Starting transaction...`);
 
     let processedCount = 0;
 
+    // 2. Perform atomic updates across multiple documents
     await adminDb.runTransaction(async (transaction) => {
-      // 1. Fetch user doc to check role
+      // Get the latest user data to check current role
       const userRef = adminDb.collection('users').doc(uid);
       const userDoc = await transaction.get(userRef);
       const userData = userDoc.data();
       
-      // We promote if they are Author or if the doc doesn't even exist yet.
       const isEligibleForPromotion = !userData || userData.role === 'Author';
 
       for (const inviteDoc of invitesSnapshot.docs) {
@@ -62,8 +62,8 @@ export async function claimReviewerInvitations(input: ClaimInvitationsInput): Pr
         const subDoc = await transaction.get(subRef);
 
         if (subDoc.exists) {
-          const subData = subDoc.data();
-          const reviewers = subData?.reviewers || [];
+          const subData = subDoc.data() || {};
+          const reviewers = subData.reviewers || [];
           
           // Link the UID to the reviewer entry matching this email
           let foundInArray = false;
@@ -76,7 +76,7 @@ export async function claimReviewerInvitations(input: ClaimInvitationsInput): Pr
             return r;
           });
 
-          // If for some reason the email wasn't in the reviewers array but was invited, add it
+          // Fallback: If email wasn't in array but doc exists, add it
           if (!foundInArray) {
               updatedReviewers.push({
                   id: uid,
@@ -103,14 +103,12 @@ export async function claimReviewerInvitations(input: ClaimInvitationsInput): Pr
         });
       }
 
-      // 2. Promote role if they are currently just an Author
+      // 3. Promote role if they are an Author (Editorial/Admin roles are never demoted)
       if (isEligibleForPromotion) {
-        console.log(`[Claim Invitations] Promoting user ${uid} to Reviewer.`);
         transaction.set(userRef, { role: 'Reviewer' }, { merge: true });
       }
     });
 
-    console.log(`[Claim Invitations] Successfully claimed ${processedCount} invitation(s) for ${emailNorm}.`);
     return { 
         success: true, 
         message: `Successfully claimed ${processedCount} assignment(s).`, 
@@ -119,6 +117,6 @@ export async function claimReviewerInvitations(input: ClaimInvitationsInput): Pr
 
   } catch (error: any) {
     console.error("[Claim Invitations] Fatal Error:", error);
-    return { success: false, message: error.message || 'An error occurred while claiming invitations.', count: 0 };
+    return { success: false, message: error.message || 'An error occurred.', count: 0 };
   }
 }
