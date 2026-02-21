@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -75,7 +74,7 @@ export default function ReviewerPage() {
 
         const q = query(
             collection(db, 'submissions'),
-            where('invitedReviewerEmails', 'array-contains', user.email)
+            where('invitedReviewerEmails', 'array-contains', user.email.toLowerCase().trim())
         );
 
         const unsubscribe = onSnapshot(q, (querySnapshot) => {
@@ -145,7 +144,7 @@ export default function ReviewerPage() {
                             ))
                         ) : assignedSubmissions.length > 0 ? (
                             assignedSubmissions.map((submission) => {
-                                const myReviewAssignment = submission.reviewers?.find(r => r.id === user?.uid || r.email === user?.email);
+                                const myReviewAssignment = submission.reviewers?.find(r => r.id === user?.uid || r.email?.toLowerCase().trim() === user?.email?.toLowerCase().trim());
                                 const status = myReviewAssignment?.status || 'Invited';
                                 const hasReviewed = status === 'Review Submitted';
                                 const isPendingInvite = status === 'Invited';

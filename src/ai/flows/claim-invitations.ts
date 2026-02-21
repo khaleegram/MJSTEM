@@ -62,7 +62,7 @@ export async function claimReviewerInvitations(input: ClaimInvitationsInput): Pr
           transaction.update(subRef, {
             reviewers: updatedReviewers,
             reviewerIds: admin.firestore.FieldValue.arrayUnion(uid),
-            invitedReviewerEmails: admin.firestore.FieldValue.arrayRemove(email)
+            invitedReviewerEmails: admin.firestore.FieldValue.arrayRemove(emailNorm)
           });
         }
 
