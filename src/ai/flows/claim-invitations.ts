@@ -53,7 +53,8 @@ export async function claimReviewerInvitations(input: ClaimInvitationsInput): Pr
           
           // Link the UID to the reviewer entry matching this email
           const updatedReviewers = reviewers.map((r: any) => {
-            if (r.email.toLowerCase().trim() === emailNorm && (r.status === 'Invited' || !r.id)) {
+            const rEmail = (r.email || '').toLowerCase().trim();
+            if (rEmail === emailNorm && (r.status === 'Invited' || !r.id)) {
               return { ...r, id: uid, status: 'Pending' };
             }
             return r;

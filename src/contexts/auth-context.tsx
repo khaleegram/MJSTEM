@@ -71,6 +71,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const refetchUserProfile = async () => {
+    if (auth.currentUser) {
+       const profile = await ensureUserDocument(auth.currentUser);
+       setUserProfile(profile);
+    }
+  }
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setLoading(true);
@@ -137,13 +144,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const sendPasswordReset = (email: string) => {
     return sendPasswordResetEmail(auth, email);
-  }
-
-  const refetchUserProfile = async () => {
-    if (auth.currentUser) {
-       const profile = await ensureUserDocument(auth.currentUser);
-       setUserProfile(profile);
-    }
   }
 
   const value = {

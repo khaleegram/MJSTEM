@@ -633,7 +633,7 @@ export default function SubmissionDetailPage() {
         ) || [];
         
         const updatedReviewerIds = submission.reviewerIds?.filter(id => id !== reviewer.id) || [];
-        const updatedInvitedEmails = submission.invitedReviewerEmails?.filter(e => e !== emailNorm) || [];
+        const updatedInvitedEmails = submission.invitedReviewerEmails?.filter(e => e === emailNorm) || [];
 
         batch.update(submissionRef, {
             reviewers: updatedReviewers,
@@ -700,7 +700,7 @@ export default function SubmissionDetailPage() {
         toast({ title: "File Shared with Author" });
         sendAttachmentNotificationEmail({ authorEmail: submission.author.email, authorName: submission.author.name, editorName: userProfile.displayName, submissionId: submission.id, manuscriptTitle: submission.title, fileName: newAttachment.name });
         setRefetchTrigger(p => p + 1);
-    } catch (serverError) { errorEmitter.emit('permission-error', new FirestorePermissionError({ path: submissionRef.path, operation: 'update', requestResourceData: updateData })); }
+    } catch (serverError) { errorEmitter.emit('permission-error', new FirestorePermissionError({ path: submissionRef.path, operation: 'update' })); }
     finally { setIsUpdating(false); }
   }
 
@@ -826,7 +826,7 @@ export default function SubmissionDetailPage() {
                     {submission.reviewers.map((r, i) => (
                          <li key={r.id || r.email} className="flex items-center justify-between group">
                            <div className="flex items-center gap-4">
-                                <Avatar><AvatarFallback>{isEditor ? getInitials(r.name) : `R${i+1}`}</AvatarFallback></Avatar>
+                                <Avatar><AvatarFallback>{isEditor ? getInitials(r.name) : `Reviewer ${i+1}`}</AvatarFallback></Avatar>
                                 <div>
                                     <p className="font-medium text-sm">{isEditor ? r.name : `Reviewer ${i+1}`}</p>
                                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
