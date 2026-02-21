@@ -2,7 +2,7 @@
 'use client';
 
 import { notFound, useParams, useRouter } from 'next/navigation';
-import { doc, getDoc, updateDoc, arrayUnion, collection, getDocs, addDoc, serverTimestamp, query, where, runTransaction, deleteDoc, arrayRemove } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, arrayUnion, collection, getDocs, addDoc, serverTimestamp, query, where, runTransaction, deleteDoc, arrayRemove, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
   Card,
@@ -64,7 +64,6 @@ async function getNextSubmissionId(): Promise<string> {
     const newCount = await runTransaction(db, async (transaction) => {
         const counterDoc = await transaction.get(counterRef);
         if (!counterDoc.exists() || !counterDoc.data().counts || !counterDoc.data().counts[year]) {
-            // Initialize for the year
             const initialCounts = counterDoc.exists() ? counterDoc.data().counts || {} : {};
             initialCounts[year] = 1;
             transaction.set(counterRef, { counts: initialCounts }, { merge: true });
@@ -107,7 +106,7 @@ const getStatusVariant = (status: SubmissionStatus) => {
   };
 
 const ReviewSubmissionForm = ({ submission, onReviewSubmit }: { submission: Submission, onReviewSubmit: () => void }) => {
-    const { user, userProfile } = useAuth();
+    const { user, userProfile, refetchUserProfile } = useAuth();
     const { toast } = useToast();
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const [recommendation, setRecommendation] = React.useState('');
@@ -116,10 +115,63 @@ const ReviewSubmissionForm = ({ submission, onReviewSubmit }: { submission: Subm
     const [attachmentUrl, setAttachmentUrl] = React.useState('');
     const [attachmentName, setAttachmentName] = React.useState('');
 
-    const myReviewAssignment = submission.reviewers?.find(r => r.id === user?.uid);
+    const myReviewAssignment = submission.reviewers?.find(r => r.id === user?.uid || r.email === user?.email);
+    const isClaimed = myReviewAssignment?.id === user?.uid;
 
     if (!myReviewAssignment || myReviewAssignment.status === 'Review Submitted') {
         return null;
+    }
+
+    const handleClaimAssignment = async () => {
+        if (!user || !userProfile) return;
+        setIsSubmitting(true);
+        try {
+            const submissionRef = doc(db, 'submissions', submission.id);
+            const userRef = doc(db, 'users', user.uid);
+            
+            await runTransaction(db, async (transaction) => {
+                // Update submission
+                const updatedReviewers = submission.reviewers?.map(r => 
+                    (r.email === user.email) ? { ...r, id: user.uid, status: 'Pending' as const } : r
+                ) || [];
+                
+                transaction.update(submissionRef, {
+                    reviewers: updatedReviewers,
+                    reviewerIds: arrayUnion(user.uid),
+                    invitedReviewerEmails: arrayRemove(user.email)
+                });
+
+                // Promote role if needed
+                if (userProfile.role === 'Author') {
+                    transaction.update(userRef, { role: 'Reviewer' });
+                }
+            });
+
+            await refetchUserProfile();
+            toast({ title: "Invitation Accepted", description: "You can now submit your review report." });
+            onReviewSubmit(); // Trigger refetch
+        } catch (error) {
+            console.error("Error claiming assignment:", error);
+            toast({ title: "Error", description: "Could not accept invitation. Please try again.", variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
+        }
+    }
+
+    if (!isClaimed) {
+        return (
+            <Card className="border-primary">
+                <CardHeader>
+                    <CardTitle className="font-headline">Review Invitation</CardTitle>
+                    <CardDescription>You have been invited to review this manuscript. Please accept the invitation to proceed.</CardDescription>
+                </CardHeader>
+                <CardFooter>
+                    <Button onClick={handleClaimAssignment} disabled={isSubmitting}>
+                        {isSubmitting ? 'Processing...' : 'Accept Invitation & Start Review'}
+                    </Button>
+                </CardFooter>
+            </Card>
+        )
     }
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -132,7 +184,7 @@ const ReviewSubmissionForm = ({ submission, onReviewSubmit }: { submission: Subm
 
         const reviewData = {
             reviewerId: user?.uid,
-            reviewerName: user?.displayName,
+            reviewerName: userProfile?.displayName || 'Anonymous Reviewer',
             recommendation,
             commentsForEditor,
             commentsForAuthor,
@@ -145,25 +197,21 @@ const ReviewSubmissionForm = ({ submission, onReviewSubmit }: { submission: Subm
         const reviewRef = collection(db, 'submissions', submission.id, 'reviews');
 
         try {
-            // 1. Add review to subcollection
             await addDoc(reviewRef, reviewData);
             
-            // 2. Update the reviewer's status in the submission's reviewers array
             const updatedReviewers = submission.reviewers?.map(r => 
                 r.id === user?.uid ? { ...r, status: 'Review Submitted' as const } : r
             );
             await updateDoc(submissionRef, { reviewers: updatedReviewers });
 
-            // 3. Log the review event
             await logSubmissionEvent({
                 submissionId: submission.id,
                 eventType: 'REVIEW_SUBMITTED',
                 context: { reviewerName: userProfile?.displayName || 'A reviewer' }
             });
             
-             // 4. Notify editors and author
             await generateNotification({
-                userId: 'Admins', // Special keyword for all Admins/Managing Editors
+                userId: 'Admins',
                 submissionId: submission.id,
                 eventType: 'REVIEW_SUBMITTED',
                 context: { 
@@ -179,31 +227,30 @@ const ReviewSubmissionForm = ({ submission, onReviewSubmit }: { submission: Subm
                 context: { submissionTitle: submission.title }
             });
             
-            toast({ title: "Review Submitted", description: "Thank you for your contribution. The editor has been notified." });
-            onReviewSubmit(); // Trigger a refetch on the parent page
+            toast({ title: "Review Submitted", description: "The editor has been notified." });
+            onReviewSubmit();
         
         } catch (serverError: any) {
-             const permissionError = new FirestorePermissionError({
+             errorEmitter.emit('permission-error', new FirestorePermissionError({
                 path: reviewRef.path,
                 operation: 'create',
                 requestResourceData: reviewData
-            });
-            errorEmitter.emit('permission-error', permissionError);
+            }));
         } finally {
             setIsSubmitting(false);
         }
     }
 
     return (
-        <Card>
+        <Card id="review-form">
             <CardHeader>
-                <CardTitle className="font-headline">Submit Your Review</CardTitle>
-                <CardDescription>Provide your expert recommendation to the editor and comments for the author.</CardDescription>
+                <CardTitle className="font-headline">Submit Review Report</CardTitle>
+                <CardDescription>Provide your expert recommendation and feedback.</CardDescription>
             </CardHeader>
             <form onSubmit={handleSubmit}>
                 <CardContent className="space-y-4">
                     <div className="space-y-2">
-                        <label className="text-sm font-medium">Your Recommendation to the Editor</label>
+                        <label className="text-sm font-medium">Your Recommendation</label>
                         <Select onValueChange={setRecommendation} value={recommendation} required>
                             <SelectTrigger>
                                 <SelectValue placeholder="Select a recommendation..." />
@@ -215,28 +262,27 @@ const ReviewSubmissionForm = ({ submission, onReviewSubmit }: { submission: Subm
                                 <SelectItem value="Reject">Recommend Rejection</SelectItem>
                             </SelectContent>
                         </Select>
-                         <p className="text-xs text-muted-foreground">This is a confidential recommendation to the editor, who makes the final decision.</p>
                     </div>
                      <div className="space-y-2">
                         <label className="text-sm font-medium flex items-center gap-2">
                             <Shield className="w-4 h-4" />
-                            Confidential Comments for the Editor
+                            Confidential Comments for Editor
                         </label>
                         <Textarea 
                             value={commentsForEditor}
                             onChange={(e) => setCommentsForEditor(e.target.value)}
-                            placeholder="These comments will only be seen by the editor." 
+                            placeholder="Private feedback for the editorial board." 
                         />
                     </div>
                      <div className="space-y-2">
                         <label className="text-sm font-medium flex items-center gap-2">
                            <MessageSquare className="w-4 h-4" />
-                           Comments for the Author
+                           Comments for Author
                         </label>
                         <Textarea 
                              value={commentsForAuthor}
                             onChange={(e) => setCommentsForAuthor(e.target.value)}
-                            placeholder="These comments will be shared with the author anonymously." 
+                            placeholder="Anonymized feedback shared with the authors." 
                         />
                     </div>
                     <div className="space-y-2">
@@ -251,13 +297,13 @@ const ReviewSubmissionForm = ({ submission, onReviewSubmit }: { submission: Subm
                                 setAttachmentName(name || 'attachment');
                             }}
                             onUploadError={(err) => toast({ title: "Upload Error", description: err.message, variant: "destructive"})}
-                            description="Upload your annotated manuscript (.doc or .docx)."
+                            description="Upload annotated files (.doc, .docx)."
                         />
                     </div>
                 </CardContent>
                 <CardFooter>
                     <Button type="submit" disabled={isSubmitting}>
-                        {isSubmitting ? 'Submitting...' : 'Submit Recommendation'}
+                        {isSubmitting ? 'Submitting...' : 'Submit Report'}
                     </Button>
                 </CardFooter>
             </form>
@@ -310,7 +356,7 @@ const AuthorRevisionForm = ({ submission, onRevisionSubmit }: { submission: Subm
                 });
                 
                 await generateNotification({
-                    userId: 'Admins', // Notify all admins/editors
+                    userId: 'Admins',
                     submissionId: submission.id,
                     eventType: 'REVISION_SUBMITTED',
                     context: {
@@ -319,16 +365,15 @@ const AuthorRevisionForm = ({ submission, onRevisionSubmit }: { submission: Subm
                     }
                 });
 
-                toast({ title: "Revision Submitted", description: "Your updated manuscript has been sent to the editor." });
+                toast({ title: "Revision Submitted", description: "Your updated manuscript has been sent." });
                 onRevisionSubmit();
             })
             .catch((serverError) => {
-                const permissionError = new FirestorePermissionError({
+                errorEmitter.emit('permission-error', new FirestorePermissionError({
                     path: submissionRef.path,
                     operation: 'update',
                     requestResourceData: updateData
-                });
-                errorEmitter.emit('permission-error', permissionError);
+                }));
             })
             .finally(() => {
                 setIsSubmitting(false);
@@ -338,8 +383,8 @@ const AuthorRevisionForm = ({ submission, onRevisionSubmit }: { submission: Subm
     return (
         <Card>
             <CardHeader>
-                <CardTitle className="font-headline">Submit Revision</CardTitle>
-                <CardDescription>Upload your revised manuscript file. The editor will be notified.</CardDescription>
+                <CardTitle className="font-headline">Submit Revised Manuscript</CardTitle>
+                <CardDescription>Upload your updated research file based on reviewer feedback.</CardDescription>
             </CardHeader>
             <form onSubmit={handleSubmit}>
                 <CardContent className="space-y-4">
@@ -347,7 +392,7 @@ const AuthorRevisionForm = ({ submission, onRevisionSubmit }: { submission: Subm
                         endpoint="documentUploader" 
                         onUploadComplete={handleFileUploadComplete} 
                         onUploadError={(err) => toast({ title: "Upload Error", description: err.message, variant: "destructive"})}
-                        description="Upload your revised manuscript (.doc, .docx)."
+                        description="Upload revised manuscript (.doc, .docx)."
                     />
                 </CardContent>
                 <CardFooter>
@@ -363,41 +408,9 @@ const AuthorRevisionForm = ({ submission, onRevisionSubmit }: { submission: Subm
 const DetailPageSkeleton = () => (
     <div className="grid gap-8 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-8">
-            <Card>
-                <CardHeader>
-                    <Skeleton className="h-7 w-24 mb-2" />
-                    <Skeleton className="h-10 w-full" />
-                    <div className="flex items-center gap-4 pt-2">
-                        <Skeleton className="h-5 w-32" />
-                        <Skeleton className="h-5 w-48" />
-                    </div>
-                </CardHeader>
-                <CardContent>
-                    <Skeleton className="h-6 w-32 mb-2" />
-                    <Skeleton className="h-20 w-full" />
-                    <Separator className="my-6" />
-                    <Skeleton className="h-6 w-24 mb-2" />
-                    <div className="flex flex-wrap gap-2">
-                        <Skeleton className="h-6 w-20" />
-                        <Skeleton className="h-6 w-24" />
-                        <Skeleton className="h-6 w-16" />
-                    </div>
-                </CardContent>
-                <CardFooter>
-                    <Skeleton className="h-10 w-48" />
-                </CardFooter>
-            </Card>
+            <Card><CardHeader><Skeleton className="h-10 w-full" /></CardHeader><CardContent><Skeleton className="h-40 w-full" /></CardContent></Card>
         </div>
-        <div className="space-y-8 lg:col-span-1">
-            <Card>
-                <CardHeader>
-                    <Skeleton className="h-8 w-48" />
-                </CardHeader>
-                <CardContent>
-                    <Skeleton className="h-20 w-full" />
-                </CardContent>
-            </Card>
-        </div>
+        <div className="lg:col-span-1 space-y-8"><Card><CardHeader><Skeleton className="h-20 w-full" /></CardHeader></Card></div>
     </div>
 )
 
@@ -428,15 +441,14 @@ const AuthorEditForm = ({ submission, onUpdate, onCancel }: { submission: Submis
 
         try {
             await updateDoc(submissionRef, updateData);
-            toast({ title: 'Submission Updated', description: 'Your changes have been saved.' });
+            toast({ title: 'Submission Updated' });
             onUpdate();
         } catch (serverError) {
-            const permissionError = new FirestorePermissionError({
+            errorEmitter.emit('permission-error', new FirestorePermissionError({
                 path: submissionRef.path,
                 operation: 'update',
                 requestResourceData: updateData,
-            });
-            errorEmitter.emit('permission-error', permissionError);
+            }));
         } finally {
             setIsSubmitting(false);
         }
@@ -445,37 +457,15 @@ const AuthorEditForm = ({ submission, onUpdate, onCancel }: { submission: Submis
     return (
         <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <FormField
-                    control={form.control}
-                    name="title"
-                    render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>Title</FormLabel>
-                            <FormControl>
-                                <Input {...field} />
-                            </FormControl>
-                            <FormMessage />
-                        </FormItem>
-                    )}
-                />
-                <FormField
-                    control={form.control}
-                    name="abstract"
-                    render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>Abstract</FormLabel>
-                            <FormControl>
-                                <Textarea {...field} className="min-h-[150px]" />
-                            </FormControl>
-                            <FormMessage />
-                        </FormItem>
-                    )}
-                />
+                <FormField control={form.control} name="title" render={({ field }) => (
+                    <FormItem><FormLabel>Title</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                )}/>
+                <FormField control={form.control} name="abstract" render={({ field }) => (
+                    <FormItem><FormLabel>Abstract</FormLabel><FormControl><Textarea {...field} className="min-h-[150px]" /></FormControl><FormMessage /></FormItem>
+                )}/>
                 <div className="flex justify-end gap-2">
                     <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
-                    <Button type="submit" disabled={isSubmitting}>
-                        {isSubmitting ? 'Saving...' : 'Save Changes'}
-                    </Button>
+                    <Button type="submit" disabled={isSubmitting}>Save Changes</Button>
                 </div>
             </form>
         </Form>
@@ -503,20 +493,11 @@ const PageCountDialog = ({ submission, onUpdate }: { submission: Submission; onU
 
     return (
         <Dialog>
-            <DialogTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-auto px-2 py-1"><Edit className="w-3 h-3" /></Button>
-            </DialogTrigger>
+            <DialogTrigger asChild><Button variant="ghost" size="sm" className="h-auto px-2 py-1"><Edit className="w-3 h-3" /></Button></DialogTrigger>
             <DialogContent className="sm:max-w-xs">
-                <DialogHeader>
-                    <DialogTitle>Edit Page Count</DialogTitle>
-                </DialogHeader>
-                <div className="py-4">
-                    <Label htmlFor="page-count">Pages</Label>
-                    <Input id="page-count" type="number" value={pageCount} onChange={(e) => setPageCount(e.target.value)} />
-                </div>
-                <DialogFooter>
-                    <Button onClick={handleSave} disabled={isSaving}>{isSaving ? 'Saving...' : 'Save'}</Button>
-                </DialogFooter>
+                <DialogHeader><DialogTitle>Edit Page Count</DialogTitle></DialogHeader>
+                <div className="py-4"><Label htmlFor="page-count">Pages</Label><Input id="page-count" type="number" value={pageCount} onChange={(e) => setPageCount(e.target.value)} /></div>
+                <DialogFooter><Button onClick={handleSave} disabled={isSaving}>Save</Button></DialogFooter>
             </DialogContent>
         </Dialog>
     )
@@ -548,26 +529,18 @@ export default function SubmissionDetailPage() {
 
   const isEditor = userProfile?.role === 'Editor' || userProfile?.role === 'Admin' || userProfile?.role === 'Managing Editor';
   const isAuthor = userProfile?.uid === submission?.author.id;
-  const isReviewer = submission?.reviewerIds?.includes(user?.uid || '');
+  const isReviewer = submission?.reviewerIds?.includes(user?.uid || '') || submission?.invitedReviewerEmails?.includes(user?.email || '');
 
   React.useEffect(() => {
     const fetchReviewers = async () => {
         if (!isEditor) return;
         const reviewersCollection = collection(db, 'users');
         try {
-            const q = query(
-                reviewersCollection, 
-                where('role', 'in', ['Reviewer', 'Editor', 'Admin', 'Managing Editor'])
-            );
+            const q = query(reviewersCollection, where('role', 'in', ['Reviewer', 'Editor', 'Admin', 'Managing Editor']));
             const querySnapshot = await getDocs(q);
-            const users = querySnapshot.docs.map(doc => doc.data() as UserProfile);
-            setAvailableReviewers(users);
+            setAvailableReviewers(querySnapshot.docs.map(doc => doc.data() as UserProfile));
         } catch (serverError) {
-            const permissionError = new FirestorePermissionError({
-                path: reviewersCollection.path,
-                operation: 'list',
-            });
-            errorEmitter.emit('permission-error', permissionError);
+            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: reviewersCollection.path, operation: 'list' }));
         }
     }
     fetchReviewers();
@@ -578,7 +551,6 @@ export default function SubmissionDetailPage() {
     const docRef = doc(db, 'submissions', id);
     try {
         const docSnap = await getDoc(docRef);
-
         if (docSnap.exists()) {
             const data = docSnap.data();
             setSubmission({
@@ -590,11 +562,7 @@ export default function SubmissionDetailPage() {
             notFound();
         }
     } catch (serverError) {
-        const permissionError = new FirestorePermissionError({
-            path: docRef.path,
-            operation: 'get',
-        });
-        errorEmitter.emit('permission-error', permissionError);
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: docRef.path, operation: 'get' }));
         notFound();
     } finally {
         setLoading(false);
@@ -609,48 +577,17 @@ export default function SubmissionDetailPage() {
   const handleDecision = async (status: SubmissionStatus) => {
     if(!submission || !userProfile || !submission.uniqueId) return;
     setIsUpdating(true);
-
     const submissionRef = doc(db, 'submissions', submission.id);
     const updateData = { status };
-
     try {
         await updateDoc(submissionRef, updateData);
-
-        await logSubmissionEvent({
-            submissionId: submission.id,
-            eventType: 'STATUS_CHANGED',
-            context: { actorName: userProfile.displayName, status }
-        });
-
-        await generateNotification({
-            userId: submission.author.id,
-            submissionId: submission.id,
-            eventType: 'STATUS_CHANGED',
-            context: { status, submissionTitle: submission.title }
-        });
-        
-        await sendDecisionEmail({
-            authorEmail: submission.author.email,
-            authorName: submission.author.name,
-            manuscriptTitle: submission.title,
-            submissionId: submission.id,
-            uniqueId: submission.uniqueId,
-            decision: status,
-        });
-
-        toast({
-            title: "Status Updated",
-            description: `Submission marked as ${status}. The author has been notified by email.`,
-        });
-
-        setRefetchTrigger(prev => prev + 1); // Trigger refetch
+        await logSubmissionEvent({ submissionId: submission.id, eventType: 'STATUS_CHANGED', context: { actorName: userProfile.displayName, status } });
+        await generateNotification({ userId: submission.author.id, submissionId: submission.id, eventType: 'STATUS_CHANGED', context: { status, submissionTitle: submission.title } });
+        await sendDecisionEmail({ authorEmail: submission.author.email, authorName: submission.author.name, manuscriptTitle: submission.title, submissionId: submission.id, uniqueId: submission.uniqueId, decision: status });
+        toast({ title: "Status Updated", description: `Author notified.` });
+        setRefetchTrigger(prev => prev + 1);
     } catch (serverError) {
-        const permissionError = new FirestorePermissionError({
-          path: submissionRef.path,
-          operation: 'update',
-          requestResourceData: updateData,
-        });
-        errorEmitter.emit('permission-error', permissionError);
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: submissionRef.path, operation: 'update', requestResourceData: updateData }));
     } finally {
         setIsUpdating(false);
     }
@@ -658,195 +595,64 @@ export default function SubmissionDetailPage() {
   
   const handleDeleteSubmission = async () => {
     if (!submission) return;
-
     try {
         await runTransaction(db, async (transaction) => {
-            const submissionRef = doc(db, 'submissions', submission.id);
-            
-            // Inefficient, but required by data model. Find and remove from volume.
-            const volumesQuery = query(collection(db, 'volumes'));
-            const volumesSnapshot = await getDocs(volumesQuery);
-            for (const volDoc of volumesSnapshot.docs) {
-                const volume = volDoc.data() as Volume;
-                let volumeUpdated = false;
-                const updatedIssues = volume.issues?.map(issue => {
-                    const articleIndex = issue.articles?.findIndex(a => a.id === submission.id);
-                    if (articleIndex !== -1 && issue.articles) {
-                        issue.articles.splice(articleIndex, 1);
-                        volumeUpdated = true;
-                    }
-                    return issue;
-                });
-                if (volumeUpdated) {
-                    transaction.update(doc(db, 'volumes', volDoc.id), { issues: updatedIssues });
-                    break; 
-                }
-            }
-            // Delete submission
-            transaction.delete(submissionRef);
+            transaction.delete(doc(db, 'submissions', submission.id));
         });
-
-        toast({ title: "Submission Deleted", description: "The submission has been permanently removed." });
+        toast({ title: "Deleted" });
         router.push('/dashboard/author');
     } catch (serverError) {
-        const permissionError = new FirestorePermissionError({
-            path: `submissions/${submission.id}`,
-            operation: 'delete',
-        });
-        errorEmitter.emit('permission-error', permissionError);
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: `submissions/${submission.id}`, operation: 'delete' }));
     }
   };
 
   const handleAssignReviewer = async (reviewer: UserProfile) => {
       if(!submission || !userProfile) return;
-
       if (submission.reviewers?.some(r => r.id === reviewer.uid)) {
-          toast({
-              title: "Already Assigned",
-              description: `${reviewer.displayName} is already a reviewer for this manuscript.`,
-              variant: "destructive",
-          });
+          toast({ title: "Already Assigned", variant: "destructive" });
           return;
       }
-      
       setIsUpdating(true);
-
       const submissionRef = doc(db, 'submissions', submission.id);
-      
-      const newReviewer = {
-          id: reviewer.uid,
-          name: reviewer.displayName,
-          email: reviewer.email,
-          status: 'Pending' as const,
-      };
-
-      const updateData: any = {
-          reviewers: arrayUnion(newReviewer),
-          reviewerIds: arrayUnion(reviewer.uid),
-      };
-
+      const newReviewer = { id: reviewer.uid, name: reviewer.displayName, email: reviewer.email, status: 'Pending' as const };
+      const updateData: any = { reviewers: arrayUnion(newReviewer), reviewerIds: arrayUnion(reviewer.uid) };
       if (submission.status === 'Submitted' || submission.status === 'Under Initial Review' || submission.status === 'With Editor') {
           updateData.status = 'Under Peer Review';
       }
-
       try {
         await updateDoc(submissionRef, updateData);
-
-        // Fire-and-forget background tasks
-        logSubmissionEvent({
-            submissionId: submission.id,
-            eventType: 'REVIEWER_ASSIGNED',
-            context: { reviewerName: reviewer.displayName, actorName: userProfile.displayName }
-        }).catch(e => console.error("Failed to log event:", e));
-        
-        generateNotification({
-            userId: reviewer.uid,
-            submissionId: submission.id,
-            eventType: 'REVIEWER_ASSIGNED',
-            context: { submissionTitle: submission.title }
-        }).catch(e => console.error("Failed to generate in-app notification:", e));
-
-        sendReviewerAssignmentEmail({
-            reviewerEmail: reviewer.email,
-            reviewerName: reviewer.displayName,
-            manuscriptTitle: submission.title,
-            submissionId: submission.id,
-        }).catch(e => console.error("Failed to send assignment email:", e));
-
-        if (updateData.status) {
-             logSubmissionEvent({
-                submissionId: submission.id,
-                eventType: 'STATUS_CHANGED',
-                context: { actorName: userProfile.displayName, status: updateData.status }
-            }).catch(e => console.error("Failed to log status change:", e));
-
-            generateNotification({
-                userId: submission.author.id,
-                submissionId: submission.id,
-                eventType: 'STATUS_CHANGED',
-                context: { status: updateData.status, submissionTitle: submission.title }
-            }).catch(e => console.error("Failed to generate status change notification:", e));
-        }
-        
-        toast({
-            title: "Reviewer Assigned",
-            description: `${reviewer.displayName} has been assigned and notified.`,
-        });
-
+        logSubmissionEvent({ submissionId: submission.id, eventType: 'REVIEWER_ASSIGNED', context: { reviewerName: reviewer.displayName, actorName: userProfile.displayName } });
+        generateNotification({ userId: reviewer.uid, submissionId: submission.id, eventType: 'REVIEWER_ASSIGNED', context: { submissionTitle: submission.title } });
+        sendReviewerAssignmentEmail({ reviewerEmail: reviewer.email, reviewerName: reviewer.displayName, manuscriptTitle: submission.title, submissionId: submission.id });
+        toast({ title: "Reviewer Assigned" });
         setRefetchTrigger(prev => prev + 1);
       } catch (serverError) {
-            const permissionError = new FirestorePermissionError({
-                path: submissionRef.path,
-                operation: 'update',
-                requestResourceData: { 
-                    reviewers: `(arrayUnion with ${reviewer.displayName})`, 
-                    reviewerIds: `(arrayUnion with ${reviewer.uid})`,
-                    status: 'Under Peer Review'
-                }
-            });
-            errorEmitter.emit('permission-error', permissionError);
-      } finally {
-             setIsUpdating(false);
-      }
+            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: submissionRef.path, operation: 'update' }));
+      } finally { setIsUpdating(false); }
   }
 
   const handleInviteReviewer = async (values: z.infer<typeof inviteReviewerSchema>) => {
     if(!submission || !userProfile) return;
-
-    if (submission.reviewers?.some(r => r.email === values.email) || submission.invitedReviewerEmails?.includes(values.email)) {
-        toast({ title: "Already Invited/Assigned", description: `A reviewer with the email ${values.email} is already associated with this manuscript.`, variant: "destructive" });
+    if (submission.reviewers?.some(r => r.email === values.email)) {
+        toast({ title: "Already Associated", variant: "destructive" });
         return;
     }
-    
     setIsUpdating(true);
-
-    const newReviewer = {
-        id: null,
-        name: values.name,
-        email: values.email,
-        status: 'Invited' as const,
-    };
-
+    const newReviewer = { id: null, name: values.name, email: values.email, status: 'Invited' as const };
     const submissionRef = doc(db, 'submissions', submission.id);
-    
-    const updateData: any = {
-        reviewers: arrayUnion(newReviewer),
-        invitedReviewerEmails: arrayUnion(values.email),
-    };
-     if (submission.status === 'Submitted' || submission.status === 'Under Initial Review' || submission.status === 'With Editor') {
+    const updateData: any = { reviewers: arrayUnion(newReviewer), invitedReviewerEmails: arrayUnion(values.email) };
+    if (submission.status === 'Submitted' || submission.status === 'Under Initial Review' || submission.status === 'With Editor') {
         updateData.status = 'Under Peer Review';
     }
-
     try {
         await updateDoc(submissionRef, updateData);
-
-        // Fire-and-forget background tasks
-        logSubmissionEvent({
-            submissionId: submission.id,
-            eventType: 'REVIEWER_INVITED',
-            context: { reviewerName: values.name, reviewerEmail: values.email, actorName: userProfile.displayName }
-        }).catch(e => console.error("Failed to log event:", e));
-        
-        sendReviewerInvitationEmail({
-            reviewerEmail: values.email,
-            reviewerName: values.name,
-            manuscriptTitle: submission.title,
-            submissionId: submission.id,
-        }).catch(e => console.error("Failed to send invitation email:", e));
-
-        toast({ title: "Invitation Sent", description: `${values.name} has been invited to review this manuscript.` });
+        logSubmissionEvent({ submissionId: submission.id, eventType: 'REVIEWER_INVITED', context: { reviewerName: values.name, reviewerEmail: values.email, actorName: userProfile.displayName } });
+        sendReviewerInvitationEmail({ reviewerEmail: values.email, reviewerName: values.name, manuscriptTitle: submission.title, submissionId: submission.id });
+        toast({ title: "Invitation Sent" });
         inviteForm.reset();
         setRefetchTrigger(prev => prev + 1);
-
-    } catch (serverError) {
-        const permissionError = new FirestorePermissionError({
-            path: submissionRef.path,
-            operation: 'update'
-        });
-        errorEmitter.emit('permission-error', permissionError);
-    } finally {
-        setIsUpdating(false);
-    }
+    } catch (serverError) { errorEmitter.emit('permission-error', new FirestorePermissionError({ path: submissionRef.path, operation: 'update' })); }
+    finally { setIsUpdating(false); }
   }
 
 
@@ -855,101 +661,35 @@ export default function SubmissionDetailPage() {
     setIsUpdating(true);
     try {
         const newId = await getNextSubmissionId();
-        const submissionRef = doc(db, 'submissions', submission.id);
-        
-        await runTransaction(db, async (transaction) => {
-            // Update submission doc
-            transaction.update(submissionRef, { uniqueId: newId });
-
-            // Update volume doc if it exists
-            const volumesQuery = query(collection(db, 'volumes'));
-            const volumesSnapshot = await getDocs(volumesQuery);
-            for (const volDoc of volumesSnapshot.docs) {
-                const volume = volDoc.data() as Volume;
-                let volumeUpdated = false;
-                const updatedIssues = volume.issues?.map(issue => {
-                    const articleIndex = issue.articles?.findIndex(a => a.id === submission.id);
-                    if (articleIndex !== -1 && issue.articles) {
-                        issue.articles[articleIndex].uniqueId = newId;
-                        volumeUpdated = true;
-                    }
-                    return issue;
-                });
-                if (volumeUpdated) {
-                    transaction.update(doc(db, 'volumes', volDoc.id), { issues: updatedIssues });
-                    break;
-                }
-            }
-        });
-
-        toast({ title: "Unique ID Assigned", description: `Assigned ID: ${newId}` });
+        await updateDoc(doc(db, 'submissions', submission.id), { uniqueId: newId });
+        toast({ title: "ID Assigned", description: newId });
         setRefetchTrigger(prev => prev + 1);
-    } catch (e) {
-        console.error("Error assigning unique ID:", e);
-        toast({ title: "Error", description: "Could not assign a unique ID.", variant: "destructive" });
-    } finally {
-        setIsUpdating(false);
-    }
+    } catch (e) { toast({ title: "Error", variant: "destructive" }); }
+    finally { setIsUpdating(false); }
   };
 
-  const handleRevisionSubmit = () => {
-    setRefetchTrigger(prev => prev + 1);
-  }
-  
   const handleEditorFileUpload = async (url: string, name?: string) => {
     if (!submission || !userProfile) return;
     setIsUpdating(true);
-    const newAttachment = {
-        url,
-        name: name || url.split('/').pop() || 'Uploaded File',
-        uploadedAt: new Date(),
-    };
-
+    const newAttachment = { url, name: name || 'Uploaded File', uploadedAt: new Date() };
     const submissionRef = doc(db, 'submissions', submission.id);
-    const updateData = {
-        editorAttachments: arrayUnion(newAttachment)
-    };
-
     try {
-        await updateDoc(submissionRef, updateData);
-        toast({ title: "File Uploaded", description: "The file is now visible to the author. An email notification has been sent." });
-        
-        sendAttachmentNotificationEmail({
-            authorEmail: submission.author.email,
-            authorName: submission.author.name,
-            editorName: userProfile.displayName,
-            submissionId: submission.id,
-            manuscriptTitle: submission.title,
-            fileName: newAttachment.name,
-        }).catch(e => console.error("Failed to send attachment email:", e));
-
-        setRefetchTrigger(p => p + 1); // refetch
-    } catch (serverError) {
-        const permissionError = new FirestorePermissionError({
-            path: submissionRef.path,
-            operation: 'update',
-            requestResourceData: { editorAttachments: '(arrayUnion)' }
-        });
-        errorEmitter.emit('permission-error', permissionError);
-    } finally {
-        setIsUpdating(false);
-    }
+        await updateDoc(submissionRef, { editorAttachments: arrayUnion(newAttachment) });
+        toast({ title: "File Shared with Author" });
+        sendAttachmentNotificationEmail({ authorEmail: submission.author.email, authorName: submission.author.name, editorName: userProfile.displayName, submissionId: submission.id, manuscriptTitle: submission.title, fileName: newAttachment.name });
+        setRefetchTrigger(p => p + 1);
+    } catch (serverError) { errorEmitter.emit('permission-error', new FirestorePermissionError({ path: submissionRef.path, operation: 'update' })); }
+    finally { setIsUpdating(false); }
   }
 
   const getInitials = (name: string) => {
     if (!name) return 'U';
     const names = name.split(' ');
-    if (names.length > 1) return names[0][0] + names[names.length - 1][0];
-    return name.substring(0, 2);
+    return names.length > 1 ? names[0][0] + names[names.length - 1][0] : name.substring(0, 2);
   }
 
-  if (loading) {
-    return <DetailPageSkeleton />;
-  }
-
-  if (!submission) {
-    return notFound();
-  }
+  if (loading) return <DetailPageSkeleton />;
+  if (!submission) return notFound();
 
   const isDecisionMade = submission.status === 'Accepted' || submission.status === 'Rejected';
   const needsRevision = submission.status === 'Minor Revision' || submission.status === 'Major Revision' || submission.status === 'Awaiting Revision: Similarity Issues';
@@ -962,169 +702,86 @@ export default function SubmissionDetailPage() {
         <Card>
             {isAuthorEditing ? (
                  <CardContent className="p-6">
-                    <AuthorEditForm 
-                        submission={submission}
-                        onUpdate={() => {
-                            setIsAuthorEditing(false);
-                            setRefetchTrigger(p => p+1);
-                        }}
-                        onCancel={() => setIsAuthorEditing(false)}
-                    />
+                    <AuthorEditForm submission={submission} onUpdate={() => { setIsAuthorEditing(false); setRefetchTrigger(p => p+1); }} onCancel={() => setIsAuthorEditing(false)} />
                  </CardContent>
             ) : (
                 <>
                 <CardHeader>
                     <div className="flex items-center justify-between">
-                    <Badge variant={getStatusVariant(submission.status)} className={cn("w-fit mb-2")}>
-                        {submission.status}
-                    </Badge>
-                    {submission.uniqueId && (
-                        <p className="text-sm font-mono text-muted-foreground">{submission.uniqueId}</p>
-                    )}
+                        <Badge variant={getStatusVariant(submission.status)} className="mb-2">{submission.status}</Badge>
+                        {submission.uniqueId && <p className="text-sm font-mono text-muted-foreground">{submission.uniqueId}</p>}
                     </div>
-                    <CardTitle className="font-headline text-3xl break-words min-w-0">{submission.title}</CardTitle>
+                    <CardTitle className="font-headline text-3xl break-words">{submission.title}</CardTitle>
                     <div className="text-sm text-muted-foreground flex items-center flex-wrap gap-x-4 gap-y-2 pt-2">
-                        <div className="flex items-center gap-2">
-                            <User className="h-4 w-4" />
-                            <span>{submission.author.name}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4" />
-                            <span>Submitted on {format(submission.submittedAt, 'PPP')}</span>
-                        </div>
+                        <div className="flex items-center gap-2"><User className="h-4 w-4" /><span>{submission.author.name}</span></div>
+                        <div className="flex items-center gap-2"><Calendar className="h-4 w-4" /><span>Submitted on {format(submission.submittedAt, 'PPP')}</span></div>
                     </div>
                 </CardHeader>
                 <CardContent>
                     <h3 className="font-semibold mb-2 font-headline">Abstract</h3>
-                    <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap break-words min-w-0">{submission.abstract}</p>
+                    <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap break-words">{submission.abstract}</p>
                     <Separator className="my-6" />
-                    <h3 className="font-semibold mb-2 font-headline">Keywords</h3>
-                    <div className="flex flex-wrap gap-2">
-                        {submission.keywords && submission.keywords.split(',').map(keyword => keyword.trim()).filter(Boolean).map(keyword => (
-                            <Badge key={keyword} variant="secondary">{keyword}</Badge>
-                        ))}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div>
+                            <h3 className="font-semibold mb-2 font-headline">Keywords</h3>
+                            <div className="flex flex-wrap gap-2">
+                                {submission.keywords?.split(',').map(k => k.trim()).filter(Boolean).map(k => (
+                                    <Badge key={k} variant="secondary">{k}</Badge>
+                                ))}
+                            </div>
+                        </div>
+                        <div>
+                            <div className="font-semibold mb-2 font-headline flex items-center gap-2">
+                                <span>Page Count</span>
+                                {isEditor && <PageCountDialog submission={submission} onUpdate={() => setRefetchTrigger(p => p+1)} />}
+                            </div>
+                            {submission.pageCount ? <p className="text-sm text-muted-foreground">{submission.pageCount} pages</p> : <p className="text-sm text-muted-foreground italic">Not set.</p>}
+                        </div>
                     </div>
-                    <Separator className="my-6" />
-                    <div className="space-y-1">
-                         <div className="font-semibold mb-2 font-headline flex items-center gap-2">
-                            <span>Page Count</span>
-                            {isEditor && <PageCountDialog submission={submission} onUpdate={() => setRefetchTrigger(p => p+1)} />}
-                         </div>
-                        {submission.pageCount ? <p className="text-sm text-muted-foreground">{submission.pageCount} pages</p> : <p className="text-sm text-muted-foreground italic">Not set.</p>}
-                    </div>
+                    {submission.supplementaryFileUrl && (
+                        <div className="mt-8 p-4 bg-secondary/30 border rounded-lg">
+                            <h3 className="font-semibold mb-2 font-headline flex items-center gap-2"><Paperclip className="w-4 h-4" /> Supplementary Data</h3>
+                            <p className="text-sm text-muted-foreground mb-4">Supporting datasets or additional materials provided by the author.</p>
+                            <Button variant="outline" asChild size="sm">
+                                <Link href={submission.supplementaryFileUrl} target="_blank"><Download className="mr-2 h-4 w-4" /> Download Material</Link>
+                            </Button>
+                        </div>
+                    )}
                 </CardContent>
                 </>
             )}
-
           <CardFooter className="flex-wrap gap-2 justify-between">
              <div className="flex-wrap gap-2 flex">
-                <Button asChild>
-                    <Link href={`https://docs.google.com/gview?url=${submission.manuscriptUrl}&embedded=true`} target="_blank" rel="noopener noreferrer">
-                        <BookText className="mr-2 h-4 w-4" /> Read Online
-                    </Link>
-                </Button>
-                {submission.originalManuscriptUrl && submission.manuscriptUrl && (
-                    <>
-                        <Button variant="outline" asChild>
-                            <Link href={submission.originalManuscriptUrl} target="_blank" rel="noopener noreferrer">
-                                <Download className="mr-2 h-4 w-4" />
-                                Download Original Manuscript
-                            </Link>
-                        </Button>
-                        <Button variant="outline" asChild>
-                            <Link href={submission.manuscriptUrl} target="_blank" rel="noopener noreferrer">
-                                <Download className="mr-2 h-4 w-4" />
-                                Download Revised Manuscript
-                            </Link>
-                        </Button>
-                    </>
-                )}
-                {(!submission.originalManuscriptUrl && submission.manuscriptUrl) && (
-                    <Button variant="outline" asChild>
-                        <Link href={submission.manuscriptUrl} target="_blank" rel="noopener noreferrer">
-                            <Download className="mr-2 h-4 w-4" />
-                            Download DOCX
-                        </Link>
-                    </Button>
-                )}
-                 {submission.supplementaryFileUrl && (
-                    <Button variant="outline" asChild>
-                        <Link href={submission.supplementaryFileUrl} target="_blank" rel="noopener noreferrer">
-                            <Paperclip className="mr-2 h-4 w-4" />
-                            Download Supplementary File
-                        </Link>
-                    </Button>
-                )}
+                <Button asChild><Link href={`https://docs.google.com/gview?url=${submission.manuscriptUrl}&embedded=true`} target="_blank"><BookText className="mr-2 h-4 w-4" /> Read Online</Link></Button>
+                {submission.manuscriptUrl && <Button variant="outline" asChild><Link href={submission.manuscriptUrl} target="_blank"><Download className="mr-2 h-4 w-4" /> Download Manuscript</Link></Button>}
             </div>
-            {canAuthorEdit && !isAuthorEditing && (
-                <Button variant="secondary" onClick={() => setIsAuthorEditing(true)}>
-                    <Edit className="mr-2 h-4 w-4" /> Edit
-                </Button>
-            )}
+            {canAuthorEdit && !isAuthorEditing && <Button variant="secondary" onClick={() => setIsAuthorEditing(true)}><Edit className="mr-2 h-4 w-4" /> Edit Details</Button>}
           </CardFooter>
         </Card>
 
-        {isAuthor && submission.editorAttachments && submission.editorAttachments.length > 0 && (
-            <Card>
-                <CardHeader>
-                    <CardTitle className="font-headline">Editor's Attachments</CardTitle>
-                    <CardDescription>Files provided by the editor for your review.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <ul className="space-y-2">
-                        {submission.editorAttachments.map((file, index) => (
-                            <li key={index} className="flex items-center justify-between text-sm p-3 border rounded-md bg-secondary/50">
-                                <div className="flex items-center gap-3">
-                                    <Paperclip className="h-4 w-4" />
-                                    <span>{file.name}</span>
-                                </div>
-                                <Button asChild variant="outline" size="sm">
-                                    <Link href={file.url} target="_blank" rel="noopener noreferrer">
-                                        <Download className="mr-2 h-4 w-4" />
-                                        Download
-                                    </Link>
-                                </Button>
-                            </li>
-                        ))}
-                    </ul>
-                </CardContent>
-            </Card>
-        )}
-
-        {isReviewer && <ReviewSubmissionForm submission={submission} onReviewSubmit={handleRevisionSubmit} />}
-        
-        {(isEditor || (isAuthor && (needsRevision))) && <SubmittedReviews submissionId={submission.id} showForAuthor={isAuthor} />}
-
-        {isAuthor && needsRevision && <AuthorRevisionForm submission={submission} onRevisionSubmit={handleRevisionSubmit} />}
-
+        {isReviewer && <ReviewSubmissionForm submission={submission} onReviewSubmit={() => setRefetchTrigger(p => p + 1)} />}
+        {(isEditor || (isAuthor && needsRevision)) && <SubmittedReviews submissionId={submission.id} showForAuthor={isAuthor} />}
+        {isAuthor && needsRevision && <AuthorRevisionForm submission={submission} onRevisionSubmit={() => setRefetchTrigger(p => p + 1)} />}
       </div>
 
       <div className="space-y-8 lg:col-span-1">
-        
         {isEditor && !submission.uniqueId && submission.status === 'Accepted' && (
-            <Card>
-                <CardHeader>
-                    <CardTitle className="font-headline text-lg flex items-center gap-2"><Info /> Missing Info</CardTitle>
-                </CardHeader>
+            <Card className="bg-yellow-50 dark:bg-yellow-950 border-yellow-200">
+                <CardHeader><CardTitle className="font-headline text-lg flex items-center gap-2"><Info /> Assignment Needed</CardTitle></CardHeader>
                 <CardContent>
-                    <p className="text-sm text-muted-foreground mb-4">This published article is missing a unique publication ID.</p>
-                    <Button onClick={handleAssignId} disabled={isUpdating}>
-                        {isUpdating ? 'Assigning...' : 'Assign Publication ID'}
-                    </Button>
+                    <p className="text-sm text-muted-foreground mb-4">Published articles require a unique MJSTEM ID.</p>
+                    <Button onClick={handleAssignId} disabled={isUpdating} className="w-full">Assign Publication ID</Button>
                 </CardContent>
             </Card>
         )}
 
         {isEditor && !isDecisionMade && (
         <Card>
-          <CardHeader>
-            <CardTitle className="font-headline">Make Final Decision</CardTitle>
-            <CardDescription>This will override the current status and notify the author.</CardDescription>
-          </CardHeader>
+          <CardHeader><CardTitle className="font-headline">Editorial Decision</CardTitle></CardHeader>
           <CardContent className="grid gap-2">
             <Button className="bg-green-600 hover:bg-green-700" onClick={() => handleDecision('Accepted')} disabled={isUpdating}>Accept</Button>
-            <Button variant="secondary" onClick={() => handleDecision('Minor Revision')} disabled={isUpdating}>Request Minor Revision</Button>
-            <Button variant="secondary" onClick={() => handleDecision('Major Revision')} disabled={isUpdating}>Request Major Revision</Button>
+            <Button variant="secondary" onClick={() => handleDecision('Minor Revision')} disabled={isUpdating}>Minor Revision</Button>
+            <Button variant="secondary" onClick={() => handleDecision('Major Revision')} disabled={isUpdating}>Major Revision</Button>
             <Button variant="destructive" onClick={() => handleDecision('Rejected')} disabled={isUpdating}>Reject</Button>
           </CardContent>
         </Card>
@@ -1132,108 +789,56 @@ export default function SubmissionDetailPage() {
         
         {isEditor && (
             <Card>
-                <CardHeader>
-                    <CardTitle className="font-headline">Editor Attachments</CardTitle>
-                    <CardDescription>Upload files for the author (e.g., annotated manuscript, revision notes).</CardDescription>
-                </CardHeader>
+                <CardHeader><CardTitle className="font-headline">Editor Attachments</CardTitle></CardHeader>
                 <CardContent>
-                    {submission.editorAttachments && submission.editorAttachments.length > 0 && (
-                        <div className="space-y-2 mb-4">
-                            <h4 className="text-sm font-medium">Uploaded Files</h4>
-                            <ul className="space-y-2">
-                                {submission.editorAttachments.map((file, index) => (
-                                    <li key={index} className="flex items-center justify-between text-sm p-2 border rounded-md">
-                                        <span className="truncate">{file.name}</span>
-                                        <Button asChild variant="ghost" size="sm">
-                                            <Link href={file.url} target="_blank">Download</Link>
-                                        </Button>
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                    )}
-                    <FileUploader
-                        endpoint="generalDocumentUploader"
-                        onUploadComplete={handleEditorFileUpload}
-                        onUploadError={(err) => toast({ title: "Upload Failed", description: err.message, variant: "destructive"})}
-                        description="Upload files for the author (.doc, .pdf, etc.)."
-                    />
+                    <FileUploader endpoint="generalDocumentUploader" onUploadComplete={handleEditorFileUpload} onUploadError={(err) => toast({ title: "Upload Failed", variant: "destructive"})} description="Share files with authors." />
                 </CardContent>
             </Card>
         )}
         
         <Card>
-          <CardHeader>
-            <CardTitle className="font-headline">Assigned Reviewers</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle className="font-headline">Peer Reviewers</CardTitle></CardHeader>
           <CardContent>
-             {submission.reviewers && submission.reviewers.length > 0 ? (
+             {submission.reviewers?.length ? (
                 <ul className="space-y-4">
-                    {submission.reviewers.map((reviewer, index) => {
-                        const isSubmitted = reviewer.status === 'Review Submitted';
-                        const isInvited = reviewer.status === 'Invited';
-                        const displayName = isEditor ? reviewer.name : `Reviewer ${index + 1}`;
-                        
-                        return (
-                         <li key={reviewer.id || reviewer.email} className="flex items-center justify-between">
+                    {submission.reviewers.map((r, i) => (
+                         <li key={r.id || r.email} className="flex items-center justify-between">
                            <div className="flex items-center gap-4">
-                                <Avatar>
-                                    {isEditor ? <AvatarImage src={availableReviewers.find(r => r.uid === reviewer.id)?.photoURL || ''} alt={reviewer.name} /> : null}
-                                    <AvatarFallback>{isEditor ? getInitials(reviewer.name) : `R${index+1}`}</AvatarFallback>
-                                </Avatar>
+                                <Avatar><AvatarFallback>{isEditor ? getInitials(r.name) : `R${i+1}`}</AvatarFallback></Avatar>
                                 <div>
-                                    <p className="font-medium">{displayName}</p>
-                                    <div className={cn("flex items-center gap-1.5 text-xs", isSubmitted ? "text-green-600" : "text-muted-foreground")}>
-                                      {isSubmitted ? <CheckCircle2 className="w-3.5 h-3.5" /> : isInvited ? <Mail className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
-                                      <span>{reviewer.status}</span>
+                                    <p className="font-medium text-sm">{isEditor ? r.name : `Reviewer ${i+1}`}</p>
+                                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                      {r.status === 'Review Submitted' ? <CheckCircle2 className="w-3 h-3 text-green-600" /> : <Clock className="w-3 h-3" />}
+                                      <span>{r.status}</span>
                                     </div>
                                 </div>
                             </div>
                          </li>
-                    )})}
+                    ))}
                 </ul>
-            ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">No reviewers assigned yet.</p>
-            )}
+            ) : <p className="text-sm text-muted-foreground text-center py-4">No assignments yet.</p>}
           </CardContent>
           {isEditor && !isDecisionMade && (
           <CardFooter>
             <Dialog>
-              <DialogTrigger asChild>
-                <Button variant="outline" className="w-full" disabled={isUpdating}>
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Assign/Invite Reviewer
-                </Button>
-              </DialogTrigger>
+              <DialogTrigger asChild><Button variant="outline" className="w-full"><PlusCircle className="mr-2 h-4 w-4" /> Assign Reviewer</Button></DialogTrigger>
               <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                  <DialogTitle>Assign or Invite Reviewer</DialogTitle>
-                </DialogHeader>
+                <DialogHeader><DialogTitle>Assign or Invite</DialogTitle></DialogHeader>
                  <Tabs defaultValue="existing" className="w-full">
-                    <TabsList className="grid w-full grid-cols-2">
-                        <TabsTrigger value="existing">Find Existing User</TabsTrigger>
-                        <TabsTrigger value="invite">Invite by Email</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="existing" className="pt-4">
-                        <ul className="space-y-3 max-h-80 overflow-y-auto">
-                            {availableReviewers.map(reviewer => (
-                            <li key={reviewer.uid} className='flex justify-between items-center p-3 rounded-lg border hover:bg-secondary/50'>
-                                <div className="flex items-center gap-4">
-                                    <Avatar>
-                                        <AvatarImage src={reviewer.photoURL || ''} alt={reviewer.displayName || 'Reviewer'} />
-                                        <AvatarFallback>{getInitials(reviewer.displayName || 'R')}</AvatarFallback>
-                                    </Avatar>
-                                    <div>
-                                        <p className="font-medium">{reviewer.displayName}</p>
-                                        <p className="text-sm text-muted-foreground truncate max-w-48">{reviewer.specialization || 'No specialization listed'}</p>
+                    <TabsList className="grid w-full grid-cols-2"><TabsTrigger value="existing">Search Users</TabsTrigger><TabsTrigger value="invite">By Email</TabsTrigger></TabsList>
+                    <TabsContent value="existing" className="pt-4 max-h-80 overflow-y-auto">
+                        {availableReviewers.map(r => (
+                            <div key={r.uid} className='flex justify-between items-center p-2 border-b last:border-0'>
+                                <div className="flex items-center gap-3">
+                                    <Avatar className="h-8 w-8"><AvatarFallback>{getInitials(r.displayName)}</AvatarFallback></Avatar>
+                                    <div className="text-xs">
+                                        <p className="font-bold">{r.displayName}</p>
+                                        <p className="text-muted-foreground line-clamp-1">{r.specialization || 'General'}</p>
                                     </div>
                                 </div>
-                                <Button variant="ghost" size="icon" onClick={() => handleAssignReviewer(reviewer)} disabled={isUpdating || !!submission.reviewers?.some(r => r.id === reviewer.uid)}>
-                                <PlusCircle className='h-5 w-5' />
-                                </Button>
-                            </li>
-                            ))}
-                        </ul>
+                                <Button variant="ghost" size="icon" onClick={() => handleAssignReviewer(r)}><PlusCircle className='h-4 w-4' /></Button>
+                            </div>
+                        ))}
                     </TabsContent>
                     <TabsContent value="invite" className="pt-4">
                         <Form {...inviteForm}>
@@ -1244,9 +849,7 @@ export default function SubmissionDetailPage() {
                                 <FormField control={inviteForm.control} name="email" render={({ field }) => (
                                     <FormItem><FormLabel>Reviewer Email</FormLabel><FormControl><Input type="email" placeholder="invite@example.com" {...field} /></FormControl><FormMessage /></FormItem>
                                 )}/>
-                                <DialogFooter>
-                                    <Button type="submit" disabled={isUpdating}>Send Invitation</Button>
-                                </DialogFooter>
+                                <DialogFooter><Button type="submit" disabled={isUpdating}>Send Invite</Button></DialogFooter>
                             </form>
                         </Form>
                     </TabsContent>
@@ -1258,36 +861,19 @@ export default function SubmissionDetailPage() {
         </Card>
         
         {canAuthorDelete && (
-             <Card>
-                <CardHeader>
-                    <CardTitle className="font-headline text-lg text-destructive">Danger Zone</CardTitle>
-                </CardHeader>
+             <Card className="border-destructive">
+                <CardHeader><CardTitle className="font-headline text-lg text-destructive">Withdraw</CardTitle></CardHeader>
                 <CardContent>
-                     <p className="text-sm text-muted-foreground mb-4">Deleting a submission is permanent and cannot be undone.</p>
                       <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                           <Button variant="destructive">
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Delete Submission
-                           </Button>
-                        </AlertDialogTrigger>
+                        <AlertDialogTrigger asChild><Button variant="destructive" className="w-full">Delete Submission</Button></AlertDialogTrigger>
                         <AlertDialogContent>
-                            <AlertDialogHeader>
-                                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                This will permanently delete your submission &quot;{submission.title}&quot;. This action cannot be undone.
-                                </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={handleDeleteSubmission}>Delete Submission</AlertDialogAction>
-                            </AlertDialogFooter>
+                            <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This action will permanently withdraw and delete your submission.</AlertDialogDescription></AlertDialogHeader>
+                            <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDeleteSubmission}>Delete</AlertDialogAction></AlertDialogFooter>
                         </AlertDialogContent>
                     </AlertDialog>
                 </CardContent>
             </Card>
         )}
-
         <SubmissionHistory submissionId={id} />
       </div>
     </div>

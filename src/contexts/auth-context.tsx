@@ -64,9 +64,9 @@ const ensureUserDocument = async (user: FirebaseUser): Promise<UserProfile> => {
     await setDoc(userRef, profile);
   }
 
-  // If the user is just an Author, check if they have pending invitations.
-  // This runs on every login, ensuring invitations are always claimed.
-  if (user.email && profile.role === 'Author') {
+  // CLAIMING LOGIC: If the user is just an Author, check if they have pending invitations.
+  // This runs on every login, ensuring invitations are always claimed and roles promoted.
+  if (user.email) {
     const submissionsRef = collection(db, 'submissions');
     const q = query(submissionsRef, where('invitedReviewerEmails', 'array-contains', user.email));
     
@@ -80,10 +80,10 @@ const ensureUserDocument = async (user: FirebaseUser): Promise<UserProfile> => {
                 const submissionData = submissionDoc.data() as Submission;
                 const submissionRef = doc(db, 'submissions', submissionDoc.id);
             
-                // Update submission to link the UID
+                // Update submission to link the UID permanently
                 const updatedReviewers = submissionData.reviewers?.map(r =>
-                    (r.email === user.email && r.status === 'Invited')
-                    ? { ...r, id: user.uid, status: 'Pending' as const }
+                    (r.email === user.email && (r.status === 'Invited' || r.id === null))
+                    ? { ...r, id: user.uid, status: r.status === 'Invited' ? 'Pending' : r.status }
                     : r
                 ) || [];
 
@@ -94,21 +94,20 @@ const ensureUserDocument = async (user: FirebaseUser): Promise<UserProfile> => {
                 });
             });
 
-            // Update user role to Reviewer
-            batch.update(userRef, { role: 'Reviewer' });
+            // Always ensure the user is promoted if they have invitations, even if they were manually promoted before
+            if (profile.role === 'Author') {
+                batch.update(userRef, { role: 'Reviewer' });
+                profile.role = 'Reviewer';
+            }
             
             await batch.commit();
-            console.log(`Claimed ${querySnapshot.size} pending review invitations and promoted ${user.email} to Reviewer.`);
+            console.log(`[Auth] Claimed ${querySnapshot.size} pending invitations for ${user.email}.`);
             
-            // Re-fetch the profile to return the updated version immediately
-            const updatedSnap = await getDoc(userRef);
-            if (updatedSnap.exists()) {
-                return updatedSnap.data() as UserProfile;
-            }
+            // Return the latest local profile
+            return profile;
         }
     } catch (error) {
-        console.error("Error auto-claiming review invitations:", error);
-        // Don't block login if this fails, just return the existing profile.
+        console.error("[Auth] Error auto-claiming invitations:", error);
     }
   }
 
@@ -125,13 +124,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setLoading(true);
       if (user) {
-        // Only fully set user if they are verified
         if (user.emailVerified) {
           setUser(user);
           const profile = await ensureUserDocument(user);
           setUserProfile(profile);
         } else {
-          // Keep firebase user object for potential re-verification, but clear app-level profile
           setUser(user); 
           setUserProfile(null);
         }
@@ -147,11 +144,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const login = async (email: string, pass: string) => {
     const userCredential = await signInWithEmailAndPassword(auth, email, pass);
     if (!userCredential.user.emailVerified) {
-      // Don't fully log in the user in our app state, just return the user object
-      // so the UI can prompt for verification.
       throw new Error("Please check your inbox and verify your email address to log in.");
     }
-    // Auth state listener will handle setting user and profile
     return userCredential.user;
   };
 
@@ -162,8 +156,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if(user) {
         await updateProfile(user, { displayName });
         await sendEmailVerification(user);
-        // The onAuthStateChanged listener will handle creating the user document once verified
-        // We log them out to force them to verify.
         await signOut(auth);
     }
     return userCredential;
@@ -172,7 +164,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const signInWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
     const result = await signInWithPopup(auth, provider);
-    // The onAuthStateChanged listener will handle creating/fetching the user document
     return result;
   }
 
