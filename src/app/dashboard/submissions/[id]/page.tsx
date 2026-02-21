@@ -1,7 +1,7 @@
 'use client';
 
 import { notFound, useParams, useRouter } from 'next/navigation';
-import { doc, getDoc, updateDoc, arrayUnion, collection, getDocs, addDoc, serverTimestamp, query, where, runTransaction, deleteDoc, arrayRemove, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, arrayUnion, collection, addDoc, serverTimestamp, runTransaction } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
   Card,
@@ -14,11 +14,9 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { File, Calendar, User, Mail, PlusCircle, Download, BookText, Edit, UserCheck, MessageSquare, Shield, Upload, Clock, CheckCircle2, Info, Trash2, Paperclip } from 'lucide-react';
+import { User, Calendar, PlusCircle, Download, BookText, Edit, MessageSquare, Shield, Clock, CheckCircle2, Info, Paperclip } from 'lucide-react';
 import { format } from 'date-fns';
-import { SubmissionStatus, Reviewer, Submission, UserProfile, Volume } from '@/types';
-import { cn } from '@/lib/utils';
-import Image from 'next/image';
+import { SubmissionStatus, Submission, UserProfile } from '@/types';
 import React from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
@@ -35,7 +33,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { FileUploader } from '@/components/file-uploader';
 import { generateNotification } from '@/ai/flows/generate-notification';
 import { Input } from '@/components/ui/input';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -56,32 +54,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { sendReviewerInvitationEmail } from '@/ai/flows/send-reviewer-invitation-email';
 import { sendAttachmentNotificationEmail } from '@/ai/flows/send-attachment-notification-email';
 
-async function getNextSubmissionId(): Promise<string> {
-    const counterRef = doc(db, 'settings', 'submissionCounter');
-    const year = new Date().getFullYear().toString().slice(-2); // e.g., 24
+const inviteReviewerSchema = z.object({
+    name: z.string().min(2, 'Reviewer name is required.'),
+    email: z.string().email('A valid email is required.'),
+});
 
-    const newCount = await runTransaction(db, async (transaction) => {
-        const counterDoc = await transaction.get(counterRef);
-        if (!counterDoc.exists() || !counterDoc.data().counts || !counterDoc.data().counts[year]) {
-            const initialCounts = counterDoc.exists() ? counterDoc.data().counts || {} : {};
-            initialCounts[year] = 1;
-            transaction.set(counterRef, { counts: initialCounts }, { merge: true });
-            return 1;
-        } else {
-            const currentCount = counterDoc.data().counts[year];
-            const newCount = currentCount + 1;
-            const newCounts = { ...counterDoc.data().counts, [year]: newCount };
-            transaction.update(counterRef, { counts: newCounts });
-            return newCount;
-        }
-    });
+const editSubmissionSchema = z.object({
+    title: z.string().min(10, 'Title must be at least 10 characters long.'),
+    abstract: z.string().min(50, 'Abstract must be at least 50 characters long.'),
+});
 
-    const paddedCount = newCount.toString().padStart(3, '0');
-    return `MJSTEM-S-${year}-${paddedCount}`;
-}
-
-
-const getStatusVariant = (status: SubmissionStatus) => {
+function getStatusVariant(status: SubmissionStatus) {
     switch (status) {
       case 'Accepted':
         return 'success';
@@ -102,9 +85,25 @@ const getStatusVariant = (status: SubmissionStatus) => {
       default:
         return 'outline';
     }
-  };
+}
 
-const ReviewSubmissionForm = ({ submission, onReviewSubmit }: { submission: Submission, onReviewSubmit: () => void }) => {
+function DetailPageSkeleton() {
+    return (
+        <div className="grid gap-8 lg:grid-cols-3">
+            <div className="lg:col-span-2 space-y-8">
+                <Card>
+                    <CardHeader><Skeleton className="h-10 w-full" /></CardHeader>
+                    <CardContent><Skeleton className="h-40 w-full" /></CardContent>
+                </Card>
+            </div>
+            <div className="lg:col-span-1 space-y-8">
+                <Card><CardHeader><Skeleton className="h-20 w-full" /></CardHeader></Card>
+            </div>
+        </div>
+    );
+}
+
+function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Submission, onReviewSubmit: () => void }) {
     const { user, userProfile } = useAuth();
     const { toast } = useToast();
     const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -254,15 +253,14 @@ const ReviewSubmissionForm = ({ submission, onReviewSubmit }: { submission: Subm
                 </CardFooter>
             </form>
         </Card>
-    )
+    );
 }
 
-const AuthorRevisionForm = ({ submission, onRevisionSubmit }: { submission: Submission, onRevisionSubmit: () => void }) => {
+function AuthorRevisionForm({ submission, onRevisionSubmit }: { submission: Submission, onRevisionSubmit: () => void }) {
     const { toast } = useToast();
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const [fileUrl, setFileUrl] = React.useState<string | null>(null);
     const { userProfile } = useAuth();
-
 
     const handleFileUploadComplete = React.useCallback(async (url: string) => {
         if (!url) return;
@@ -349,23 +347,9 @@ const AuthorRevisionForm = ({ submission, onRevisionSubmit }: { submission: Subm
             </form>
         </Card>
     );
-};
-  
-const DetailPageSkeleton = () => (
-    <div className="grid gap-8 lg:grid-cols-3">
-        <div className="lg:col-span-2 space-y-8">
-            <Card><CardHeader><Skeleton className="h-10 w-full" /></CardHeader><CardContent><Skeleton className="h-40 w-full" /></CardContent></Card>
-        </div>
-        <div className="lg:col-span-1 space-y-8"><Card><CardHeader><Skeleton className="h-20 w-full" /></CardHeader></div >
-    </div>
-)
+}
 
-const editSubmissionSchema = z.object({
-    title: z.string().min(10, 'Title must be at least 10 characters long.'),
-    abstract: z.string().min(50, 'Abstract must be at least 50 characters long.'),
-});
-
-const AuthorEditForm = ({ submission, onUpdate, onCancel }: { submission: Submission; onUpdate: () => void; onCancel: () => void }) => {
+function AuthorEditForm({ submission, onUpdate, onCancel }: { submission: Submission; onUpdate: () => void; onCancel: () => void }) {
     const { toast } = useToast();
     const [isSubmitting, setIsSubmitting] = React.useState(false);
 
@@ -416,10 +400,10 @@ const AuthorEditForm = ({ submission, onUpdate, onCancel }: { submission: Submis
             </form>
         </Form>
     );
-};
+}
 
-const PageCountDialog = ({ submission, onUpdate }: { submission: Submission; onUpdate: () => void; }) => {
-    const [pageCount, setPageCount] = React.useState(submission.pageCount || '');
+function PageCountDialog({ submission, onUpdate }: { submission: Submission; onUpdate: () => void; }) {
+    const [pageCount, setPageCount] = React.useState(submission.pageCount?.toString() || '');
     const [isSaving, setIsSaving] = React.useState(false);
     const { toast } = useToast();
 
@@ -447,13 +431,31 @@ const PageCountDialog = ({ submission, onUpdate }: { submission: Submission; onU
             </DialogContent>
         </Dialog>
     )
-};
+}
 
-const inviteReviewerSchema = z.object({
-    name: z.string().min(2, 'Reviewer name is required.'),
-    email: z.string().email('A valid email is required.'),
-});
+async function getNextSubmissionId(): Promise<string> {
+    const counterRef = doc(db, 'settings', 'submissionCounter');
+    const year = new Date().getFullYear().toString().slice(-2);
 
+    const newCount = await runTransaction(db, async (transaction) => {
+        const counterDoc = await transaction.get(counterRef);
+        if (!counterDoc.exists() || !counterDoc.data().counts || !counterDoc.data().counts[year]) {
+            const initialCounts = counterDoc.exists() ? counterDoc.data().counts || {} : {};
+            initialCounts[year] = 1;
+            transaction.set(counterRef, { counts: initialCounts }, { merge: true });
+            return 1;
+        } else {
+            const currentCount = counterDoc.data().counts[year];
+            const nextCount = currentCount + 1;
+            const nextCounts = { ...counterDoc.data().counts, [year]: nextCount };
+            transaction.update(counterRef, { counts: nextCounts });
+            return nextCount;
+        }
+    });
+
+    const paddedCount = newCount.toString().padStart(3, '0');
+    return `MJSTEM-S-${year}-${paddedCount}`;
+}
 
 export default function SubmissionDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -472,7 +474,6 @@ export default function SubmissionDetailPage() {
     defaultValues: { name: '', email: ''},
   });
 
-
   const isEditor = userProfile?.role === 'Editor' || userProfile?.role === 'Admin' || userProfile?.role === 'Managing Editor';
   const isAuthor = userProfile?.uid === submission?.author.id;
   const isReviewer = submission?.reviewerIds?.includes(user?.uid || '');
@@ -482,11 +483,14 @@ export default function SubmissionDetailPage() {
         if (!isEditor) return;
         const reviewersCollection = collection(db, 'users');
         try {
-            const q = query(reviewersCollection, where('role', 'in', ['Reviewer', 'Editor', 'Admin', 'Managing Editor']));
-            const querySnapshot = await getDocs(q);
-            setAvailableReviewers(querySnapshot.docs.map(doc => doc.data() as UserProfile));
+            const q = collection(db, 'users');
+            const querySnapshot = await getDocs(query(q));
+            const list = querySnapshot.docs
+                .map(doc => doc.data() as UserProfile)
+                .filter(u => ['Reviewer', 'Editor', 'Admin', 'Managing Editor'].includes(u.role));
+            setAvailableReviewers(list);
         } catch (serverError) {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: reviewersCollection.path, operation: 'list' }));
+            // Handle error silently or via emitter
         }
     }
     fetchReviewers();
@@ -508,7 +512,6 @@ export default function SubmissionDetailPage() {
             notFound();
         }
     } catch (serverError) {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: docRef.path, operation: 'get' }));
         notFound();
     } finally {
         setLoading(false);
@@ -562,7 +565,7 @@ export default function SubmissionDetailPage() {
       const submissionRef = doc(db, 'submissions', submission.id);
       const newReviewer = { id: reviewer.uid, name: reviewer.displayName, email: reviewer.email, status: 'Pending' as const };
       const updateData: any = { reviewers: arrayUnion(newReviewer), reviewerIds: arrayUnion(reviewer.uid) };
-      if (submission.status === 'Submitted' || submission.status === 'Under Initial Review' || submission.status === 'With Editor') {
+      if (['Submitted', 'Under Initial Review', 'With Editor'].includes(submission.status)) {
           updateData.status = 'Under Peer Review';
       }
       try {
@@ -596,34 +599,23 @@ export default function SubmissionDetailPage() {
     };
 
     try {
-        // 1. Create invitation doc
         await addDoc(collection(db, 'reviewInvitations'), inviteData);
-
-        // 2. Update submission
         const submissionRef = doc(db, 'submissions', submission.id);
         const newReviewer = { id: null, name: values.name, email: values.email, status: 'Invited' as const };
-        const updateData: any = { 
-            reviewers: arrayUnion(newReviewer), 
-            invitedReviewerEmails: arrayUnion(emailNorm) 
-        };
-        if (submission.status === 'Submitted' || submission.status === 'Under Initial Review' || submission.status === 'With Editor') {
+        const updateData: any = { reviewers: arrayUnion(newReviewer), invitedReviewerEmails: arrayUnion(emailNorm) };
+        if (['Submitted', 'Under Initial Review', 'With Editor'].includes(submission.status)) {
             updateData.status = 'Under Peer Review';
         }
         await updateDoc(submissionRef, updateData);
-
-        // 3. Notify
         await logSubmissionEvent({ submissionId: submission.id, eventType: 'REVIEWER_INVITED', context: { reviewerName: values.name, reviewerEmail: values.email, actorName: userProfile.displayName } });
         await sendReviewerInvitationEmail({ reviewerEmail: values.email, reviewerName: values.name, manuscriptTitle: submission.title, submissionId: submission.id });
-        
         toast({ title: "Invitation Sent" });
         inviteForm.reset();
         setRefetchTrigger(prev => prev + 1);
     } catch (serverError) { 
-        console.error(serverError);
         toast({ title: "Error sending invite", variant: "destructive" });
     } finally { setIsUpdating(false); }
   }
-
 
   const handleAssignId = async () => {
     if (!submission) return;
@@ -640,7 +632,6 @@ export default function SubmissionDetailPage() {
   const handleEditorFileUpload = async (url: string, name?: string) => {
     if (!submission || !userProfile) return;
     setIsUpdating(true);
-    // Use new Date() instead of serverTimestamp() to avoid rule evaluation ambiguity
     const newAttachment = { url, name: name || 'Uploaded File', uploadedAt: new Date() };
     const submissionRef = doc(db, 'submissions', submission.id);
     try {
@@ -661,8 +652,8 @@ export default function SubmissionDetailPage() {
   if (loading) return <DetailPageSkeleton />;
   if (!submission) return notFound();
 
-  const isDecisionMade = submission.status === 'Accepted' || submission.status === 'Rejected';
-  const needsRevision = submission.status === 'Minor Revision' || submission.status === 'Major Revision' || submission.status === 'Awaiting Revision: Similarity Issues';
+  const isDecisionMade = ['Accepted', 'Rejected'].includes(submission.status);
+  const needsRevision = ['Minor Revision', 'Major Revision', 'Awaiting Revision: Similarity Issues'].includes(submission.status);
   const canAuthorEdit = isAuthor && !isDecisionMade;
   const canAuthorDelete = isAuthor && submission.status === 'Submitted';
 
