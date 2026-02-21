@@ -76,37 +76,40 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (auth.currentUser) {
        const profile = await ensureUserDocument(auth.currentUser);
        setUserProfile(profile);
+       return profile;
     }
+    return null;
   }
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setLoading(true);
-      if (user) {
-        if (user.emailVerified) {
-          const profile = await ensureUserDocument(user);
-          setUser(user);
+      if (firebaseUser) {
+        if (firebaseUser.emailVerified) {
+          const profile = await ensureUserDocument(firebaseUser);
+          setUser(firebaseUser);
           setUserProfile(profile);
           
-          // Attempt to claim pending invitations every time we have a valid session
-          if (user.email) {
-            console.log("[Auth] Attempting to claim invitations for:", user.email);
-            claimReviewerInvitations({ uid: user.uid, email: user.email })
-              .then((result) => {
+          // Background Claim: Run every time a session is established
+          if (firebaseUser.email) {
+            console.log("[Auth] Attempting to claim invitations for:", firebaseUser.email);
+            claimReviewerInvitations({ uid: firebaseUser.uid, email: firebaseUser.email })
+              .then(async (result) => {
                 if (result.success && result.count > 0) {
-                  console.log(`[Auth] Claimed ${result.count} assignment(s). Refreshing profile...`);
+                  console.log(`[Auth] Claimed ${result.count} assignment(s). Promoting UI...`);
+                  // Immediately refresh local state so the dashboard updates
+                  const updatedProfile = await refetchUserProfile();
+                  
                   toast({
-                    title: "Reviewer Invitations Claimed",
+                    title: "Account Upgraded",
                     description: `You have been assigned to ${result.count} new manuscript(s) and your account has been promoted to Reviewer.`,
                   });
-                  // Refetch profile data to reflect new role
-                  refetchUserProfile();
                 }
               })
               .catch(err => console.error("[Auth] Background claim failed:", err));
           }
         } else {
-          setUser(user); 
+          setUser(firebaseUser); 
           setUserProfile(null);
         }
       } else {
