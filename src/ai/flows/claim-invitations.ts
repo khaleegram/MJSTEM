@@ -21,6 +21,8 @@ interface ClaimInvitationsInput {
  * 4. Promotes user role to 'Reviewer' if they are currently an 'Author'.
  */
 export async function claimReviewerInvitations(input: ClaimInvitationsInput): Promise<{ success: boolean; message: string; count: number }> {
+  console.log("[Claim Invitations] HIT", input.email);
+
   if (!adminDb) {
     console.error("[Claim Invitations] Admin DB not initialized.");
     return { success: false, message: 'Server configuration error.', count: 0 };
@@ -30,6 +32,7 @@ export async function claimReviewerInvitations(input: ClaimInvitationsInput): Pr
   const emailNorm = (email || '').toLowerCase().trim();
 
   if (!emailNorm) {
+      console.warn("[Claim Invitations] No email provided for UID:", uid);
       return { success: false, message: 'Email is required.', count: 0 };
   }
 
@@ -41,8 +44,11 @@ export async function claimReviewerInvitations(input: ClaimInvitationsInput): Pr
       .get();
 
     if (invitesSnapshot.empty) {
+      console.log(`[Claim Invitations] No pending invitations found for: ${emailNorm}`);
       return { success: true, message: 'No pending invitations.', count: 0 };
     }
+
+    console.log(`[Claim Invitations] Found ${invitesSnapshot.size} pending invitations for: ${emailNorm}`);
 
     let processedCount = 0;
 
@@ -105,10 +111,12 @@ export async function claimReviewerInvitations(input: ClaimInvitationsInput): Pr
 
       // 3. Promote role if they are an Author (Editorial/Admin roles are never demoted)
       if (isEligibleForPromotion) {
+        console.log(`[Claim Invitations] Promoting user ${uid} to Reviewer role.`);
         transaction.set(userRef, { role: 'Reviewer' }, { merge: true });
       }
     });
 
+    console.log(`[Claim Invitations] Success: Processed ${processedCount} documents.`);
     return { 
         success: true, 
         message: `Successfully claimed ${processedCount} assignment(s).`, 
@@ -116,7 +124,7 @@ export async function claimReviewerInvitations(input: ClaimInvitationsInput): Pr
     };
 
   } catch (error: any) {
-    console.error("[Claim Invitations] Fatal Error:", error);
-    return { success: false, message: error.message || 'An error occurred.', count: 0 };
+    console.error("[Claim Invitations] FATAL ERROR:", error);
+    return { success: false, message: error.message || 'An error occurred during the claim process.', count: 0 };
   }
 }

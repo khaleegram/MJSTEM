@@ -92,11 +92,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           
           // Professional Background Claim: Run on every successful login/boot
           if (firebaseUser.email) {
-            console.log(`[Auth] Attempting to claim invitations for: ${firebaseUser.email}`);
+            console.log(`[Auth] Calling claimReviewerInvitations for: ${firebaseUser.email}`);
             claimReviewerInvitations({ uid: firebaseUser.uid, email: firebaseUser.email })
               .then(async (result) => {
+                console.log("[Auth] Claim result:", result);
                 if (result.success && result.count > 0) {
-                  console.log(`[Auth] Claim success: ${result.count} invites.`);
                   // Refresh the profile locally so UI reflects "Reviewer" role immediately
                   await refetchUserProfile();
                   toast({
@@ -105,7 +105,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                   });
                 }
               })
-              .catch(err => console.error("[Auth] Background claim failed:", err));
+              .catch(err => {
+                console.error("[Auth] Background claim failed:", err);
+                toast({
+                  title: "Background Update Failed",
+                  description: "There was an error updating your reviewer assignments. Please try signing in again later.",
+                  variant: "destructive"
+                });
+              });
           }
         } else {
           // If verification is needed, show basic user but null profile to block dashboard access
