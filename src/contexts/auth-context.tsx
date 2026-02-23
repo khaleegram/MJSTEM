@@ -82,7 +82,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      console.log("[Auth] State changed. User:", firebaseUser?.email || "None");
       setLoading(true);
+      
       if (firebaseUser) {
         // Handle verified users (including Google)
         if (firebaseUser.emailVerified) {
@@ -90,32 +92,48 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           setUser(firebaseUser);
           setUserProfile(profile);
           
-          // Professional Background Claim: Run on every successful login/boot
+          // Professional Background Claim: Run on every successful boot
           if (firebaseUser.email) {
-            console.log(`[Auth] Calling claimReviewerInvitations for: ${firebaseUser.email}`);
+            console.log(`[Auth] Triggering claimReviewerInvitations for: ${firebaseUser.email}`);
+            
             claimReviewerInvitations({ uid: firebaseUser.uid, email: firebaseUser.email })
               .then(async (result) => {
-                console.log("[Auth] Claim result:", result);
-                if (result.success && result.count > 0) {
-                  // Refresh the profile locally so UI reflects "Reviewer" role immediately
-                  await refetchUserProfile();
-                  toast({
-                    title: "Account Upgraded",
-                    description: `You have been assigned to ${result.count} new manuscript(s) and your account has been promoted to Reviewer.`,
-                  });
+                console.log("[Auth] claimReviewerInvitations response:", result);
+                
+                // ALWAYS show a toast in debug mode to prove the action ran
+                if (result.success) {
+                    if (result.count > 0) {
+                        await refetchUserProfile();
+                        toast({
+                            title: "Account Upgraded",
+                            description: `Success! Linked to ${result.count} new assignment(s). Your role is now ${result.count > 0 ? 'Reviewer' : profile.role}.`,
+                        });
+                    } else {
+                        // Silent in production, but visible in DEBUG
+                        toast({
+                            title: "Auth Debug",
+                            description: "Claim action ran successfully, but no matching pending invitations were found for this email.",
+                        });
+                    }
+                } else {
+                    toast({
+                        title: "Claim Error",
+                        description: result.message,
+                        variant: "destructive"
+                    });
                 }
               })
               .catch(err => {
-                console.error("[Auth] Background claim failed:", err);
+                console.error("[Auth] Background claim exception:", err);
                 toast({
-                  title: "Background Update Failed",
-                  description: "There was an error updating your reviewer assignments. Please try signing in again later.",
+                  title: "Fatal Claim Failure",
+                  description: "The claim process encountered an exception. Check server logs.",
                   variant: "destructive"
                 });
               });
           }
         } else {
-          // If verification is needed, show basic user but null profile to block dashboard access
+          console.log("[Auth] Email not verified. Profile blocked.");
           setUser(firebaseUser); 
           setUserProfile(null);
         }
