@@ -171,7 +171,7 @@ service cloud.firestore {
       
       allow create: if isEditorialMember();
       
-      // Allow editors to revoke invitations (status change)
+      // allow editorial members to update status (revoke/claim)
       allow update: if isEditorialMember();
       
       allow delete: if isAdmin() || isManagingEditor();

@@ -941,7 +941,7 @@ export default function SubmissionDetailPage() {
                         ))}
                     </TabsContent>
                     <TabsContent value="invite" className="pt-4">
-                        <Form {...inviteForm}>
+                        <Form {...form}>
                             <form onSubmit={inviteForm.handleSubmit(handleInviteReviewer)} className="space-y-4">
                                 <FormField control={inviteForm.control} name="name" render={({ field }) => (
                                     <FormItem><FormLabel>Reviewer Name</FormLabel><FormControl><Input placeholder="Dr. Jane Doe" {...field} /></FormControl><FormMessage /></FormItem>

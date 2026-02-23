@@ -1,4 +1,3 @@
-
 import { getApps, initializeApp, cert, App } from "firebase-admin/app";
 import * as admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -13,16 +12,19 @@ if (!getApps().length) {
         privateKey: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
     };
 
-    if (serviceAccount.privateKey && serviceAccount.clientEmail) {
+    if (serviceAccount.privateKey && serviceAccount.clientEmail && serviceAccount.projectId) {
         adminApp = initializeApp({
             credential: cert(serviceAccount),
+            projectId: serviceAccount.projectId,
         });
-        console.log("Firebase Admin SDK initialized successfully.");
+        console.log("[Firebase Admin] Initialized with Service Account.");
     } else {
-        console.warn("Firebase Admin SDK credentials not found. Privileged server actions may be disabled.");
+        // Fallback to Application Default Credentials
+        adminApp = initializeApp();
+        console.warn("[Firebase Admin] Initialized with Default Credentials (Service Account env vars missing).");
     }
   } catch (error: any) {
-    console.error("Firebase Admin SDK initialization error:", error.message);
+    console.error("[Firebase Admin] SDK initialization error:", error.message);
   }
 } else {
     adminApp = getApps()[0];
