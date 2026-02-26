@@ -42,7 +42,7 @@ service cloud.firestore {
     }
 
     function isReviewer() {
-      return isRole('Reviewer');
+      return isRole('Reviewer') || isEditorialMember();
     }
 
     function isAuthor() {
@@ -94,10 +94,10 @@ service cloud.firestore {
       allow update: if
         isEditorialMember()
         || (isSignedIn() && request.auth.uid == resource.data.author.id && (
-            // Robust Revision Upload Rule
+            // Robust Revision Upload Rule - Allows all necessary fields for a revision
             (resource.data.status in ['Minor Revision', 'Major Revision', 'Awaiting Revision: Similarity Issues'] &&
              request.resource.data.diff(resource.data).changedKeys().hasAny([
-               'manuscriptUrl', 'status', 'revision', 'originalManuscriptUrl', 'supplementaryFileUrl'
+               'manuscriptUrl', 'status', 'revision', 'originalManuscriptUrl', 'supplementaryFileUrl', 'pageCount'
              ]))
             // Standard title/abstract updates
             || (resource.data.status != 'Accepted' && resource.data.status != 'Rejected' &&
@@ -126,13 +126,21 @@ service cloud.firestore {
           (isAuthor() &&
             get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid) ||
           (isReviewer() && resource.data.reviewerId == request.auth.uid);
+        
+        // Reviewer assigned to this specific submission
         allow create: if isReviewer()
           && request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds;
+        
         allow update, delete: if false;
       }
 
       match /history/{historyId} {
-        allow read, list: if isSignedIn();
+        allow read, list: if isSignedIn() && (
+          resource.data.userId == request.auth.uid || isEditorialMember() || 
+          (get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid) ||
+          (get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds != null && 
+           request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds)
+        );
         allow create: if isServer() || isEditorialMember() || isSignedIn();
         allow update, delete: if false;
       }
