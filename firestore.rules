@@ -9,10 +9,6 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isServer() {
-      return request.auth == null;
-    }
-
     function getUserData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
@@ -23,29 +19,24 @@ service cloud.firestore {
         : null;
     }
 
-    function isRole(role) {
-      let currentRole = userRole();
-      return currentRole != null && currentRole == role;
-    }
-
     function isAdmin() {
-      return isRole('Admin');
+      let role = userRole();
+      return role == 'Admin';
     }
 
     function isManagingEditor() {
-      return isRole('Managing Editor');
+      let role = userRole();
+      return role == 'Managing Editor';
     }
 
     function isEditor() {
-      return isRole('Editor');
+      let role = userRole();
+      return role == 'Editor';
     }
 
     function isEditorialMember() {
-      return isEditor() || isManagingEditor() || isAdmin();
-    }
-
-    function isReviewer() {
-      return isRole('Reviewer') || isEditorialMember();
+      let role = userRole();
+      return role == 'Editor' || role == 'Managing Editor' || role == 'Admin';
     }
 
     // ===========================
@@ -53,71 +44,46 @@ service cloud.firestore {
     // ===========================
     match /users/{userId} {
       allow list: if isEditorialMember();
-      
-      // Allow users to read their own doc (UID) or their placeholder (Email)
       allow get: if request.auth.uid == userId 
                  || (isSignedIn() && request.auth.token.email.lower() == userId.lower())
                  || isEditorialMember();
-      
-      // Allow users to create their own doc, or editors to create placeholders
-      allow create: if request.auth.uid == userId 
-                    || (isSignedIn() && request.auth.token.email.lower() == userId.lower())
-                    || isEditorialMember();
-
-      // Loosened update: Allow users to update their profile or editors to manage roles
+      allow create: if isSignedIn();
       allow update: if request.auth.uid == userId || isEditorialMember();
-
-      // Allow users to delete placeholders after migration
-      allow delete: if isAdmin() || isManagingEditor() 
-                    || (request.auth.uid == userId)
-                    || (isSignedIn() && request.auth.token.email.lower() == userId.lower());
+      allow delete: if isAdmin() || isManagingEditor() || request.auth.uid == userId;
     }
 
     // ===========================
     // SUBMISSIONS COLLECTION
     // ===========================
     match /submissions/{submissionId} {
+      
+      // Ownership check: Match by UID or Email
+      function isAuthor() {
+        return isSignedIn() && (
+          request.auth.uid == resource.data.author.id
+          || (request.auth.token.email != null && resource.data.author.email != null && request.auth.token.email.lower() == resource.data.author.email.lower())
+        );
+      }
 
-      allow get: if resource.data.status == 'Accepted' || (isSignedIn() && (
-        resource.data.author.id == request.auth.uid
-        || (resource.data.author.email != null && request.auth.token.email != null && request.auth.token.email.lower() == resource.data.author.email.lower())
-        || (resource.data.reviewerIds != null && request.auth.uid in resource.data.reviewerIds)
-        || isEditorialMember()
-        || (resource.data.invitedReviewerEmails != null && request.auth.token.email != null && request.auth.token.email.lower() in resource.data.invitedReviewerEmails)
-      ));
+      function isAssignedReviewer() {
+        return isSignedIn() && (
+          (resource.data.reviewerIds != null && request.auth.uid in resource.data.reviewerIds)
+          || (resource.data.invitedReviewerEmails != null && request.auth.token.email != null && request.auth.token.email.lower() in resource.data.invitedReviewerEmails)
+        );
+      }
 
+      allow get: if resource.data.status == 'Accepted' || isAuthor() || isAssignedReviewer() || isEditorialMember();
       allow list: if true;
       allow create: if isSignedIn();
 
-      // BROAD UPDATES: Allow if user is an Editor, the Author, or an assigned/invited Reviewer
-      allow update: if
-        isEditorialMember()
-        || (isSignedIn() && (
-            // Match Author by UID or Email
-            request.auth.uid == resource.data.author.id 
-            || (resource.data.author.email != null && request.auth.token.email != null && request.auth.token.email.lower() == resource.data.author.email.lower())
-            
-            // Match Reviewer by UID or Email (for accepting or submitting reports)
-            || (resource.data.reviewerIds != null && request.auth.uid in resource.data.reviewerIds)
-            || (resource.data.invitedReviewerEmails != null && request.auth.token.email != null && request.auth.token.email.lower() in resource.data.invitedReviewerEmails)
-        ));
+      // Loosened Update Rule: Allow if Editorial, Author, or Assigned Reviewer
+      allow update: if isEditorialMember() || isAuthor() || isAssignedReviewer();
 
-      allow delete: if
-        (request.auth.uid == resource.data.author.id && resource.data.status == 'Submitted')
-        || isEditorialMember();
+      allow delete: if isEditorialMember() || (isAuthor() && resource.data.status == 'Submitted');
 
       match /reviews/{reviewId} {
-        allow list: if isEditorialMember() || (isSignedIn() &&
-          (get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid || 
-           get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.email.lower() == request.auth.token.email.lower()));
-        
-        allow read: if
-          isEditorialMember() ||
-          (isSignedIn() &&
-            (get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid || 
-             get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.email.lower() == request.auth.token.email.lower())) ||
-          (isReviewer() && (resource.data.reviewerId == request.auth.uid || request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds));
-        
+        allow list: if isEditorialMember() || isAuthor();
+        allow read: if isEditorialMember() || isAuthor() || (isSignedIn() && request.auth.uid == resource.data.reviewerId);
         allow create: if isSignedIn();
         allow update, delete: if isEditorialMember();
       }
@@ -133,13 +99,13 @@ service cloud.firestore {
       allow list: if isEditorialMember();
       allow get: if isEditorialMember() || (isSignedIn() && request.auth.token.email != null && request.auth.token.email.lower() == resource.data.emailNorm);
       allow create: if isEditorialMember();
-      allow update: if isEditorialMember();
+      allow update: if isEditorialMember() || (isSignedIn() && request.auth.token.email != null && request.auth.token.email.lower() == resource.data.emailNorm);
       allow delete: if isAdmin() || isManagingEditor();
     }
 
     match /notifications/{notificationId} {
       allow list, get: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow create: if isServer() || isEditorialMember();
+      allow create: if true; // Allow system-generated notifications
       allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow delete: if false;
     }
@@ -166,7 +132,7 @@ service cloud.firestore {
 
     match /settings/{settingId} {
       allow read: if true;
-      allow write: if (isManagingEditor() || isAdmin()) && settingId != 'submissionCounter';
+      allow write: if isManagingEditor() || isAdmin();
     }
   }
 }
