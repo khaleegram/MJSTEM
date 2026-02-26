@@ -624,7 +624,6 @@ export default function SubmissionDetailPage() {
         const batch = writeBatch(db);
 
         // 1. Create Placeholder User / Promote if existing
-        // Search for user by email
         const usersRef = collection(db, 'users');
         const q = query(usersRef, where('email', '==', emailNorm));
         const userSnap = await getDocs(q);
@@ -636,7 +635,7 @@ export default function SubmissionDetailPage() {
                 batch.update(existingUserDoc.ref, { role: 'Reviewer' });
             }
         } else {
-            // Create placeholder
+            // Create placeholder keyed by email
             const placeholderRef = doc(usersRef, emailNorm);
             batch.set(placeholderRef, {
                 email: emailNorm,
@@ -951,7 +950,7 @@ export default function SubmissionDetailPage() {
                         ))}
                     </TabsContent>
                     <TabsContent value="invite" className="pt-4">
-                        <Form {...form}>
+                        <Form {...inviteForm}>
                             <form onSubmit={inviteForm.handleSubmit(handleInviteReviewer)} className="space-y-4">
                                 <FormField control={inviteForm.control} name="name" render={({ field }) => (
                                     <FormItem><FormLabel>Reviewer Name</FormLabel><FormControl><Input placeholder="Dr. Jane Doe" {...field} /></FormControl><FormMessage /></FormItem>

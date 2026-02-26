@@ -60,8 +60,8 @@ service cloud.firestore {
       // Users can read their own profile. Editorial members can read any profile.
       allow get: if request.auth.uid == userId || isEditorialMember();
 
-      // A user can create their own user document.
-      allow create: if request.auth.uid == userId;
+      // A user can create their own user document, or editorial members can create placeholders.
+      allow create: if request.auth.uid == userId || isEditorialMember();
 
       // A user can update their own non-critical info. Admins/editors can change roles.
       allow update: if
@@ -97,7 +97,7 @@ service cloud.firestore {
         isEditorialMember()
 
         // Authors can update their submission under specific conditions.
-        || (isAuthor() && request.auth.uid == resource.data.author.id && (
+        || (isSignedIn() && request.auth.uid == resource.data.author.id && (
             // Allow revision uploads when requested.
             (resource.data.status in ['Minor Revision', 'Major Revision', 'Awaiting Revision: Similarity Issues'] &&
              request.resource.data.diff(resource.data).changedKeys().hasOnly([
