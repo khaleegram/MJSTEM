@@ -18,7 +18,9 @@ service cloud.firestore {
     }
 
     function userRole() {
-      return isSignedIn() ? getUserData().role : null;
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) 
+        ? getUserData().role 
+        : null;
     }
 
     function isRole(role) {
@@ -96,7 +98,7 @@ service cloud.firestore {
         || (isSignedIn() && request.auth.uid == resource.data.author.id && (
             // Robust Revision Upload Rule - Allows all necessary fields for a revision
             (resource.data.status in ['Minor Revision', 'Major Revision', 'Awaiting Revision: Similarity Issues'] &&
-             request.resource.data.diff(resource.data).changedKeys().hasAny([
+             request.resource.data.diff(resource.data).changedKeys().hasOnly([
                'manuscriptUrl', 'status', 'revision', 'originalManuscriptUrl', 'supplementaryFileUrl', 'pageCount'
              ]))
             // Standard title/abstract updates
