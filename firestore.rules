@@ -80,23 +80,26 @@ service cloud.firestore {
 
       allow get: if resource.data.status == 'Accepted' || (isSignedIn() && (
         resource.data.author.id == request.auth.uid
-        || (resource.data.author.email != null && request.auth.token.email.lower() == resource.data.author.email.lower())
+        || (resource.data.author.email != null && request.auth.token.email != null && request.auth.token.email.lower() == resource.data.author.email.lower())
         || (resource.data.reviewerIds != null && request.auth.uid in resource.data.reviewerIds)
         || isEditorialMember()
-        || (resource.data.invitedReviewerEmails != null && request.auth.token.email.lower() in resource.data.invitedReviewerEmails)
+        || (resource.data.invitedReviewerEmails != null && request.auth.token.email != null && request.auth.token.email.lower() in resource.data.invitedReviewerEmails)
       ));
 
       allow list: if true;
       allow create: if isSignedIn();
 
-      // UN-TIGHTENED RULE: Allow update if the user is associated with the submission
+      // BROAD UPDATES: Allow if user is an Editor, the Author, or an assigned/invited Reviewer
       allow update: if
         isEditorialMember()
         || (isSignedIn() && (
+            // Match Author by UID or Email
             request.auth.uid == resource.data.author.id 
-            || (resource.data.author.email != null && request.auth.token.email.lower() == resource.data.author.email.lower())
+            || (resource.data.author.email != null && request.auth.token.email != null && request.auth.token.email.lower() == resource.data.author.email.lower())
+            
+            // Match Reviewer by UID or Email (for accepting or submitting reports)
             || (resource.data.reviewerIds != null && request.auth.uid in resource.data.reviewerIds)
-            || (resource.data.invitedReviewerEmails != null && request.auth.token.email.lower() in resource.data.invitedReviewerEmails)
+            || (resource.data.invitedReviewerEmails != null && request.auth.token.email != null && request.auth.token.email.lower() in resource.data.invitedReviewerEmails)
         ));
 
       allow delete: if
@@ -128,7 +131,7 @@ service cloud.firestore {
 
     match /reviewInvitations/{inviteId} {
       allow list: if isEditorialMember();
-      allow get: if isEditorialMember() || (isSignedIn() && request.auth.token.email.lower() == resource.data.emailNorm);
+      allow get: if isEditorialMember() || (isSignedIn() && request.auth.token.email != null && request.auth.token.email.lower() == resource.data.emailNorm);
       allow create: if isEditorialMember();
       allow update: if isEditorialMember();
       allow delete: if isAdmin() || isManagingEditor();
