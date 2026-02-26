@@ -97,14 +97,11 @@ service cloud.firestore {
       allow update: if
         isEditorialMember()
         || (isSignedIn() && request.auth.uid == resource.data.author.id && (
-            // Robust Revision Upload Rule - Allows all necessary fields for a revision from any review/revision state
-            (resource.data.status in ['Submitted', 'With Editor', 'Under Initial Review', 'Under Peer Review', 'Under Review-R1', 'Under Review-R2', 'Minor Revision', 'Major Revision', 'Awaiting Revision: Similarity Issues'] &&
+            // Author Revision Update - Liberal status check to prevent R1/R2 blockages
+            (resource.data.status != 'Accepted' && resource.data.status != 'Rejected' &&
              request.resource.data.diff(resource.data).changedKeys().hasOnly([
-               'manuscriptUrl', 'status', 'revision', 'originalManuscriptUrl', 'supplementaryFileUrl', 'pageCount'
+               'manuscriptUrl', 'status', 'revision', 'originalManuscriptUrl', 'supplementaryFileUrl', 'pageCount', 'title', 'abstract'
              ]))
-            // Standard title/abstract updates
-            || (resource.data.status != 'Accepted' && resource.data.status != 'Rejected' &&
-                request.resource.data.diff(resource.data).changedKeys().hasOnly(['title', 'abstract']))
         ))
         // Reviewer submitting a report
         || (isReviewer()
