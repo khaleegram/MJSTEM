@@ -58,10 +58,14 @@ service cloud.firestore {
       allow list: if isEditorialMember();
 
       // Users can read their own profile. Editorial members can read any profile.
-      allow get: if request.auth.uid == userId || isEditorialMember();
+      allow get: if request.auth.uid == userId 
+                 || (isSignedIn() && request.auth.token.email.lower() == userId.lower())
+                 || isEditorialMember();
 
       // A user can create their own user document, or editorial members can create placeholders.
-      allow create: if request.auth.uid == userId || isEditorialMember();
+      allow create: if request.auth.uid == userId 
+                    || (isSignedIn() && request.auth.token.email.lower() == userId.lower())
+                    || isEditorialMember();
 
       // A user can update their own non-critical info. Admins/editors can change roles.
       allow update: if
@@ -69,7 +73,9 @@ service cloud.firestore {
           .changedKeys().hasOnly(['displayName', 'photoURL', 'specialization', 'fcmTokens']))
         || isEditorialMember();
 
-      allow delete: if isAdmin() || isManagingEditor();
+      allow delete: if isAdmin() || isManagingEditor()
+                    || (request.auth.uid == userId)
+                    || (isSignedIn() && request.auth.token.email.lower() == userId.lower());
     }
 
     // ===========================
@@ -100,7 +106,7 @@ service cloud.firestore {
         || (isSignedIn() && request.auth.uid == resource.data.author.id && (
             // Allow revision uploads when requested.
             (resource.data.status in ['Minor Revision', 'Major Revision', 'Awaiting Revision: Similarity Issues'] &&
-             request.resource.data.diff(resource.data).changedKeys().hasOnly([
+             request.resource.data.diff(resource.data).changedKeys().hasAny([
                'manuscriptUrl',
                'status',
                'revision',
@@ -113,11 +119,17 @@ service cloud.firestore {
                 request.resource.data.diff(resource.data).changedKeys().hasOnly(['title', 'abstract']))
         ))
 
-        // Reviewers can update the 'reviewers' array (to mark their review as submitted).
+        // Case 1: Reviewer submitting a report (already linked)
         || (isReviewer()
             && resource.data.reviewerIds != null
             && request.auth.uid in resource.data.reviewerIds
-            && request.resource.data.diff(resource.data).changedKeys().hasOnly(['reviewers']));
+            && request.resource.data.diff(resource.data).changedKeys().hasOnly(['reviewers']))
+            
+        // Case 2: Invited user accepting an invitation (linking UID)
+        || (isSignedIn()
+            && resource.data.invitedReviewerEmails != null
+            && request.auth.token.email.lower() in resource.data.invitedReviewerEmails
+            && request.resource.data.diff(resource.data).changedKeys().hasAny(['reviewers', 'reviewerIds', 'invitedReviewerEmails']));
 
       // Authors can delete their submission only if it's new. Editorial members can always delete.
       allow delete: if
@@ -155,7 +167,7 @@ service cloud.firestore {
         );
 
         // Only the backend (or editorial members) can create history events.
-        allow create: if isServer() || isEditorialMember();
+        allow create: if isServer() || isEditorialMember() || isSignedIn();
         allow update, delete: if false; // History is immutable.
       }
     }

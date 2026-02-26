@@ -94,7 +94,7 @@ service cloud.firestore {
       allow update: if
         isEditorialMember()
         || (isSignedIn() && request.auth.uid == resource.data.author.id && (
-            // Robust Revision Upload Rule: Allow updating manuscript, status, and related metadata
+            // Robust Revision Upload Rule
             (resource.data.status in ['Minor Revision', 'Major Revision', 'Awaiting Revision: Similarity Issues'] &&
              request.resource.data.diff(resource.data).changedKeys().hasAny([
                'manuscriptUrl', 'status', 'revision', 'originalManuscriptUrl', 'supplementaryFileUrl'
@@ -103,9 +103,16 @@ service cloud.firestore {
             || (resource.data.status != 'Accepted' && resource.data.status != 'Rejected' &&
                 request.resource.data.diff(resource.data).changedKeys().hasOnly(['title', 'abstract']))
         ))
+        // Reviewer submitting a report
         || (isReviewer()
             && resource.data.reviewerIds != null
-            && request.auth.uid in resource.data.reviewerIds);
+            && request.auth.uid in resource.data.reviewerIds
+            && request.resource.data.diff(resource.data).changedKeys().hasOnly(['reviewers']))
+        // Invited user accepting an invitation (linking UID)
+        || (isSignedIn()
+            && resource.data.invitedReviewerEmails != null
+            && request.auth.token.email.lower() in resource.data.invitedReviewerEmails
+            && request.resource.data.diff(resource.data).changedKeys().hasAny(['reviewers', 'reviewerIds', 'invitedReviewerEmails']));
 
       allow delete: if
         (isAuthor() && request.auth.uid == resource.data.author.id && resource.data.status == 'Submitted')
