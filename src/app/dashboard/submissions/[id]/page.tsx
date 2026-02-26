@@ -113,9 +113,12 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
     const [attachmentUrl, setAttachmentUrl] = React.useState('');
     const [attachmentName, setAttachmentName] = React.useState('');
 
-    const myReviewAssignment = submission.reviewers?.find(r => r.id === user?.uid);
+    const userEmail = user?.email?.toLowerCase().trim();
+    const myReviewAssignment = submission.reviewers?.find(r => 
+        r.id === user?.uid || (userEmail && r.email?.toLowerCase().trim() === userEmail)
+    );
 
-    if (!myReviewAssignment || myReviewAssignment.status === 'Review Submitted') {
+    if (!myReviewAssignment || myReviewAssignment.status === 'Review Submitted' || myReviewAssignment.status === 'Invited') {
         return null;
     }
 
@@ -143,9 +146,10 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
 
         addDoc(reviewRef, reviewData)
             .then(async () => {
-                const updatedReviewers = submission.reviewers?.map(r => 
-                    r.id === user?.uid ? { ...r, status: 'Review Submitted' as const } : r
-                );
+                const updatedReviewers = submission.reviewers?.map(r => {
+                    const isMe = r.id === user?.uid || (userEmail && r.email?.toLowerCase().trim() === userEmail);
+                    return isMe ? { ...r, id: user?.uid, status: 'Review Submitted' as const } : r;
+                });
                 await updateDoc(submissionRef, { reviewers: updatedReviewers });
 
                 await logSubmissionEvent({
@@ -253,6 +257,67 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
                     </Button>
                 </CardFooter>
             </form>
+        </Card>
+    );
+}
+
+function AcceptInvitationCard({ submission, onAccept }: { submission: Submission, onAccept: () => void }) {
+    const { user, userProfile } = useAuth();
+    const { toast } = useToast();
+    const [isAccepting, setIsAccepting] = React.useState(false);
+
+    const handleAccept = async () => {
+        if (!user || !userProfile) return;
+        setIsAccepting(true);
+        const emailNorm = user.email?.toLowerCase().trim();
+        const submissionRef = doc(db, 'submissions', submission.id);
+
+        try {
+            await runTransaction(db, async (transaction) => {
+                const subSnap = await transaction.get(submissionRef);
+                if (!subSnap.exists()) throw new Error("Submission not found.");
+
+                const data = subSnap.data() as Submission;
+                const updatedReviewers = data.reviewers?.map(r => {
+                    if (r.email?.toLowerCase().trim() === emailNorm) {
+                        return { ...r, id: user.uid, status: 'Pending' as const };
+                    }
+                    return r;
+                }) || [];
+
+                transaction.update(submissionRef, {
+                    reviewers: updatedReviewers,
+                    reviewerIds: arrayUnion(user.uid),
+                    invitedReviewerEmails: data.invitedReviewerEmails?.filter(e => e.toLowerCase().trim() !== emailNorm) || []
+                });
+            });
+
+            await logSubmissionEvent({
+                submissionId: submission.id,
+                eventType: 'STATUS_CHANGED',
+                context: { actorName: userProfile.displayName, status: 'Review Invitation Accepted' }
+            });
+
+            toast({ title: "Invitation Accepted", description: "You can now access the full manuscript and submit your review." });
+            onAccept();
+        } catch (error: any) {
+            toast({ title: "Failed to Accept", description: error.message, variant: "destructive" });
+        } finally {
+            setIsAccepting(false);
+        }
+    }
+
+    return (
+        <Card className="border-primary bg-primary/5">
+            <CardHeader>
+                <CardTitle className="font-headline">Review Invitation</CardTitle>
+                <CardDescription>You have been invited to review this manuscript. Please accept the invitation to proceed.</CardDescription>
+            </CardHeader>
+            <CardFooter>
+                <Button onClick={handleAccept} disabled={isAccepting} className="w-full">
+                    {isAccepting ? 'Accepting...' : 'Accept Review Assignment'}
+                </Button>
+            </CardFooter>
         </Card>
     );
 }
@@ -489,7 +554,12 @@ export default function SubmissionDetailPage() {
 
   const isEditor = userProfile?.role === 'Editor' || userProfile?.role === 'Admin' || userProfile?.role === 'Managing Editor';
   const isAuthor = userProfile?.uid === submission?.author.id;
-  const isReviewer = submission?.reviewerIds?.includes(user?.uid || '');
+  
+  const userEmail = user?.email?.toLowerCase().trim();
+  const isReviewer = submission?.reviewerIds?.includes(user?.uid || '') || 
+                     (userEmail && submission?.invitedReviewerEmails?.includes(userEmail));
+
+  const needsToAcceptInvite = isReviewer && !submission?.reviewerIds?.includes(user?.uid || '');
 
   React.useEffect(() => {
     const fetchReviewers = () => {
@@ -623,8 +693,6 @@ export default function SubmissionDetailPage() {
     try {
         const batch = writeBatch(db);
 
-        // 1. Create Placeholder User document keyed by email
-        // This is our new professional architecture: the placeholder is the authoritative record.
         const placeholderRef = doc(db, 'users', emailNorm);
         const placeholderSnap = await getDoc(placeholderRef);
 
@@ -637,13 +705,11 @@ export default function SubmissionDetailPage() {
                 createdAt: serverTimestamp(),
             });
         } else {
-            // If placeholder exists but role is Author (unlikely but safe), promote it
             if (placeholderSnap.data().role === 'Author') {
                 batch.update(placeholderRef, { role: 'Reviewer' });
             }
         }
 
-        // 2. Create Invitation Record
         const invitesRef = collection(db, 'reviewInvitations');
         const inviteDocRef = doc(invitesRef);
         batch.set(inviteDocRef, {
@@ -654,7 +720,6 @@ export default function SubmissionDetailPage() {
             createdAt: serverTimestamp(),
         });
 
-        // 3. Update Submission Metadata
         const submissionRef = doc(db, 'submissions', submission.id);
         const newReviewer = { id: null, name: values.name, email: values.email, status: 'Invited' as const };
         const updateData: any = { 
@@ -693,7 +758,6 @@ export default function SubmissionDetailPage() {
     try {
         const batch = writeBatch(db);
 
-        // Update Submission: Filter out the reviewer from arrays
         const updatedReviewers = submission.reviewers?.filter(r => 
             !(r.email.toLowerCase().trim() === emailNorm)
         ) || [];
@@ -707,7 +771,6 @@ export default function SubmissionDetailPage() {
             invitedReviewerEmails: updatedInvitedEmails
         });
 
-        // Revoke any pending invitations
         const invitesQuery = query(
             collection(db, 'reviewInvitations'),
             where('submissionId', '==', submission.id),
@@ -851,7 +914,14 @@ export default function SubmissionDetailPage() {
           </CardFooter>
         </Card>
 
-        {isReviewer && <ReviewSubmissionForm submission={submission} onReviewSubmit={() => setRefetchTrigger(p => p + 1)} />}
+        {needsToAcceptInvite && (
+            <AcceptInvitationCard submission={submission} onAccept={() => setRefetchTrigger(p => p + 1)} />
+        )}
+
+        {isReviewer && !needsToAcceptInvite && (
+            <ReviewSubmissionForm submission={submission} onReviewSubmit={() => setRefetchTrigger(p => p + 1)} />
+        )}
+
         {(isEditor || (isAuthor && needsRevision)) && <SubmittedReviews submissionId={submission.id} showForAuthor={isAuthor} />}
         {isAuthor && needsRevision && <AuthorRevisionForm submission={submission} onRevisionSubmit={() => setRefetchTrigger(p => p + 1)} />}
       </div>
