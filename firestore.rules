@@ -16,7 +16,7 @@ service cloud.firestore {
 
     function userRole() {
       let data = getUserData();
-      return data != null ? data.role : 'Author';
+      return data != null ? data.get('role', 'Author') : 'Author';
     }
 
     function isEditorialMember() {
@@ -41,7 +41,7 @@ service cloud.firestore {
       allow list: if isEditorialMember();
       allow get: if isSignedIn() && (
         request.auth.uid == userId 
-        || (request.auth.token.email != null && request.auth.token.email.lower() == userId.lower())
+        || (request.auth.token.get('email', '').lower() == userId.lower())
         || isEditorialMember()
       );
       allow create: if isSignedIn() || isEditorialMember();
@@ -55,29 +55,29 @@ service cloud.firestore {
     match /submissions/{submissionId} {
       
       function isAuthor(data) {
-        let authEmail = request.auth.token.email;
-        let docEmail = data.author.email;
-        return isSignedIn() && (
-          request.auth.uid == data.author.id
-          || (authEmail != null && docEmail != null && authEmail.lower() == docEmail.lower())
-        );
+        let uid = request.auth.uid;
+        let email = request.auth.token.get('email', '').lower();
+        let authorObj = data.get('author', {});
+        let docId = authorObj.get('id', '');
+        let docEmail = authorObj.get('email', '').lower();
+        
+        return isSignedIn() && (uid == docId || (email != '' && email == docEmail));
       }
 
       function isAssignedReviewer(data) {
-        let authEmail = request.auth.token.email;
+        let uid = request.auth.uid;
+        let email = request.auth.token.get('email', '').lower();
         let reviewerIds = data.get('reviewerIds', []);
         let invitedEmails = data.get('invitedReviewerEmails', []);
-        return isSignedIn() && (
-          (reviewerIds != null && request.auth.uid in reviewerIds)
-          || (invitedEmails != null && authEmail != null && authEmail.lower() in invitedEmails)
-        );
+        
+        return isSignedIn() && (uid in reviewerIds || (email != '' && email in invitedEmails));
       }
 
       allow get: if isSignedIn() && (resource.data.status == 'Accepted' || isAuthor(resource.data) || isAssignedReviewer(resource.data) || isEditorialMember());
       allow list: if isSignedIn();
       allow create: if isSignedIn();
 
-      // Loosened Update Rule: Prioritize association over strict field checks
+      // Loosened Update Rule: Trust association (Author/Reviewer/Editor) over strict field checks
       allow update: if isSignedIn() && (
         isEditorialMember() 
         || isAuthor(resource.data) 
