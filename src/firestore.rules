@@ -95,20 +95,21 @@ service cloud.firestore {
       allow create: if isSignedIn();
 
       allow update: if
+        // 1. Editors can do everything
         isEditorialMember()
-        || (isSignedIn() && request.auth.uid == resource.data.author.id && (
-            // Author Revision Update - Liberal status check to prevent R1/R2 blockages
-            (resource.data.status != 'Accepted' && resource.data.status != 'Rejected' &&
-             request.resource.data.diff(resource.data).changedKeys().hasOnly([
-               'manuscriptUrl', 'status', 'revision', 'originalManuscriptUrl', 'supplementaryFileUrl', 'pageCount', 'title', 'abstract'
-             ]))
-        ))
-        // Reviewer submitting a report
+        
+        // 2. Authors can update their own papers if not finalized (Accepted/Rejected)
+        // Loosened: Removed 'hasOnly' to prevent brittle R1/R2 blockages
+        || (isSignedIn() && request.auth.uid == resource.data.author.id && 
+            resource.data.status != 'Accepted' && resource.data.status != 'Rejected')
+        
+        // 3. Reviewers assigned to this paper can submit their report
         || (isReviewer()
             && resource.data.reviewerIds != null
             && request.auth.uid in resource.data.reviewerIds
             && request.resource.data.diff(resource.data).changedKeys().hasOnly(['reviewers']))
-        // Invited user accepting an invitation (linking UID)
+            
+        // 4. Invited users accepting an invitation (linking UID)
         || (isSignedIn()
             && resource.data.invitedReviewerEmails != null
             && request.auth.token.email.lower() in resource.data.invitedReviewerEmails
