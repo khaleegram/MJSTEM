@@ -1,7 +1,7 @@
 'use client';
 
 import { notFound, useParams, useRouter } from 'next/navigation';
-import { doc, getDoc, updateDoc, arrayUnion, collection, addDoc, serverTimestamp, runTransaction, getDocs, query, where, writeBatch } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, arrayUnion, collection, addDoc, serverTimestamp, runTransaction, getDocs, query, where, writeBatch, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
   Card,
@@ -623,20 +623,12 @@ export default function SubmissionDetailPage() {
     try {
         const batch = writeBatch(db);
 
-        // 1. Create Placeholder User / Promote if existing
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, where('email', '==', emailNorm));
-        const userSnap = await getDocs(q);
+        // 1. Create Placeholder User document keyed by email
+        // This is our new professional architecture: the placeholder is the authoritative record.
+        const placeholderRef = doc(db, 'users', emailNorm);
+        const placeholderSnap = await getDoc(placeholderRef);
 
-        if (!userSnap.empty) {
-            const existingUserDoc = userSnap.docs[0];
-            const existingUserData = existingUserDoc.data();
-            if (existingUserData.role === 'Author') {
-                batch.update(existingUserDoc.ref, { role: 'Reviewer' });
-            }
-        } else {
-            // Create placeholder keyed by email
-            const placeholderRef = doc(usersRef, emailNorm);
+        if (!placeholderSnap.exists()) {
             batch.set(placeholderRef, {
                 email: emailNorm,
                 displayName: values.name,
@@ -644,9 +636,14 @@ export default function SubmissionDetailPage() {
                 isPlaceholder: true,
                 createdAt: serverTimestamp(),
             });
+        } else {
+            // If placeholder exists but role is Author (unlikely but safe), promote it
+            if (placeholderSnap.data().role === 'Author') {
+                batch.update(placeholderRef, { role: 'Reviewer' });
+            }
         }
 
-        // 2. Create Invitation
+        // 2. Create Invitation Record
         const invitesRef = collection(db, 'reviewInvitations');
         const inviteDocRef = doc(invitesRef);
         batch.set(inviteDocRef, {
@@ -674,7 +671,7 @@ export default function SubmissionDetailPage() {
         await logSubmissionEvent({ submissionId: submission.id, eventType: 'REVIEWER_INVITED', context: { reviewerName: values.name, reviewerEmail: values.email, actorName: userProfile.displayName } });
         await sendReviewerInvitationEmail({ reviewerEmail: values.email, reviewerName: values.name, manuscriptTitle: submission.title, submissionId: submission.id });
         
-        toast({ title: "Invitation Sent", description: "Placeholder account created/updated." });
+        toast({ title: "Invitation Sent", description: "A placeholder account has been created for the reviewer." });
         inviteForm.reset();
         setRefetchTrigger(prev => prev + 1);
 
@@ -696,6 +693,7 @@ export default function SubmissionDetailPage() {
     try {
         const batch = writeBatch(db);
 
+        // Update Submission: Filter out the reviewer from arrays
         const updatedReviewers = submission.reviewers?.filter(r => 
             !(r.email.toLowerCase().trim() === emailNorm)
         ) || [];
@@ -709,6 +707,7 @@ export default function SubmissionDetailPage() {
             invitedReviewerEmails: updatedInvitedEmails
         });
 
+        // Revoke any pending invitations
         const invitesQuery = query(
             collection(db, 'reviewInvitations'),
             where('submissionId', '==', submission.id),
@@ -730,7 +729,12 @@ export default function SubmissionDetailPage() {
         setRefetchTrigger(prev => prev + 1);
             
     } catch (error) {
-        toast({ title: "Error", description: "Could not initiate removal.", variant: "destructive" });
+        const permissionError = new FirestorePermissionError({
+            path: `submissions/${submission.id} or reviewInvitations`,
+            operation: 'write',
+            requestResourceData: { action: 'remove_reviewer', email: emailNorm }
+        });
+        errorEmitter.emit('permission-error', permissionError);
     } finally {
         setIsUpdating(false);
     }

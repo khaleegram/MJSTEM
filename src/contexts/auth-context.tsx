@@ -47,7 +47,7 @@ const AuthContext = createContext<AuthContextType>({
 /**
  * Reconciles user documents. 
  * If a placeholder doc (keyed by email) exists from a pre-invite, 
- * it converts it to a UID-based doc.
+ * it inherits that role and converts it to a UID-based doc.
  */
 const ensureUserDocument = async (user: FirebaseUser): Promise<UserProfile> => {
   const userRef = doc(db, 'users', user.uid);
@@ -63,7 +63,7 @@ const ensureUserDocument = async (user: FirebaseUser): Promise<UserProfile> => {
   let placeholderId: string | null = null;
 
   if (emailNorm) {
-      // Look for doc where Document ID is email or has a 'placeholder' marker
+      // Direct lookup by email key (the new approach)
       const placeholderRef = doc(db, 'users', emailNorm);
       const placeholderSnap = await getDoc(placeholderRef);
       
@@ -71,7 +71,7 @@ const ensureUserDocument = async (user: FirebaseUser): Promise<UserProfile> => {
           placeholderData = placeholderSnap.data() as UserProfile;
           placeholderId = placeholderSnap.id;
       } else {
-          // Alternative search if ID isn't email
+          // Alternative search if doc exists with email field but not email ID
           const q = query(collection(db, 'users'), where('email', '==', emailNorm), where('isPlaceholder', '==', true));
           const qSnap = await getDocs(q);
           if (!qSnap.empty) {
@@ -122,23 +122,29 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setLoading(true);
       
       if (firebaseUser) {
+        // Only proceed if email is verified or using Google
         if (firebaseUser.emailVerified || firebaseUser.providerData.some(p => p.providerId === 'google.com')) {
-          const profile = await ensureUserDocument(firebaseUser);
-          setUser(firebaseUser);
-          setUserProfile(profile);
-          
-          if (firebaseUser.email) {
-            claimReviewerInvitations({ uid: firebaseUser.uid, email: firebaseUser.email })
-              .then(async (result) => {
-                if (result.success && result.count > 0) {
-                    await refetchUserProfile();
-                    toast({
-                        title: "Account Upgraded",
-                        description: `You have been linked to ${result.count} review assignment(s).`,
-                    });
-                }
-              })
-              .catch(err => console.error("[Auth] Background claim failed:", err));
+          try {
+            const profile = await ensureUserDocument(firebaseUser);
+            setUser(firebaseUser);
+            setUserProfile(profile);
+            
+            // Secondary claim process for linking historical submissions
+            if (firebaseUser.email) {
+              claimReviewerInvitations({ uid: firebaseUser.uid, email: firebaseUser.email })
+                .then(async (result) => {
+                  if (result.success && result.count > 0) {
+                      await refetchUserProfile();
+                      toast({
+                          title: "Account Upgraded",
+                          description: `You have been linked to ${result.count} review assignment(s).`,
+                      });
+                  }
+                })
+                .catch(err => console.error("[Auth] Background claim failed:", err));
+            }
+          } catch (error) {
+            console.error("[Auth] Error during document reconciliation:", error);
           }
         } else {
           setUser(firebaseUser); 

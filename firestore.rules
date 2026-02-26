@@ -54,17 +54,26 @@ service cloud.firestore {
     // ===========================
     match /users/{userId} {
       allow list: if isEditorialMember();
-      allow get: if request.auth.uid == userId || isEditorialMember();
+      
+      // Allow users to read their own doc (UID) or their placeholder (Email)
+      allow get: if request.auth.uid == userId 
+                 || (isSignedIn() && request.auth.token.email.lower() == userId.lower())
+                 || isEditorialMember();
       
       // Allow users to create their own doc, or editors to create placeholders
-      allow create: if request.auth.uid == userId || isEditorialMember();
+      allow create: if request.auth.uid == userId 
+                    || (isSignedIn() && request.auth.token.email.lower() == userId.lower())
+                    || isEditorialMember();
 
       allow update: if
         (request.auth.uid == userId && request.resource.data.diff(resource.data)
           .changedKeys().hasOnly(['displayName', 'photoURL', 'specialization', 'fcmTokens']))
         || isEditorialMember();
 
-      allow delete: if isAdmin() || isManagingEditor() || (request.auth.uid == userId);
+      // Allow users to delete their own email-based placeholder after migration
+      allow delete: if isAdmin() || isManagingEditor() 
+                    || (request.auth.uid == userId)
+                    || (isSignedIn() && request.auth.token.email.lower() == userId.lower());
     }
 
     // ===========================
@@ -85,11 +94,12 @@ service cloud.firestore {
       allow update: if
         isEditorialMember()
         || (isSignedIn() && request.auth.uid == resource.data.author.id && (
-            // Robust Revision Upload Rule
+            // Robust Revision Upload Rule: Allow updating manuscript, status, and related metadata
             (resource.data.status in ['Minor Revision', 'Major Revision', 'Awaiting Revision: Similarity Issues'] &&
              request.resource.data.diff(resource.data).changedKeys().hasAny([
                'manuscriptUrl', 'status', 'revision', 'originalManuscriptUrl', 'supplementaryFileUrl'
              ]))
+            // Standard title/abstract updates
             || (resource.data.status != 'Accepted' && resource.data.status != 'Rejected' &&
                 request.resource.data.diff(resource.data).changedKeys().hasOnly(['title', 'abstract']))
         ))
