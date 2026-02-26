@@ -24,7 +24,8 @@ service cloud.firestore {
     }
 
     function isRole(role) {
-      return userRole() == role;
+      let currentRole = userRole();
+      return currentRole != null && currentRole == role;
     }
 
     function isAdmin() {
@@ -96,8 +97,8 @@ service cloud.firestore {
       allow update: if
         isEditorialMember()
         || (isSignedIn() && request.auth.uid == resource.data.author.id && (
-            // Robust Revision Upload Rule - Allows all necessary fields for a revision
-            (resource.data.status in ['Minor Revision', 'Major Revision', 'Awaiting Revision: Similarity Issues'] &&
+            // Robust Revision Upload Rule - Allows all necessary fields for a revision from any review/revision state
+            (resource.data.status in ['Submitted', 'With Editor', 'Under Initial Review', 'Under Peer Review', 'Under Review-R1', 'Under Review-R2', 'Minor Revision', 'Major Revision', 'Awaiting Revision: Similarity Issues'] &&
              request.resource.data.diff(resource.data).changedKeys().hasOnly([
                'manuscriptUrl', 'status', 'revision', 'originalManuscriptUrl', 'supplementaryFileUrl', 'pageCount'
              ]))
@@ -117,15 +118,15 @@ service cloud.firestore {
             && request.resource.data.diff(resource.data).changedKeys().hasAny(['reviewers', 'reviewerIds', 'invitedReviewerEmails']));
 
       allow delete: if
-        (isAuthor() && request.auth.uid == resource.data.author.id && resource.data.status == 'Submitted')
+        (request.auth.uid == resource.data.author.id && resource.data.status == 'Submitted')
         || isEditorialMember();
 
       match /reviews/{reviewId} {
-        allow list: if isEditorialMember() || (isAuthor() &&
+        allow list: if isEditorialMember() || (isSignedIn() &&
           get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid);
         allow read: if
           isEditorialMember() ||
-          (isAuthor() &&
+          (isSignedIn() &&
             get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid) ||
           (isReviewer() && resource.data.reviewerId == request.auth.uid);
         
