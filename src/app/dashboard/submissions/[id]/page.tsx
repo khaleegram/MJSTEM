@@ -618,42 +618,73 @@ export default function SubmissionDetailPage() {
     if(!submission || !userProfile) return;
     const emailNorm = values.email.toLowerCase().trim();
     
-    if (submission.invitedReviewerEmails?.includes(emailNorm)) {
-        toast({ title: "Already Invited", variant: "destructive" });
-        return;
-    }
     setIsUpdating(true);
 
-    const inviteData = {
-        submissionId: submission.id,
-        emailNorm: emailNorm,
-        invitedBy: userProfile.uid,
-        status: 'pending' as const,
-        createdAt: serverTimestamp(),
-    };
+    try {
+        const batch = writeBatch(db);
 
-    const invitesRef = collection(db, 'reviewInvitations');
-    const submissionRef = doc(db, 'submissions', submission.id);
+        // 1. Create Placeholder User / Promote if existing
+        // Search for user by email
+        const usersRef = collection(db, 'users');
+        const q = query(usersRef, where('email', '==', emailNorm));
+        const userSnap = await getDocs(q);
 
-    addDoc(invitesRef, inviteData)
-        .then(async () => {
-            const newReviewer = { id: null, name: values.name, email: values.email, status: 'Invited' as const };
-            const updateData: any = { reviewers: arrayUnion(newReviewer), invitedReviewerEmails: arrayUnion(emailNorm) };
-            if (['Submitted', 'Under Initial Review', 'With Editor'].includes(submission.status)) {
-                updateData.status = 'Under Peer Review';
+        if (!userSnap.empty) {
+            const existingUserDoc = userSnap.docs[0];
+            const existingUserData = existingUserDoc.data();
+            if (existingUserData.role === 'Author') {
+                batch.update(existingUserDoc.ref, { role: 'Reviewer' });
             }
-            await updateDoc(submissionRef, updateData);
-            await logSubmissionEvent({ submissionId: submission.id, eventType: 'REVIEWER_INVITED', context: { reviewerName: values.name, reviewerEmail: values.email, actorName: userProfile.displayName } });
-            await sendReviewerInvitationEmail({ reviewerEmail: values.email, reviewerName: values.name, manuscriptTitle: submission.title, submissionId: submission.id });
-            toast({ title: "Invitation Sent" });
-            inviteForm.reset();
-            setRefetchTrigger(prev => prev + 1);
-        })
-        .catch(async (serverError) => { 
-            const permissionError = new FirestorePermissionError({ path: invitesRef.path, operation: 'create', requestResourceData: inviteData } satisfies SecurityRuleContext);
-            errorEmitter.emit('permission-error', permissionError);
-        })
-        .finally(() => { setIsUpdating(false); });
+        } else {
+            // Create placeholder
+            const placeholderRef = doc(usersRef, emailNorm);
+            batch.set(placeholderRef, {
+                email: emailNorm,
+                displayName: values.name,
+                role: 'Reviewer',
+                isPlaceholder: true,
+                createdAt: serverTimestamp(),
+            });
+        }
+
+        // 2. Create Invitation
+        const invitesRef = collection(db, 'reviewInvitations');
+        const inviteDocRef = doc(invitesRef);
+        batch.set(inviteDocRef, {
+            submissionId: submission.id,
+            emailNorm: emailNorm,
+            invitedBy: userProfile.uid,
+            status: 'pending',
+            createdAt: serverTimestamp(),
+        });
+
+        // 3. Update Submission Metadata
+        const submissionRef = doc(db, 'submissions', submission.id);
+        const newReviewer = { id: null, name: values.name, email: values.email, status: 'Invited' as const };
+        const updateData: any = { 
+            reviewers: arrayUnion(newReviewer), 
+            invitedReviewerEmails: arrayUnion(emailNorm) 
+        };
+        if (['Submitted', 'Under Initial Review', 'With Editor'].includes(submission.status)) {
+            updateData.status = 'Under Peer Review';
+        }
+        batch.update(submissionRef, updateData);
+
+        await batch.commit();
+
+        await logSubmissionEvent({ submissionId: submission.id, eventType: 'REVIEWER_INVITED', context: { reviewerName: values.name, reviewerEmail: values.email, actorName: userProfile.displayName } });
+        await sendReviewerInvitationEmail({ reviewerEmail: values.email, reviewerName: values.name, manuscriptTitle: submission.title, submissionId: submission.id });
+        
+        toast({ title: "Invitation Sent", description: "Placeholder account created/updated." });
+        inviteForm.reset();
+        setRefetchTrigger(prev => prev + 1);
+
+    } catch (error: any) {
+        const permissionError = new FirestorePermissionError({ path: 'users or submissions', operation: 'write', requestResourceData: { email: emailNorm } });
+        errorEmitter.emit('permission-error', permissionError);
+    } finally {
+        setIsUpdating(false);
+    }
   }
 
   const handleRemoveReviewer = async (reviewer: { id: string | null, email: string }) => {
@@ -666,7 +697,6 @@ export default function SubmissionDetailPage() {
     try {
         const batch = writeBatch(db);
 
-        // 1. Update submission doc: Filter out the reviewer
         const updatedReviewers = submission.reviewers?.filter(r => 
             !(r.email.toLowerCase().trim() === emailNorm)
         ) || [];
@@ -680,7 +710,6 @@ export default function SubmissionDetailPage() {
             invitedReviewerEmails: updatedInvitedEmails
         });
 
-        // 2. Revoke pending invitation if it exists
         const invitesQuery = query(
             collection(db, 'reviewInvitations'),
             where('submissionId', '==', submission.id),
@@ -696,31 +725,12 @@ export default function SubmissionDetailPage() {
             });
         });
 
-        batch.commit()
-            .then(async () => {
-                await logSubmissionEvent({
-                    submissionId: submission.id,
-                    eventType: 'STATUS_CHANGED',
-                    context: { 
-                        actorName: userProfile.displayName, 
-                        status: `Reviewer Removed (${reviewer.email})` 
-                    }
-                });
-
-                toast({ title: "Reviewer Removed" });
-                setRefetchTrigger(prev => prev + 1);
-            })
-            .catch(async (serverError) => {
-                const permissionError = new FirestorePermissionError({
-                    path: `submissions/${submission.id} or reviewInvitations`,
-                    operation: 'write',
-                    requestResourceData: { action: 'remove_reviewer', email: emailNorm }
-                } satisfies SecurityRuleContext);
-                errorEmitter.emit('permission-error', permissionError);
-            });
+        await batch.commit();
+        await logSubmissionEvent({ submissionId: submission.id, eventType: 'STATUS_CHANGED', context: { actorName: userProfile.displayName, status: `Reviewer Removed (${reviewer.email})` } });
+        toast({ title: "Reviewer Removed" });
+        setRefetchTrigger(prev => prev + 1);
             
     } catch (error) {
-        console.error("Error preparing batch:", error);
         toast({ title: "Error", description: "Could not initiate removal.", variant: "destructive" });
     } finally {
         setIsUpdating(false);

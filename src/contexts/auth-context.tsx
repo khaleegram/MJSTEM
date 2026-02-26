@@ -14,7 +14,7 @@ import {
   sendPasswordResetEmail,
 } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, deleteDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { UserProfile } from '@/types';
 import { claimReviewerInvitations } from '@/ai/flows/claim-invitations';
 import { toast } from '@/hooks/use-toast';
@@ -44,25 +44,62 @@ const AuthContext = createContext<AuthContextType>({
   refetchUserProfile: async () => {},
 });
 
+/**
+ * Reconciles user documents. 
+ * If a placeholder doc (keyed by email) exists from a pre-invite, 
+ * it converts it to a UID-based doc.
+ */
 const ensureUserDocument = async (user: FirebaseUser): Promise<UserProfile> => {
   const userRef = doc(db, 'users', user.uid);
   const snap = await getDoc(userRef);
   
   if (snap.exists()) {
     return snap.data() as UserProfile;
-  } else {
-    const profile: UserProfile = {
-      uid: user.uid,
-      email: user.email!,
-      displayName: user.displayName || 'New User',
-      photoURL: user.photoURL || '',
-      role: 'Author',
-      specialization: '',
-      fcmTokens: [],
-    };
-    await setDoc(userRef, profile);
-    return profile;
   }
+
+  // Check if a placeholder exists for this email
+  const emailNorm = user.email?.toLowerCase().trim();
+  let placeholderData: Partial<UserProfile> | null = null;
+  let placeholderId: string | null = null;
+
+  if (emailNorm) {
+      // Look for doc where Document ID is email or has a 'placeholder' marker
+      const placeholderRef = doc(db, 'users', emailNorm);
+      const placeholderSnap = await getDoc(placeholderRef);
+      
+      if (placeholderSnap.exists()) {
+          placeholderData = placeholderSnap.data() as UserProfile;
+          placeholderId = placeholderSnap.id;
+      } else {
+          // Alternative search if ID isn't email
+          const q = query(collection(db, 'users'), where('email', '==', emailNorm), where('isPlaceholder', '==', true));
+          const qSnap = await getDocs(q);
+          if (!qSnap.empty) {
+              placeholderData = qSnap.docs[0].data() as UserProfile;
+              placeholderId = qSnap.docs[0].id;
+          }
+      }
+  }
+
+  const profile: UserProfile = {
+    uid: user.uid,
+    email: user.email!,
+    displayName: user.displayName || placeholderData?.displayName || 'New User',
+    photoURL: user.photoURL || placeholderData?.photoURL || '',
+    role: (placeholderData?.role as any) || 'Author',
+    specialization: placeholderData?.specialization || '',
+    fcmTokens: [],
+  };
+
+  // Create the real UID-based document
+  await setDoc(userRef, profile);
+
+  // Clean up the placeholder if it existed
+  if (placeholderId) {
+      await deleteDoc(doc(db, 'users', placeholderId));
+  }
+
+  return profile;
 };
 
 
@@ -82,58 +119,28 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      console.log("[Auth] State changed. User:", firebaseUser?.email || "None");
       setLoading(true);
       
       if (firebaseUser) {
-        // Handle verified users (including Google)
-        if (firebaseUser.emailVerified) {
+        if (firebaseUser.emailVerified || firebaseUser.providerData.some(p => p.providerId === 'google.com')) {
           const profile = await ensureUserDocument(firebaseUser);
           setUser(firebaseUser);
           setUserProfile(profile);
           
-          // Professional Background Claim: Run on every successful boot
           if (firebaseUser.email) {
-            console.log(`[Auth] Triggering claimReviewerInvitations for: ${firebaseUser.email}`);
-            
             claimReviewerInvitations({ uid: firebaseUser.uid, email: firebaseUser.email })
               .then(async (result) => {
-                console.log("[Auth] claimReviewerInvitations response:", result);
-                
-                // ALWAYS show a toast in debug mode to prove the action ran
-                if (result.success) {
-                    if (result.count > 0) {
-                        await refetchUserProfile();
-                        toast({
-                            title: "Account Upgraded",
-                            description: `Success! Linked to ${result.count} new assignment(s). Your role is now ${result.count > 0 ? 'Reviewer' : profile.role}.`,
-                        });
-                    } else {
-                        // Silent in production, but visible in DEBUG
-                        toast({
-                            title: "Auth Debug",
-                            description: "Claim action ran successfully, but no matching pending invitations were found for this email.",
-                        });
-                    }
-                } else {
+                if (result.success && result.count > 0) {
+                    await refetchUserProfile();
                     toast({
-                        title: "Claim Error",
-                        description: result.message,
-                        variant: "destructive"
+                        title: "Account Upgraded",
+                        description: `You have been linked to ${result.count} review assignment(s).`,
                     });
                 }
               })
-              .catch(err => {
-                console.error("[Auth] Background claim exception:", err);
-                toast({
-                  title: "Fatal Claim Failure",
-                  description: "The claim process encountered an exception. Check server logs.",
-                  variant: "destructive"
-                });
-              });
+              .catch(err => console.error("[Auth] Background claim failed:", err));
           }
         } else {
-          console.log("[Auth] Email not verified. Profile blocked.");
           setUser(firebaseUser); 
           setUserProfile(null);
         }
@@ -148,9 +155,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const login = async (email: string, pass: string) => {
     const userCredential = await signInWithEmailAndPassword(auth, email, pass);
-    if (!userCredential.user.emailVerified) {
-      throw new Error("Please check your inbox and verify your email address to log in.");
-    }
     return userCredential.user;
   };
 
