@@ -86,6 +86,7 @@ service cloud.firestore {
 
       allow get: if resource.data.status == 'Accepted' || (isSignedIn() && (
         resource.data.author.id == request.auth.uid
+        || (resource.data.author.email != null && request.auth.token.email.lower() == resource.data.author.email.lower())
         || (resource.data.reviewerIds != null && request.auth.uid in resource.data.reviewerIds)
         || isEditorialMember()
         || (resource.data.invitedReviewerEmails != null && request.auth.token.email.lower() in resource.data.invitedReviewerEmails)
@@ -98,12 +99,12 @@ service cloud.firestore {
         // 1. Editors can do everything
         isEditorialMember()
         
-        // 2. Authors can update their own papers if not finalized (Accepted/Rejected)
-        // Loosened: Removed 'hasOnly' to prevent brittle R1/R2 blockages
-        || (isSignedIn() && request.auth.uid == resource.data.author.id && 
+        // 2. Authors can update their own papers (match by ID or Email) if not finalized
+        || (isSignedIn() && 
+            (request.auth.uid == resource.data.author.id || (resource.data.author.email != null && request.auth.token.email.lower() == resource.data.author.email.lower())) && 
             resource.data.status != 'Accepted' && resource.data.status != 'Rejected')
         
-        // 3. Reviewers assigned to this paper can submit their report
+        // 3. Reviewers assigned to this paper can submit their report (only update reviewers array)
         || (isReviewer()
             && resource.data.reviewerIds != null
             && request.auth.uid in resource.data.reviewerIds
@@ -121,16 +122,18 @@ service cloud.firestore {
 
       match /reviews/{reviewId} {
         allow list: if isEditorialMember() || (isSignedIn() &&
-          get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid);
+          (get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid || 
+           get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.email.lower() == request.auth.token.email.lower()));
         allow read: if
           isEditorialMember() ||
           (isSignedIn() &&
-            get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid) ||
+            (get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid || 
+             get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.email.lower() == request.auth.token.email.lower())) ||
           (isReviewer() && resource.data.reviewerId == request.auth.uid);
         
         // Reviewer assigned to this specific submission
         allow create: if isReviewer()
-          && request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds;
+          && (request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds);
         
         allow update, delete: if false;
       }
