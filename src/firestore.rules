@@ -16,7 +16,7 @@ service cloud.firestore {
 
     function userRole() {
       let data = getUserData();
-      return data != null ? data.role : null;
+      return data != null ? data.role : 'Author';
     }
 
     function isEditorialMember() {
@@ -39,12 +39,14 @@ service cloud.firestore {
     // ===========================
     match /users/{userId} {
       allow list: if isEditorialMember();
-      allow get: if request.auth.uid == userId 
-                 || (isSignedIn() && request.auth.token.email != null && request.auth.token.email.lower() == userId.lower())
-                 || isEditorialMember();
+      allow get: if isSignedIn() && (
+        request.auth.uid == userId 
+        || (request.auth.token.email != null && request.auth.token.email.lower() == userId.lower())
+        || isEditorialMember()
+      );
       allow create: if isSignedIn() || isEditorialMember();
-      allow update: if request.auth.uid == userId || isEditorialMember();
-      allow delete: if isAdmin() || isManagingEditor() || request.auth.uid == userId;
+      allow update: if isSignedIn() && (request.auth.uid == userId || isEditorialMember());
+      allow delete: if isSignedIn() && (isAdmin() || isManagingEditor() || request.auth.uid == userId);
     }
 
     // ===========================
@@ -52,7 +54,6 @@ service cloud.firestore {
     // ===========================
     match /submissions/{submissionId} {
       
-      // Helper to check ownership/assignment based on provided document data
       function isAuthor(data) {
         return isSignedIn() && (
           request.auth.uid == data.author.id
@@ -67,39 +68,41 @@ service cloud.firestore {
         );
       }
 
-      allow get: if resource.data.status == 'Accepted' || isAuthor(resource.data) || isAssignedReviewer(resource.data) || isEditorialMember();
-      allow list: if true;
+      allow get: if isSignedIn() && (resource.data.status == 'Accepted' || isAuthor(resource.data) || isAssignedReviewer(resource.data) || isEditorialMember());
+      allow list: if isSignedIn();
       allow create: if isSignedIn();
 
-      // Loosened Update Rule: Allow if Editorial, Author, or Assigned Reviewer
-      allow update: if isEditorialMember() || isAuthor(resource.data) || isAssignedReviewer(resource.data);
+      // Loosened Update Rule: Allow any authenticated associate (Author, Reviewer, or Editor) to update
+      allow update: if isSignedIn() && (isEditorialMember() || isAuthor(resource.data) || isAssignedReviewer(resource.data));
 
-      allow delete: if isEditorialMember() || (isAuthor(resource.data) && resource.data.status == 'Submitted');
+      allow delete: if isSignedIn() && (isEditorialMember() || (isAuthor(resource.data) && resource.data.status == 'Submitted'));
 
       match /reviews/{reviewId} {
         function getSubmission() {
           return get(/databases/$(database)/documents/submissions/$(submissionId)).data;
         }
 
-        allow list: if isEditorialMember() || isAuthor(getSubmission());
-        allow read: if isEditorialMember() || isAuthor(getSubmission()) || (isSignedIn() && request.auth.uid == resource.data.reviewerId);
+        allow list, read: if isSignedIn() && (isEditorialMember() || isAuthor(getSubmission()) || request.auth.uid == resource.data.reviewerId);
         allow create: if isSignedIn();
-        allow update, delete: if isEditorialMember();
+        allow update, delete: if isSignedIn() && isEditorialMember();
       }
 
       match /history/{historyId} {
-        allow read, list: if isSignedIn();
+        function getSubmission() {
+          return get(/databases/$(database)/documents/submissions/$(submissionId)).data;
+        }
+        allow read, list: if isSignedIn() && (isEditorialMember() || isAuthor(getSubmission()));
         allow create: if isSignedIn();
         allow update, delete: if false;
       }
     }
 
     match /reviewInvitations/{inviteId} {
-      allow list: if isEditorialMember();
-      allow get: if isEditorialMember() || (isSignedIn() && request.auth.token.email != null && request.auth.token.email.lower() == resource.data.emailNorm);
-      allow create: if isEditorialMember();
-      allow update: if isEditorialMember() || (isSignedIn() && request.auth.token.email != null && request.auth.token.email.lower() == resource.data.emailNorm);
-      allow delete: if isAdmin() || isManagingEditor();
+      allow list: if isSignedIn() && isEditorialMember();
+      allow get: if isSignedIn() && (isEditorialMember() || (request.auth.token.email != null && request.auth.token.email.lower() == resource.data.emailNorm));
+      allow create: if isSignedIn() && isEditorialMember();
+      allow update: if isSignedIn() && (isEditorialMember() || (request.auth.token.email != null && request.auth.token.email.lower() == resource.data.emailNorm));
+      allow delete: if isSignedIn() && (isAdmin() || isManagingEditor());
     }
 
     match /notifications/{notificationId} {
@@ -111,17 +114,17 @@ service cloud.firestore {
 
     match /volumes/{volumeId} {
       allow read: if true;
-      allow write: if isManagingEditor() || isAdmin();
+      allow write: if isSignedIn() && (isManagingEditor() || isAdmin());
     }
 
     match /editorialBoard/{memberId} {
       allow read: if true;
-      allow write: if isManagingEditor() || isAdmin();
+      allow write: if isSignedIn() && (isManagingEditor() || isAdmin());
     }
 
     match /indexingServices/{serviceId} {
       allow read: if true;
-      allow write: if isManagingEditor() || isAdmin();
+      allow write: if isSignedIn() && (isManagingEditor() || isAdmin());
     }
 
     match /settings/submissionCounter {
@@ -131,7 +134,7 @@ service cloud.firestore {
 
     match /settings/{settingId} {
       allow read: if true;
-      allow write: if isManagingEditor() || isAdmin();
+      allow write: if isSignedIn() && (isManagingEditor() || isAdmin());
     }
   }
 }
