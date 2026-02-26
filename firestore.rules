@@ -48,10 +48,6 @@ service cloud.firestore {
       return isRole('Reviewer') || isEditorialMember();
     }
 
-    function isAuthor() {
-      return isRole('Author');
-    }
-
     // ===========================
     // USERS COLLECTION
     // ===========================
@@ -68,12 +64,10 @@ service cloud.firestore {
                     || (isSignedIn() && request.auth.token.email.lower() == userId.lower())
                     || isEditorialMember();
 
-      allow update: if
-        (request.auth.uid == userId && request.resource.data.diff(resource.data)
-          .changedKeys().hasOnly(['displayName', 'photoURL', 'specialization', 'fcmTokens']))
-        || isEditorialMember();
+      // Loosened update: Allow users to update their profile or editors to manage roles
+      allow update: if request.auth.uid == userId || isEditorialMember();
 
-      // Allow users to delete their own email-based placeholder after migration
+      // Allow users to delete placeholders after migration
       allow delete: if isAdmin() || isManagingEditor() 
                     || (request.auth.uid == userId)
                     || (isSignedIn() && request.auth.token.email.lower() == userId.lower());
@@ -95,26 +89,15 @@ service cloud.firestore {
       allow list: if true;
       allow create: if isSignedIn();
 
+      // UN-TIGHTENED RULE: Allow update if the user is associated with the submission
       allow update: if
-        // 1. Editors can do everything
         isEditorialMember()
-        
-        // 2. Authors can update their own papers (match by ID or Email) if not finalized
-        || (isSignedIn() && 
-            (request.auth.uid == resource.data.author.id || (resource.data.author.email != null && request.auth.token.email.lower() == resource.data.author.email.lower())) && 
-            resource.data.status != 'Accepted' && resource.data.status != 'Rejected')
-        
-        // 3. Reviewers assigned to this paper can submit their report (only update reviewers array)
-        || (isReviewer()
-            && resource.data.reviewerIds != null
-            && request.auth.uid in resource.data.reviewerIds
-            && request.resource.data.diff(resource.data).changedKeys().hasOnly(['reviewers']))
-            
-        // 4. Invited users accepting an invitation (linking UID)
-        || (isSignedIn()
-            && resource.data.invitedReviewerEmails != null
-            && request.auth.token.email.lower() in resource.data.invitedReviewerEmails
-            && request.resource.data.diff(resource.data).changedKeys().hasAny(['reviewers', 'reviewerIds', 'invitedReviewerEmails']));
+        || (isSignedIn() && (
+            request.auth.uid == resource.data.author.id 
+            || (resource.data.author.email != null && request.auth.token.email.lower() == resource.data.author.email.lower())
+            || (resource.data.reviewerIds != null && request.auth.uid in resource.data.reviewerIds)
+            || (resource.data.invitedReviewerEmails != null && request.auth.token.email.lower() in resource.data.invitedReviewerEmails)
+        ));
 
       allow delete: if
         (request.auth.uid == resource.data.author.id && resource.data.status == 'Submitted')
@@ -124,28 +107,21 @@ service cloud.firestore {
         allow list: if isEditorialMember() || (isSignedIn() &&
           (get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid || 
            get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.email.lower() == request.auth.token.email.lower()));
+        
         allow read: if
           isEditorialMember() ||
           (isSignedIn() &&
             (get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid || 
              get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.email.lower() == request.auth.token.email.lower())) ||
-          (isReviewer() && resource.data.reviewerId == request.auth.uid);
+          (isReviewer() && (resource.data.reviewerId == request.auth.uid || request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds));
         
-        // Reviewer assigned to this specific submission
-        allow create: if isReviewer()
-          && (request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds);
-        
-        allow update, delete: if false;
+        allow create: if isSignedIn();
+        allow update, delete: if isEditorialMember();
       }
 
       match /history/{historyId} {
-        allow read, list: if isSignedIn() && (
-          resource.data.userId == request.auth.uid || isEditorialMember() || 
-          (get(/databases/$(database)/documents/submissions/$(submissionId)).data.author.id == request.auth.uid) ||
-          (get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds != null && 
-           request.auth.uid in get(/databases/$(database)/documents/submissions/$(submissionId)).data.reviewerIds)
-        );
-        allow create: if isServer() || isEditorialMember() || isSignedIn();
+        allow read, list: if isSignedIn();
+        allow create: if isSignedIn();
         allow update, delete: if false;
       }
     }
