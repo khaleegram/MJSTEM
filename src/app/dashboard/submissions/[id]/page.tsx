@@ -553,9 +553,12 @@ export default function SubmissionDetailPage() {
   });
 
   const isEditor = userProfile?.role === 'Editor' || userProfile?.role === 'Admin' || userProfile?.role === 'Managing Editor';
-  const isAuthor = userProfile?.uid === submission?.author.id;
-  
   const userEmail = user?.email?.toLowerCase().trim();
+  
+  // Resilient author identification (handles imported papers and UID transitions)
+  const isAuthor = userProfile?.uid === submission?.author.id || 
+                   (userEmail && submission?.author.email && userEmail === submission.author.email.toLowerCase().trim());
+  
   const isReviewer = submission?.reviewerIds?.includes(user?.uid || '') || 
                      (userEmail && submission?.invitedReviewerEmails?.includes(userEmail));
 
@@ -922,7 +925,7 @@ export default function SubmissionDetailPage() {
             <ReviewSubmissionForm submission={submission} onReviewSubmit={() => setRefetchTrigger(p => p + 1)} />
         )}
 
-        {(isEditor || (isAuthor && needsRevision)) && <SubmittedReviews submissionId={submission.id} showForAuthor={isAuthor} />}
+        {(isEditor || (isAuthor && (needsRevision || submission.status.includes('Review')))) && <SubmittedReviews submissionId={submission.id} showForAuthor={isAuthor} />}
         {isAuthor && needsRevision && <AuthorRevisionForm submission={submission} onRevisionSubmit={() => setRefetchTrigger(p => p + 1)} />}
       </div>
 

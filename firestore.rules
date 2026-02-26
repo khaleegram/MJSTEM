@@ -55,16 +55,21 @@ service cloud.firestore {
     match /submissions/{submissionId} {
       
       function isAuthor(data) {
+        let authEmail = request.auth.token.email;
+        let docEmail = data.author.email;
         return isSignedIn() && (
           request.auth.uid == data.author.id
-          || (request.auth.token.email != null && data.author.email != null && request.auth.token.email.lower() == data.author.email.lower())
+          || (authEmail != null && docEmail != null && authEmail.lower() == docEmail.lower())
         );
       }
 
       function isAssignedReviewer(data) {
+        let authEmail = request.auth.token.email;
+        let reviewerIds = data.get('reviewerIds', []);
+        let invitedEmails = data.get('invitedReviewerEmails', []);
         return isSignedIn() && (
-          (data.reviewerIds != null && request.auth.uid in data.reviewerIds)
-          || (data.invitedReviewerEmails != null && request.auth.token.email != null && request.auth.token.email.lower() in data.invitedReviewerEmails)
+          (reviewerIds != null && request.auth.uid in reviewerIds)
+          || (invitedEmails != null && authEmail != null && authEmail.lower() in invitedEmails)
         );
       }
 
@@ -72,9 +77,12 @@ service cloud.firestore {
       allow list: if isSignedIn();
       allow create: if isSignedIn();
 
-      // Loosened Update Rule: Allow any authenticated associate (Author, Reviewer, or Editor) to update
-      // We trust the client-side logic for specific field sets to avoid brittle rule failures.
-      allow update: if isSignedIn() && (isEditorialMember() || isAuthor(resource.data) || isAssignedReviewer(resource.data));
+      // Loosened Update Rule: Prioritize association over strict field checks
+      allow update: if isSignedIn() && (
+        isEditorialMember() 
+        || isAuthor(resource.data) 
+        || isAssignedReviewer(resource.data)
+      );
 
       allow delete: if isSignedIn() && (isEditorialMember() || (isAuthor(resource.data) && resource.data.status == 'Submitted'));
 
