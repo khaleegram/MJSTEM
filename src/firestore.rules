@@ -73,11 +73,14 @@ service cloud.firestore {
         return isSignedIn() && (uid in reviewerIds || (email != '' && email in invitedEmails));
       }
 
-      allow get: if isSignedIn() && (resource.data.status == 'Accepted' || isAuthor(resource.data) || isAssignedReviewer(resource.data) || isEditorialMember());
-      allow list: if isSignedIn();
+      // PUBLIC READ for Accepted Articles
+      allow get: if resource.data.status == 'Accepted' 
+                 || (isSignedIn() && (isAuthor(resource.data) || isAssignedReviewer(resource.data) || isEditorialMember()));
+      
+      allow list: if resource.data.status == 'Accepted' || isSignedIn();
+
       allow create: if isSignedIn();
 
-      // Loosened Update Rule: Trust association (Author/Reviewer/Editor) over strict field checks
       allow update: if isSignedIn() && (
         isEditorialMember() 
         || isAuthor(resource.data) 
@@ -91,7 +94,8 @@ service cloud.firestore {
           return get(/databases/$(database)/documents/submissions/$(submissionId)).data;
         }
 
-        allow list, read: if isSignedIn() && (isEditorialMember() || isAuthor(getSubmission()) || request.auth.uid == resource.data.reviewerId);
+        allow list, read: if (getSubmission().status == 'Accepted') 
+                          || (isSignedIn() && (isEditorialMember() || isAuthor(getSubmission()) || request.auth.uid == resource.data.reviewerId));
         allow create: if isSignedIn();
         allow update, delete: if isSignedIn() && isEditorialMember();
       }
