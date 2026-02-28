@@ -27,6 +27,38 @@ export const RevisionManuscriptSchema = z.object({
   replaced: z.boolean().optional(),
 });
 
+export const RevisionDocumentSchema = z.object({
+  id: z.string().optional(),
+  category: z.enum([
+    'revised_manuscript_clean',
+    'response_to_reviewers',
+    'tracked_changes',
+    'supplementary',
+    'figure_table',
+    'ethics',
+    'cover_letter',
+    'additional',
+  ]),
+  label: z.string(),
+  url: z.string().url(),
+  fileName: z.string().optional(),
+  uploadedAt: z.any().optional(),
+  visibleToReviewers: z.boolean().optional(),
+  required: z.boolean().optional(),
+});
+
+export const RevisionPackageSchema = z.object({
+  round: z.number().int().positive(),
+  status: z.enum(['submitted']),
+  submittedAt: z.any().optional(),
+  submittedBy: z.object({
+    id: z.string().optional(),
+    name: z.string().optional(),
+    email: z.string().email().optional(),
+  }).optional(),
+  documents: z.array(RevisionDocumentSchema),
+});
+
 export const NewSubmissionSchema = z.object({
   title: z.string().min(10, 'Title must be at least 10 characters long.'),
   abstract: z.string().min(50, 'Abstract must be at least 50 characters long.'),
@@ -91,6 +123,7 @@ export const SubmissionSchema = z.object({
   pageCount: z.number().optional(),
   revision: z.number().default(0),
   revisionManuscripts: z.array(RevisionManuscriptSchema).optional(),
+  revisionPackages: z.array(RevisionPackageSchema).optional(),
   editorAttachments: z.array(EditorAttachmentSchema).optional(),
 });
 

@@ -129,7 +129,8 @@ service cloud.firestore {
           'status',
           'revision',
           'originalManuscriptUrl',
-          'revisionManuscripts'
+          'revisionManuscripts',
+          'revisionPackages'
         ]) &&
         authorStatusAndRevisionValid();
     }
