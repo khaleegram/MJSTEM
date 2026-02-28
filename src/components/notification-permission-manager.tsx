@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect } from 'react';
@@ -6,6 +7,8 @@ import { useToast } from '@/hooks/use-toast';
 import { getMessaging, getToken, isSupported } from 'firebase/messaging';
 import { app, db } from '@/lib/firebase';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 const PROMPT_DELAY = 5000; // 5 seconds after login
 const RE_PROMPT_INTERVAL = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -32,16 +35,13 @@ export function NotificationPermissionManager() {
         return; // User has already made a choice
       }
 
-      // Logic for smart re-prompting
       const lastPrompted = localStorage.getItem('lastNotificationPrompt');
       const now = new Date().getTime();
 
       if (lastPrompted && (now - parseInt(lastPrompted, 10) < RE_PROMPT_INTERVAL)) {
-        // It's too soon to ask again
         return;
       }
 
-      // Wait a few seconds before prompting
       setTimeout(async () => {
         try {
           const newPermission = await Notification.requestPermission();
@@ -59,16 +59,24 @@ export function NotificationPermissionManager() {
             if (currentToken) {
               const userDocRef = doc(db, 'users', user.uid);
               if (!userProfile.fcmTokens?.includes(currentToken)) {
-                await updateDoc(userDocRef, { fcmTokens: arrayUnion(currentToken) });
-                toast({ title: "Notifications Enabled!", description: "You will now receive push notifications for important updates." });
+                const updateData = { fcmTokens: arrayUnion(currentToken) };
+                updateDoc(userDocRef, updateData)
+                  .then(() => {
+                    toast({ title: "Notifications Enabled!", description: "You will now receive push notifications for important updates." });
+                  })
+                  .catch(async (serverError) => {
+                    const permissionError = new FirestorePermissionError({
+                      path: userDocRef.path,
+                      operation: 'update',
+                      requestResourceData: updateData,
+                    });
+                    errorEmitter.emit('permission-error', permissionError);
+                  });
               }
-            } else {
-              toast({ title: "Could not get notification token.", description: "Please try again.", variant: "destructive" });
             }
           }
         } catch (error: any) {
           console.error('An error occurred while handling notification permission: ', error);
-          toast({ title: "Error enabling notifications", description: error.message, variant: "destructive" });
         }
       }, PROMPT_DELAY);
     };
@@ -77,5 +85,5 @@ export function NotificationPermissionManager() {
 
   }, [user, userProfile, loading, toast]);
 
-  return null; // This component doesn't render anything
+  return null;
 }

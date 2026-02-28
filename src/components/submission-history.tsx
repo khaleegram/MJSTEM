@@ -7,8 +7,10 @@ import { db } from '@/lib/firebase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatDistanceToNow, isValid } from 'date-fns';
-import { BookCopy, Edit, UserCheck, MessageSquare, FileEdit, Icon } from 'lucide-react';
+import { BookCopy, Edit, UserCheck, MessageSquare, FileEdit } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 
 interface HistoryEvent {
@@ -36,8 +38,9 @@ export const SubmissionHistory = ({ submissionId }: { submissionId: string }) =>
             return;
         };
         
+        const historyCollectionRef = collection(db, 'submissions', submissionId, 'history');
         const historyQuery = query(
-            collection(db, 'submissions', submissionId, 'history'),
+            historyCollectionRef,
             orderBy('timestamp', 'desc')
         );
 
@@ -49,15 +52,18 @@ export const SubmissionHistory = ({ submissionId }: { submissionId: string }) =>
                     timestamp: data.timestamp?.toDate(),
                     ...data
                 } as HistoryEvent;
-            }).filter(event => event.timestamp && isValid(event.timestamp)); // Filter out events with invalid or missing timestamps
+            }).filter(event => event.timestamp && isValid(event.timestamp));
             setHistory(fetchedHistory);
             setLoading(false);
-        }, (error) => {
-            console.error("Error fetching history:", error);
+        }, (serverError) => {
+            const permissionError = new FirestorePermissionError({
+                path: historyCollectionRef.path,
+                operation: 'list',
+            });
+            errorEmitter.emit('permission-error', permissionError);
             setLoading(false);
         });
 
-        // Cleanup subscription on unmount
         return () => unsubscribe();
     }, [submissionId]);
 

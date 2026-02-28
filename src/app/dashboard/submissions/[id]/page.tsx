@@ -1,7 +1,8 @@
+
 'use client';
 
 import { notFound, useParams, useRouter } from 'next/navigation';
-import { doc, getDoc, updateDoc, arrayUnion, collection, addDoc, serverTimestamp, runTransaction, getDocs, query, where, writeBatch, setDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, arrayUnion, collection, addDoc, serverTimestamp, runTransaction, getDocs, query, where, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
   Card,
@@ -301,7 +302,12 @@ function AcceptInvitationCard({ submission, onAccept }: { submission: Submission
             toast({ title: "Invitation Accepted", description: "You can now access the full manuscript and submit your review." });
             onAccept();
         } catch (error: any) {
-            toast({ title: "Failed to Accept", description: error.message, variant: "destructive" });
+            const permissionError = new FirestorePermissionError({
+                path: submissionRef.path,
+                operation: 'write',
+                requestResourceData: { action: 'accept_invitation' }
+            });
+            errorEmitter.emit('permission-error', permissionError);
         } finally {
             setIsAccepting(false);
         }
@@ -555,7 +561,6 @@ export default function SubmissionDetailPage() {
   const isEditor = userProfile?.role === 'Editor' || userProfile?.role === 'Admin' || userProfile?.role === 'Managing Editor';
   const userEmail = user?.email?.toLowerCase().trim();
   
-  // Resilient author identification (handles imported papers and UID transitions)
   const isAuthor = userProfile?.uid === submission?.author.id || 
                    (userEmail && submission?.author.email && userEmail === submission.author.email.toLowerCase().trim());
   
@@ -812,11 +817,17 @@ export default function SubmissionDetailPage() {
     const submissionRef = doc(db, 'submissions', submission.id);
     try {
         const newId = await getNextSubmissionId();
-        await updateDoc(submissionRef, { uniqueId: newId });
+        const updateData = { uniqueId: newId };
+        await updateDoc(submissionRef, updateData);
         toast({ title: "ID Assigned", description: newId });
         setRefetchTrigger(prev => prev + 1);
-    } catch (e) { 
-        toast({ title: "Error", variant: "destructive" }); 
+    } catch (error: any) { 
+        const permissionError = new FirestorePermissionError({
+            path: submissionRef.path,
+            operation: 'update',
+            requestResourceData: { action: 'assign_id' }
+        });
+        errorEmitter.emit('permission-error', permissionError);
     }
     finally { setIsUpdating(false); }
   };
@@ -826,15 +837,16 @@ export default function SubmissionDetailPage() {
     setIsUpdating(true);
     const newAttachment = { url, name: name || 'Uploaded File', uploadedAt: new Date() };
     const submissionRef = doc(db, 'submissions', submission.id);
+    const updateData = { editorAttachments: arrayUnion(newAttachment) };
     
-    updateDoc(submissionRef, { editorAttachments: arrayUnion(newAttachment) })
+    updateDoc(submissionRef, updateData)
         .then(async () => {
             toast({ title: "File Shared with Author" });
             sendAttachmentNotificationEmail({ authorEmail: submission.author.email, authorName: submission.author.name, editorName: userProfile.displayName, submissionId: submission.id, manuscriptTitle: submission.title, fileName: newAttachment.name });
             setRefetchTrigger(p => p + 1);
         })
         .catch(async (serverError) => { 
-            const permissionError = new FirestorePermissionError({ path: submissionRef.path, operation: 'update', requestResourceData: { editorAttachments: 'arrayUnion(...)' } } satisfies SecurityRuleContext);
+            const permissionError = new FirestorePermissionError({ path: submissionRef.path, operation: 'update', requestResourceData: updateData } satisfies SecurityRuleContext);
             errorEmitter.emit('permission-error', permissionError); 
         })
         .finally(() => { setIsUpdating(false); });
