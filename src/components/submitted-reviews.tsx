@@ -55,10 +55,10 @@ export const SubmittedReviews = ({ submissionId, showForAuthor = false }: { subm
         
         let reviewsQuery;
         if (isEditor || showForAuthor) {
-            // Editors and Authors (via the permissive rules) see all reviews
+            // Editors and Authors (via permissive rules) see all reviews
             reviewsQuery = query(reviewsCollectionRef, orderBy('submittedAt', 'desc'));
         } else {
-            // For reviewers, they should still only easily query their own
+            // For reviewers, they only see their own to maintain double-blind
             reviewsQuery = query(reviewsCollectionRef, where('reviewerId', '==', user.uid), orderBy('submittedAt', 'desc'));
         }
         

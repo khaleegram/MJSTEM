@@ -192,8 +192,8 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
                         context: { reviewerName: userProfile?.displayName || 'A reviewer', action: 'updated' }
                     });
                     toast({ 
-                        title: "Review Updated Successfully!", 
-                        description: "Your changes have been saved and the editor has been updated.",
+                        title: "Done! Review Updated", 
+                        description: "Your changes have been saved successfully.",
                         className: "bg-green-600 text-white border-none"
                     });
                     setIsEditing(false);
@@ -242,7 +242,7 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
                     
                     toast({ 
                         title: "Done! Review Submitted", 
-                        description: "Your expert report has been received. Thank you for your contribution.",
+                        description: "Your expert report has been received. Thank you.",
                         className: "bg-green-600 text-white border-none"
                     });
                     onReviewSubmit();
@@ -568,8 +568,7 @@ function PageCountDialog({ submission, onUpdate }: { submission: Submission; onU
         updateDoc(submissionRef, updateData)
             .then(() => {
                 toast({ 
-                    title: "Updated!", 
-                    description: "Page count saved.",
+                    title: "Done! Page count updated", 
                     className: "bg-green-600 text-white border-none"
                 });
                 onUpdate();
@@ -715,8 +714,8 @@ export default function SubmissionDetailPage() {
             await generateNotification({ userId: submission.author.id, submissionId: submission.id, eventType: 'STATUS_CHANGED', context: { status, submissionTitle: submission.title } });
             await sendDecisionEmail({ authorEmail: submission.author.email, authorName: submission.author.name, manuscriptTitle: submission.title, submissionId: submission.id, uniqueId: submission.uniqueId, decision: status });
             toast({ 
-                title: "Decision Recorded!", 
-                description: `Author has been notified of the '${status}' status.`,
+                title: "Done! Decision Recorded", 
+                description: `Status updated to '${status}'.`,
                 className: "bg-green-600 text-white border-none"
             });
             setRefetchTrigger(prev => prev + 1);
@@ -737,8 +736,8 @@ export default function SubmissionDetailPage() {
     })
     .then(() => {
         toast({ 
-            title: "Submission Deleted", 
-            description: "The manuscript has been withdrawn.",
+            title: "Submission Withdrawn", 
+            description: "The manuscript has been permanently removed.",
             className: "bg-red-600 text-white border-none"
         });
         router.push('/dashboard/author');
@@ -768,8 +767,8 @@ export default function SubmissionDetailPage() {
             generateNotification({ userId: reviewer.uid, submissionId: submission.id, eventType: 'REVIEWER_ASSIGNED', context: { submissionTitle: submission.title } });
             sendReviewerAssignmentEmail({ reviewerEmail: reviewer.email, reviewerName: reviewer.displayName, manuscriptTitle: submission.title, submissionId: submission.id });
             toast({ 
-                title: "Reviewer Assigned!", 
-                description: `${reviewer.displayName} has been notified.`,
+                title: "Done! Reviewer Assigned", 
+                description: `${reviewer.displayName} has been added.`,
                 className: "bg-green-600 text-white border-none"
             });
             setRefetchTrigger(prev => prev + 1);
@@ -833,8 +832,8 @@ export default function SubmissionDetailPage() {
         await sendReviewerInvitationEmail({ reviewerEmail: values.email, reviewerName: values.name, manuscriptTitle: submission.title, submissionId: submission.id });
         
         toast({ 
-            title: "Invitation Sent!", 
-            description: "Reviewer has been invited via email.",
+            title: "Done! Invitation Sent", 
+            description: `Reviewer ${values.name} has been invited.`,
             className: "bg-green-600 text-white border-none"
         });
         inviteForm.reset();
@@ -888,8 +887,7 @@ export default function SubmissionDetailPage() {
         await batch.commit();
         await logSubmissionEvent({ submissionId: submission.id, eventType: 'STATUS_CHANGED', context: { actorName: userProfile.displayName, status: `Reviewer Removed (${reviewer.email})` } });
         toast({ 
-            title: "Reviewer Removed", 
-            description: "The assignment has been canceled.",
+            title: "Done! Reviewer Removed", 
             className: "bg-orange-600 text-white border-none"
         });
         setRefetchTrigger(prev => prev + 1);
@@ -914,8 +912,8 @@ export default function SubmissionDetailPage() {
         const updateData = { uniqueId: newId };
         await updateDoc(submissionRef, updateData);
         toast({ 
-            title: "ID Assigned!", 
-            description: `New ID: ${newId}`,
+            title: "Done! ID Assigned", 
+            description: `ID: ${newId}`,
             className: "bg-green-600 text-white border-none"
         });
         setRefetchTrigger(prev => prev + 1);
@@ -939,8 +937,8 @@ export default function SubmissionDetailPage() {
     updateDoc(submissionRef, updateData)
         .then(async () => {
             toast({ 
-                title: "File Shared!", 
-                description: "The author has been notified of the attachment.",
+                title: "Done! File Shared", 
+                description: "Author has been notified.",
                 className: "bg-green-600 text-white border-none"
             });
             sendAttachmentNotificationEmail({ authorEmail: submission.author.email, authorName: submission.author.name, editorName: userProfile.displayName, submissionId: submission.id, manuscriptTitle: submission.title, fileName: newAttachment.name });
