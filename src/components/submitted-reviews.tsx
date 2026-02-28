@@ -54,11 +54,11 @@ export const SubmittedReviews = ({ submissionId, showForAuthor = false }: { subm
         const reviewsCollectionRef = collection(db, 'submissions', submissionId, 'reviews');
         
         let reviewsQuery;
+        // In permissive mode, the query filter doesn't strictly matter for security,
+        // but it's kept for logical clarity in the UI.
         if (isEditor || showForAuthor) {
-            // Editors and Authors (via permissive rules) see all reviews
             reviewsQuery = query(reviewsCollectionRef, orderBy('submittedAt', 'desc'));
         } else {
-            // For reviewers, they only see their own to maintain double-blind
             reviewsQuery = query(reviewsCollectionRef, where('reviewerId', '==', user.uid), orderBy('submittedAt', 'desc'));
         }
         
@@ -90,9 +90,7 @@ export const SubmittedReviews = ({ submissionId, showForAuthor = false }: { subm
     
     const reviewerIdToAnonymousNameMap = useMemo(() => {
         if (!showForAuthor) return new Map();
-        
         const uniqueReviewerIds = Array.from(new Set(reviews.map(review => review.reviewerId)));
-        
         const map = new Map<string, string>();
         uniqueReviewerIds.forEach((id, index) => {
             map.set(id, `Reviewer #${index + 1}`);
