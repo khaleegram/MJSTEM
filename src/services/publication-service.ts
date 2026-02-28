@@ -1,7 +1,10 @@
+'use client';
 
 import { collection, getDocs, query, orderBy, limit, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Volume, Issue, Article } from '@/types';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 // Define a new type that includes the volume title with the issue.
 export interface IssueWithVolume extends Issue {
@@ -9,76 +12,76 @@ export interface IssueWithVolume extends Issue {
 }
 
 export async function getLatestIssue(): Promise<IssueWithVolume | null> {
-    try {
-        // Find the most recent volume by year, then by title or another field if year is not enough
-        const volumeQuery = query(collection(db, 'volumes'), orderBy('year', 'desc'), limit(1));
-        const volumeSnapshot = await getDocs(volumeQuery);
+    const volumeCollectionRef = collection(db, 'volumes');
+    const volumeQuery = query(volumeCollectionRef, orderBy('year', 'desc'), limit(1));
 
-        if (volumeSnapshot.empty) {
-            console.log("No volumes found.");
-            return null;
-        }
-
-        const latestVolumeDoc = volumeSnapshot.docs[0];
-        const latestVolume = { id: latestVolumeDoc.id, ...latestVolumeDoc.data() } as Volume;
-        
-        // Check if there are any issues in this volume and if they have articles
-        if (!latestVolume.issues || latestVolume.issues.length === 0) {
-            console.log("Latest volume has no issues.");
-            return null;
-        }
-        
-        // Find the latest issue that actually has articles
-        // We iterate backwards from the last issue added
-        for (let i = latestVolume.issues.length - 1; i >= 0; i--) {
-            const issue = latestVolume.issues[i];
-            if (issue.articles && issue.articles.length > 0) {
-                 return {
-                    ...issue,
-                    volumeTitle: latestVolume.title,
-                };
+    return getDocs(volumeQuery)
+        .then((volumeSnapshot) => {
+            if (volumeSnapshot.empty) {
+                return null;
             }
-        }
-        
-        console.log("No issues with articles found in the latest volume.");
-        return null;
 
-
-    } catch (error) {
-        console.error("Error fetching latest issue:", error);
-        return null;
-    }
+            const latestVolumeDoc = volumeSnapshot.docs[0];
+            const latestVolume = { id: latestVolumeDoc.id, ...latestVolumeDoc.data() } as Volume;
+            
+            if (!latestVolume.issues || latestVolume.issues.length === 0) {
+                return null;
+            }
+            
+            for (let i = latestVolume.issues.length - 1; i >= 0; i--) {
+                const issue = latestVolume.issues[i];
+                if (issue.articles && issue.articles.length > 0) {
+                     return {
+                        ...issue,
+                        volumeTitle: latestVolume.title,
+                    };
+                }
+            }
+            return null;
+        })
+        .catch(async (serverError) => {
+            const permissionError = new FirestorePermissionError({
+                path: volumeCollectionRef.path,
+                operation: 'list',
+            });
+            errorEmitter.emit('permission-error', permissionError);
+            return null;
+        });
 }
 
 export async function getFeaturedArticles(): Promise<Article[]> {
-    try {
-        const articlesQuery = query(
-            collection(db, 'submissions'),
-            where('status', '==', 'Accepted'),
-            orderBy('submittedAt', 'desc'),
-            limit(3)
-        );
+    const submissionsCollectionRef = collection(db, 'submissions');
+    const articlesQuery = query(
+        submissionsCollectionRef,
+        where('status', '==', 'Accepted'),
+        orderBy('submittedAt', 'desc'),
+        limit(3)
+    );
 
-        const articlesSnapshot = await getDocs(articlesQuery);
+    return getDocs(articlesQuery)
+        .then((articlesSnapshot) => {
+            if (articlesSnapshot.empty) {
+                return [];
+            }
 
-        if (articlesSnapshot.empty) {
+            return articlesSnapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    title: data.title,
+                    contributors: data.contributors,
+                    manuscriptUrl: data.manuscriptUrl,
+                    authorName: data.author.name,
+                    uniqueId: data.uniqueId
+                } as Article;
+            });
+        })
+        .catch(async (serverError) => {
+            const permissionError = new FirestorePermissionError({
+                path: submissionsCollectionRef.path,
+                operation: 'list',
+            });
+            errorEmitter.emit('permission-error', permissionError);
             return [];
-        }
-
-        return articlesSnapshot.docs.map(doc => {
-            const data = doc.data();
-            return {
-                id: doc.id,
-                title: data.title,
-                contributors: data.contributors,
-                manuscriptUrl: data.manuscriptUrl,
-                authorName: data.author.name,
-                uniqueId: data.uniqueId
-            } as Article;
         });
-
-    } catch (error) {
-        console.error("Error fetching featured articles:", error);
-        return [];
-    }
 }

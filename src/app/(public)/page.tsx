@@ -1,61 +1,85 @@
-import { PublicHeader } from '@/components/public-header';
-import { getLatestIssue, getFeaturedArticles } from '@/services/publication-service';
+'use client';
+
+import { useEffect, useState } from 'react';
+import { getLatestIssue, getFeaturedArticles, IssueWithVolume } from '@/services/publication-service';
 import { doc, getDoc, collection, getDocs, orderBy, query } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { IndexingService } from '@/types';
+import { IndexingService, Article } from '@/types';
 import { HomePageClient } from '@/components/home-page-client';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
-export const dynamic = 'force-dynamic';
+export default function HomePage() {
+  const [latestIssue, setLatestIssue] = useState<IssueWithVolume | null>(null);
+  const [featuredArticles, setFeaturedArticles] = useState<Article[]>([]);
+  const [journalInfo, setJournalInfo] = useState<{ coverLetterUrl?: string, submissionTemplateUrl?: string }>({});
+  const [indexingServices, setIndexingServices] = useState<IndexingService[]>([]);
+  const [loading, setLoading] = useState(true);
 
-export default async function HomePage() {
-  let latestIssue = null;
-  let featuredArticles: any[] = [];
-  let journalInfo: { coverLetterUrl?: string, submissionTemplateUrl?: string } = {};
-  let indexingServices: IndexingService[] = [];
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      
+      // These functions now have internal error handling/emitting using FirestorePermissionError
+      getLatestIssue().then(setLatestIssue);
+      getFeaturedArticles().then(setFeaturedArticles);
 
-  try {
-    // Fetch publication data
-    latestIssue = await getLatestIssue();
-    featuredArticles = await getFeaturedArticles();
+      // Fetch branding and settings
+      const journalInfoRef = doc(db, 'settings', 'journalInfo');
+      getDoc(journalInfoRef)
+        .then((docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                setJournalInfo({
+                    coverLetterUrl: data.coverLetterUrl,
+                    submissionTemplateUrl: data.submissionTemplateUrl,
+                });
+            }
+        })
+        .catch(async (serverError) => {
+            const permissionError = new FirestorePermissionError({
+                path: journalInfoRef.path,
+                operation: 'get',
+            });
+            errorEmitter.emit('permission-error', permissionError);
+        });
+      
+      const indexingCollectionRef = collection(db, 'indexingServices');
+      const indexingQuery = query(indexingCollectionRef, orderBy('order'));
+      getDocs(indexingQuery)
+        .then((indexingSnapshot) => {
+            const services = indexingSnapshot.docs.map(doc => {
+                const data = doc.data();
+                return { 
+                    id: doc.id, 
+                    name: data.name,
+                    logoUrl: data.logoUrl,
+                    order: data.order 
+                } as IndexingService;
+            });
+            setIndexingServices(services);
+        })
+        .catch(async (serverError) => {
+            const permissionError = new FirestorePermissionError({
+                path: indexingCollectionRef.path,
+                operation: 'list',
+            });
+            errorEmitter.emit('permission-error', permissionError);
+        })
+        .finally(() => {
+            setLoading(false);
+        });
+    };
 
-    // Fetch branding and settings
-    const journalInfoRef = doc(db, 'settings', 'journalInfo');
-    const journalInfoSnap = await getDoc(journalInfoRef);
-    if (journalInfoSnap.exists()) {
-      const data = journalInfoSnap.data();
-      journalInfo = {
-        coverLetterUrl: data.coverLetterUrl,
-        submissionTemplateUrl: data.submissionTemplateUrl,
-      };
-    }
-    
-    const indexingQuery = query(collection(db, 'indexingServices'), orderBy('order'));
-    const indexingSnapshot = await getDocs(indexingQuery);
-    indexingServices = indexingSnapshot.docs.map(doc => {
-        const data = doc.data();
-        return { 
-            id: doc.id, 
-            name: data.name,
-            logoUrl: data.logoUrl,
-            order: data.order 
-        } as IndexingService;
-    });
-  } catch (e) {
-    console.error("Could not fetch page data", e);
-  }
-
-  // Ensure all data is plain serializable objects for Client Components to prevent JSON.parse errors
-  const serializableLatestIssue = latestIssue ? JSON.parse(JSON.stringify(latestIssue)) : null;
-  const serializableFeaturedArticles = JSON.parse(JSON.stringify(featuredArticles));
-  const serializableJournalInfo = JSON.parse(JSON.stringify(journalInfo));
-  const serializableIndexingServices = JSON.parse(JSON.stringify(indexingServices));
+    fetchData();
+  }, []);
 
   return (
     <HomePageClient
-      latestIssue={serializableLatestIssue}
-      featuredArticles={serializableFeaturedArticles}
-      journalInfo={serializableJournalInfo}
-      indexingServices={serializableIndexingServices}
+      latestIssue={latestIssue}
+      featuredArticles={featuredArticles}
+      journalInfo={journalInfo}
+      indexingServices={indexingServices}
     />
   );
 }
