@@ -15,7 +15,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { User, Calendar, PlusCircle, Download, BookText, Edit, MessageSquare, Shield, Clock, CheckCircle2, Info, Paperclip, Trash2, CheckCircle } from 'lucide-react';
+import { User, Calendar, PlusCircle, Download, BookText, Edit, MessageSquare, Shield, Clock, CheckCircle2, Info, Paperclip, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { SubmissionStatus, Submission, UserProfile } from '@/types';
 import React from 'react';
@@ -28,7 +28,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { SubmittedReviews } from '@/components/submitted-reviews';
 import { SubmissionHistory } from '@/components/submission-history';
 import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
+import { FirestorePermissionError } from '@/firebase/errors';
 import { logSubmissionEvent } from '@/ai/flows/log-submission-event';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { FileUploader } from '@/components/file-uploader';
@@ -192,8 +192,8 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
                         context: { reviewerName: userProfile?.displayName || 'A reviewer', action: 'updated' }
                     });
                     toast({ 
-                        title: "Review Updated!", 
-                        description: "Your changes have been saved successfully.",
+                        title: "Review Updated Successfully!", 
+                        description: "Your changes have been saved and the editor has been updated.",
                         className: "bg-green-600 text-white border-none"
                     });
                     setIsEditing(false);
@@ -241,8 +241,8 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
                     });
                     
                     toast({ 
-                        title: "Review Submitted!", 
-                        description: "Your expert report has been received.",
+                        title: "Done! Review Submitted", 
+                        description: "Your expert report has been received. Thank you for your contribution.",
                         className: "bg-green-600 text-white border-none"
                     });
                     onReviewSubmit();
@@ -454,8 +454,8 @@ function AuthorRevisionForm({ submission, onRevisionSubmit }: { submission: Subm
                 });
 
                 toast({ 
-                    title: "Revision Submitted!", 
-                    description: "Your updated manuscript has been sent to the editor.",
+                    title: "Done! Revision Received", 
+                    description: "Your updated manuscript has been sent to the editor for review.",
                     className: "bg-green-600 text-white border-none"
                 });
                 onRevisionSubmit();
@@ -520,8 +520,8 @@ function AuthorEditForm({ submission, onUpdate, onCancel }: { submission: Submis
         updateDoc(submissionRef, updateData)
             .then(() => {
                 toast({ 
-                    title: "Changes Saved!", 
-                    description: "Manuscript details have been updated.",
+                    title: "Done! Changes Saved", 
+                    description: "Manuscript details have been updated successfully.",
                     className: "bg-green-600 text-white border-none"
                 });
                 onUpdate();
@@ -646,7 +646,7 @@ export default function SubmissionDetailPage() {
                    (userEmail && submission?.author.email && userEmail === submission.author.email.toLowerCase().trim());
   
   const isReviewer = submission?.reviewerIds?.includes(user?.uid || '') || 
-                     (userEmail && submission?.invitedReviewerEmails?.includes(userEmail));
+                     (userEmail && submission?.invitedReviewerEmails?.some(e => e.toLowerCase().trim() === userEmail));
 
   const needsToAcceptInvite = isReviewer && !submission?.reviewerIds?.includes(user?.uid || '');
 

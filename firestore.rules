@@ -31,6 +31,28 @@ service cloud.firestore {
     }
 
     // ===========================
+    // OWNERSHIP HELPERS
+    // ===========================
+    
+    function isAuthor(data) {
+      let uid = request.auth.uid;
+      let email = request.auth.token.get('email', '').lower();
+      let docAuthorId = data.get(['author', 'id'], '');
+      let docAuthorEmail = data.get(['author', 'email'], '').lower();
+      
+      return isSignedIn() && (uid == docAuthorId || (email != '' && email == docAuthorEmail));
+    }
+
+    function isAssignedReviewer(data) {
+      let uid = request.auth.uid;
+      let email = request.auth.token.get('email', '').lower();
+      let reviewerIds = data.get('reviewerIds', []);
+      let invitedEmails = data.get('invitedReviewerEmails', []);
+      
+      return isSignedIn() && (uid in reviewerIds || (email != '' && email in invitedEmails));
+    }
+
+    // ===========================
     // USERS COLLECTION
     // ===========================
     match /users/{userId} {
@@ -50,25 +72,6 @@ service cloud.firestore {
     // ===========================
     match /submissions/{submissionId} {
       
-      function isAuthor(data) {
-        let uid = request.auth.uid;
-        let email = request.auth.token.get('email', '').lower();
-        let authorObj = data.get('author', {});
-        let docId = authorObj.get('id', '');
-        let docEmail = authorObj.get('email', '').lower();
-        
-        return isSignedIn() && (uid == docId || (email != '' && email == docEmail));
-      }
-
-      function isAssignedReviewer(data) {
-        let uid = request.auth.uid;
-        let email = request.auth.token.get('email', '').lower();
-        let reviewerIds = data.get('reviewerIds', []);
-        let invitedEmails = data.get('invitedReviewerEmails', []);
-        
-        return isSignedIn() && (uid in reviewerIds || (email != '' && email in invitedEmails));
-      }
-
       allow get: if resource.data.status == 'Accepted' 
                  || (isSignedIn() && (isAuthor(resource.data) || isAssignedReviewer(resource.data) || isEditorialMember()));
       
@@ -112,9 +115,9 @@ service cloud.firestore {
 
     match /reviewInvitations/{inviteId} {
       allow list: if isSignedIn() && isEditorialMember();
-      allow get: if isSignedIn() && (isEditorialMember() || (request.auth.token.email != null && request.auth.token.email.lower() == resource.data.emailNorm));
+      allow get: if isSignedIn() && (isEditorialMember() || (request.auth.token.get('email', '').lower() == resource.data.emailNorm));
       allow create: if isSignedIn() && isEditorialMember();
-      allow update: if isSignedIn() && (isEditorialMember() || (request.auth.token.email != null && request.auth.token.email.lower() == resource.data.emailNorm));
+      allow update: if isSignedIn() && (isEditorialMember() || (request.auth.token.get('email', '').lower() == resource.data.emailNorm));
       allow delete: if isSignedIn() && (isAdmin());
     }
 
