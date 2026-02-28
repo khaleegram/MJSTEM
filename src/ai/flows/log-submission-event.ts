@@ -2,17 +2,12 @@
 'use server';
 /**
  * @fileOverview A flow for logging submission events to Firestore.
- *
- * - logSubmissionEvent - A function that creates a human-readable log entry for an event.
- * - LogEventInput - The input type for the logSubmissionEvent function.
+ * Now uses the Firebase Admin SDK to bypass security rules on the server.
  */
 
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
+import { adminDb } from '@/lib/firebase-admin';
+import * as admin from 'firebase-admin';
 import { z } from 'zod';
-import { Mail } from 'lucide-react';
 
 const LogEventInputSchema = z.object({
   submissionId: z.string(),
@@ -62,25 +57,22 @@ function generateLogDetails(input: LogEventInput): { message: string, icon: stri
 
 
 export async function logSubmissionEvent(input: LogEventInput): Promise<void> {
+  if (!adminDb) {
+      console.error("[Log Event] Admin DB not initialized.");
+      return;
+  }
+
   const { message, icon } = generateLogDetails(input);
   
-  const historyCollectionRef = collection(db, 'submissions', input.submissionId, 'history');
+  const historyCollectionRef = adminDb.collection('submissions').doc(input.submissionId).collection('history');
   
-  const historyData = {
-      message: message,
-      icon: icon,
-      timestamp: serverTimestamp(),
-  };
-
-  addDoc(historyCollectionRef, historyData)
-    .catch(serverError => {
-        const permissionError = new FirestorePermissionError({
-            path: historyCollectionRef.path,
-            operation: 'create',
-            requestResourceData: historyData,
-        });
-        errorEmitter.emit('permission-error', permissionError);
-    });
+  try {
+      await historyCollectionRef.add({
+          message: message,
+          icon: icon,
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      });
+  } catch (error) {
+      console.error("[Log Event] Failed to log event via Admin SDK:", error);
+  }
 }
-
-    

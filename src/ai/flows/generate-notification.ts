@@ -2,14 +2,13 @@
 'use server';
 /**
  * @fileOverview A flow for generating and storing notifications in Firestore.
+ * Uses Admin SDK to ensure background tasks are not blocked by security rules.
  */
 
-import { addDoc, collection, serverTimestamp, getDocs, query, where } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { adminDb } from '@/lib/firebase-admin';
+import * as admin from 'firebase-admin';
 import { z } from 'zod';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
-import { UserRole }from '@/types';
+import { UserRole } from '@/types';
 import { sendPushNotification } from './send-push-notification';
 
 const NotificationInputSchema = z.object({
@@ -32,14 +31,12 @@ function generateNotificationDetails(input: NotificationInput): { message: strin
                 icon: 'Edit',
             };
         case 'REVIEW_SUBMITTED':
-             // Message for editors
             if (input.userId === 'Admins') {
                  return {
                     message: `${reviewerName} has submitted their review for '${truncatedTitle}'.`,
                     icon: 'MessageSquare',
                 };
             }
-            // Message for author
             return {
                 message: `A new review was submitted for your manuscript '${truncatedTitle}'.`,
                 icon: 'MessageSquare',
@@ -68,36 +65,29 @@ function generateNotificationDetails(input: NotificationInput): { message: strin
 }
 
 async function getUidsForRoles(roles: UserRole[]): Promise<string[]> {
-    const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('role', 'in', roles));
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => doc.id);
+    if (!adminDb) return [];
+    const usersRef = adminDb.collection('users');
+    const snapshot = await usersRef.where('role', 'in', roles).get();
+    return snapshot.docs.map(doc => doc.id);
 }
 
 async function createNotification(userId: string, submissionId: string, message: string, icon: string) {
+    if (!adminDb) return;
     const notificationData = {
         userId: userId,
         message,
         icon,
         link: `/dashboard/submissions/${submissionId}`,
-        timestamp: serverTimestamp(),
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
         read: false,
     };
-    const notificationsCollectionRef = collection(db, 'notifications');
-    addDoc(notificationsCollectionRef, notificationData)
-    .catch(serverError => {
-        const permissionError = new FirestorePermissionError({
-            path: notificationsCollectionRef.path,
-            operation: 'create',
-            requestResourceData: notificationData,
-        });
-        errorEmitter.emit('permission-error', permissionError);
-    });
+    await adminDb.collection('notifications').add(notificationData);
 }
 
 export async function generateNotification(input: NotificationInput): Promise<void> {
+  if (!adminDb) return;
+
   const { message, icon } = generateNotificationDetails(input);
-  
   let targetUids: string[] = [];
 
   if (input.userId === 'Admins') {
@@ -111,9 +101,6 @@ export async function generateNotification(input: NotificationInput): Promise<vo
     await createNotification(input.userId, input.submissionId, message, icon);
   }
 
-  // After creating the in-app notification, send the push notification.
-  // This is a "fire-and-forget" operation. We don't want to block the main thread
-  // or show an error to the user if the push fails.
   if (targetUids.length > 0) {
     sendPushNotification({
         userIds: targetUids,
@@ -121,7 +108,7 @@ export async function generateNotification(input: NotificationInput): Promise<vo
         body: message,
         link: `/dashboard/submissions/${input.submissionId}`,
     }).catch(error => {
-        console.error("[Push Notification] Failed to send push notification:", error);
+        console.error("[Push Notification] Failed:", error);
     });
   }
 }

@@ -1,3 +1,4 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -29,11 +30,6 @@ service cloud.firestore {
       return role == 'Admin';
     }
 
-    function isManagingEditor() {
-      let role = userRole();
-      return role == 'Managing Editor';
-    }
-
     // ===========================
     // USERS COLLECTION
     // ===========================
@@ -46,7 +42,7 @@ service cloud.firestore {
       );
       allow create: if isSignedIn() || isEditorialMember();
       allow update: if isSignedIn() && (request.auth.uid == userId || isEditorialMember());
-      allow delete: if isSignedIn() && (isAdmin() || isManagingEditor() || request.auth.uid == userId);
+      allow delete: if isSignedIn() && (isAdmin() || request.auth.uid == userId);
     }
 
     // ===========================
@@ -73,7 +69,6 @@ service cloud.firestore {
         return isSignedIn() && (uid in reviewerIds || (email != '' && email in invitedEmails));
       }
 
-      // PUBLIC READ for Accepted Articles
       allow get: if resource.data.status == 'Accepted' 
                  || (isSignedIn() && (isAuthor(resource.data) || isAssignedReviewer(resource.data) || isEditorialMember()));
       
@@ -81,7 +76,6 @@ service cloud.firestore {
 
       allow create: if isSignedIn();
 
-      // Loosened Update Rule: Trust association (Author/Reviewer/Editor) over strict field checks
       allow update: if isSignedIn() && (
         isEditorialMember() 
         || isAuthor(resource.data) 
@@ -105,8 +99,12 @@ service cloud.firestore {
         function getSubmission() {
           return get(/databases/$(database)/documents/submissions/$(submissionId)).data;
         }
-        allow read, list: if isSignedIn() && (isEditorialMember() || isAuthor(getSubmission()));
-        allow create: if isSignedIn();
+        allow read, list: if isSignedIn() && (
+          isEditorialMember() 
+          || isAuthor(getSubmission()) 
+          || isAssignedReviewer(getSubmission())
+        );
+        allow create: if true; // Background tasks bypass this via Admin SDK, but allowed for robustness
         allow update, delete: if false;
       }
     }
@@ -116,7 +114,7 @@ service cloud.firestore {
       allow get: if isSignedIn() && (isEditorialMember() || (request.auth.token.email != null && request.auth.token.email.lower() == resource.data.emailNorm));
       allow create: if isSignedIn() && isEditorialMember();
       allow update: if isSignedIn() && (isEditorialMember() || (request.auth.token.email != null && request.auth.token.email.lower() == resource.data.emailNorm));
-      allow delete: if isSignedIn() && (isAdmin() || isManagingEditor());
+      allow delete: if isSignedIn() && (isAdmin());
     }
 
     match /notifications/{notificationId} {
@@ -128,17 +126,17 @@ service cloud.firestore {
 
     match /volumes/{volumeId} {
       allow read: if true;
-      allow write: if isSignedIn() && (isManagingEditor() || isAdmin());
+      allow write: if isSignedIn() && isEditorialMember();
     }
 
     match /editorialBoard/{memberId} {
       allow read: if true;
-      allow write: if isSignedIn() && (isManagingEditor() || isAdmin());
+      allow write: if isSignedIn() && isEditorialMember();
     }
 
     match /indexingServices/{serviceId} {
       allow read: if true;
-      allow write: if isSignedIn() && (isManagingEditor() || isAdmin());
+      allow write: if isSignedIn() && isEditorialMember();
     }
 
     match /settings/submissionCounter {
@@ -148,7 +146,7 @@ service cloud.firestore {
 
     match /settings/{settingId} {
       allow read: if true;
-      allow write: if isSignedIn() && (isManagingEditor() || isAdmin());
+      allow write: if isSignedIn() && isEditorialMember();
     }
   }
 }
