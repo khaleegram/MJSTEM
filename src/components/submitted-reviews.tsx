@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { collection, getDocs, orderBy, query, Timestamp, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, Timestamp, onSnapshot, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -41,19 +41,24 @@ const getRecommendationVariant = (recommendation: string) => {
 export const SubmittedReviews = ({ submissionId, showForAuthor = false }: { submissionId: string; showForAuthor?: boolean }) => {
     const [reviews, setReviews] = useState<Review[]>([]);
     const [loading, setLoading] = useState(true);
-    const { userProfile } = useAuth();
+    const { user, userProfile } = useAuth();
     const isEditor = userProfile?.role === 'Editor' || userProfile?.role === 'Admin' || userProfile?.role === 'Managing Editor';
 
     useEffect(() => {
-        if (!submissionId) {
+        if (!submissionId || !user) {
             setLoading(false);
             return;
         }
 
-        const reviewsQuery = query(
-            collection(db, 'submissions', submissionId, 'reviews'),
-            orderBy('submittedAt', 'desc')
-        );
+        const reviewsCollectionRef = collection(db, 'submissions', submissionId, 'reviews');
+        
+        let reviewsQuery;
+        if (isEditor || showForAuthor) {
+            reviewsQuery = query(reviewsCollectionRef, orderBy('submittedAt', 'desc'));
+        } else {
+            // For reviewers, they can only query their own documents due to security rules
+            reviewsQuery = query(reviewsCollectionRef, where('reviewerId', '==', user.uid), orderBy('submittedAt', 'desc'));
+        }
         
         const unsubscribe = onSnapshot(reviewsQuery, (querySnapshot) => {
             const fetchedReviews = querySnapshot.docs.map(doc => {
@@ -79,12 +84,11 @@ export const SubmittedReviews = ({ submissionId, showForAuthor = false }: { subm
         });
 
         return () => unsubscribe();
-    }, [submissionId]);
+    }, [submissionId, user, isEditor, showForAuthor]);
     
     const reviewerIdToAnonymousNameMap = useMemo(() => {
         if (!showForAuthor) return new Map();
         
-        // Get unique reviewer IDs from the reviews list
         const uniqueReviewerIds = Array.from(new Set(reviews.map(review => review.reviewerId)));
         
         const map = new Map<string, string>();
@@ -95,7 +99,7 @@ export const SubmittedReviews = ({ submissionId, showForAuthor = false }: { subm
     }, [reviews, showForAuthor]);
 
 
-    if (!isEditor && !showForAuthor) {
+    if (!isEditor && !showForAuthor && reviews.length === 0 && !loading) {
         return null;
     }
 
@@ -134,15 +138,16 @@ export const SubmittedReviews = ({ submissionId, showForAuthor = false }: { subm
     return (
         <Card>
             <CardHeader>
-                <CardTitle className="font-headline">{showForAuthor ? "Reviewer Comments" : "Submitted Reviews"}</CardTitle>
-                <CardDescription>{showForAuthor ? "Feedback from reviewers to guide your revision." : "Feedback from the assigned peer reviewers."}</CardDescription>
+                <CardTitle className="font-headline">{showForAuthor ? "Reviewer Comments" : "Your Feedback & Reports"}</CardTitle>
+                <CardDescription>{showForAuthor ? "Feedback from reviewers to guide your revision." : "View the feedback provided during the peer-review process."}</CardDescription>
             </CardHeader>
             <CardContent>
                 <Accordion type="single" collapsible className="w-full" defaultValue='item-0'>
                     {reviews.map((review, index) => {
+                        const isMyReview = review.reviewerId === user?.uid;
                         const reviewerName = showForAuthor 
                             ? reviewerIdToAnonymousNameMap.get(review.reviewerId) || `Reviewer #${index + 1}`
-                            : review.reviewerName;
+                            : isMyReview ? "Your Review" : review.reviewerName;
 
                         return (
                          <AccordionItem value={`item-${index}`} key={review.id}>
@@ -152,12 +157,12 @@ export const SubmittedReviews = ({ submissionId, showForAuthor = false }: { subm
                                         <User className="w-4 h-4" />
                                         <span>Review from {reviewerName}</span>
                                     </div>
-                                    {!showForAuthor && <Badge variant={getRecommendationVariant(review.recommendation)}>{review.recommendation}</Badge>}
+                                    {(!showForAuthor || isMyReview) && <Badge variant={getRecommendationVariant(review.recommendation)}>{review.recommendation}</Badge>}
                                </div>
                             </AccordionTrigger>
                             <AccordionContent className="space-y-6 pt-4">
                                 <p className='text-xs text-muted-foreground'>Submitted on {format(review.submittedAt, 'PPP')}</p>
-                                {!showForAuthor && review.commentsForEditor && (
+                                {(isEditor || isMyReview) && review.commentsForEditor && (
                                      <div>
                                         <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
                                             <Shield className="w-4 h-4" />
@@ -175,7 +180,7 @@ export const SubmittedReviews = ({ submissionId, showForAuthor = false }: { subm
                                         <p className="text-sm text-muted-foreground border p-3 rounded-md">{review.commentsForAuthor}</p>
                                     </div>
                                )}
-                               {!showForAuthor && review.attachmentUrl && (
+                               {(isEditor || isMyReview) && review.attachmentUrl && (
                                     <div>
                                         <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
                                             <Paperclip className="w-4 h-4" />

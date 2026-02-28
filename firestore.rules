@@ -92,7 +92,8 @@ service cloud.firestore {
         allow list, read: if (getSubmission().status == 'Accepted') 
                           || (isSignedIn() && (isEditorialMember() || isAuthor(getSubmission()) || request.auth.uid == resource.data.reviewerId));
         allow create: if isSignedIn();
-        allow update, delete: if isSignedIn() && isEditorialMember();
+        allow update: if isSignedIn() && (isEditorialMember() || request.auth.uid == resource.data.reviewerId);
+        allow delete: if isSignedIn() && isEditorialMember();
       }
 
       match /history/{historyId} {
@@ -104,7 +105,7 @@ service cloud.firestore {
           || isAuthor(getSubmission()) 
           || isAssignedReviewer(getSubmission())
         );
-        allow create: if true; // Background tasks bypass this via Admin SDK, but allowed for robustness
+        allow create: if true;
         allow update, delete: if false;
       }
     }

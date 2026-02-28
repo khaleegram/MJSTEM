@@ -47,13 +47,13 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog"
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { sendReviewerAssignmentEmail } from '@/ai/flows/send-reviewer-assignment-email';
 import { sendDecisionEmail } from '@/ai/flows/send-decision-email';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { sendReviewerInvitationEmail } from '@/ai/flows/send-reviewer-invitation-email';
 import { sendAttachmentNotificationEmail } from '@/ai/flows/send-attachment-notification-email';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
 const inviteReviewerSchema = z.object({
     name: z.string().min(2, 'Reviewer name is required.'),
@@ -108,19 +108,57 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
     const { user, userProfile } = useAuth();
     const { toast } = useToast();
     const [isSubmitting, setIsSubmitting] = React.useState(false);
+    const [reviewId, setReviewId] = React.useState<string | null>(null);
     const [recommendation, setRecommendation] = React.useState('');
     const [commentsForEditor, setCommentsForEditor] = React.useState('');
     const [commentsForAuthor, setCommentsForAuthor] = React.useState('');
     const [attachmentUrl, setAttachmentUrl] = React.useState('');
     const [attachmentName, setAttachmentName] = React.useState('');
+    const [isEditing, setIsEditing] = React.useState(false);
 
     const userEmail = user?.email?.toLowerCase().trim();
     const myReviewAssignment = submission.reviewers?.find(r => 
         r.id === user?.uid || (userEmail && r.email?.toLowerCase().trim() === userEmail)
     );
 
-    if (!myReviewAssignment || myReviewAssignment.status === 'Review Submitted' || myReviewAssignment.status === 'Invited') {
+    React.useEffect(() => {
+        if (!user || !submission.id) return;
+        
+        const reviewsRef = collection(db, 'submissions', submission.id, 'reviews');
+        const q = query(reviewsRef, where('reviewerId', '==', user.uid));
+        
+        getDocs(q).then(snapshot => {
+            if (!snapshot.empty) {
+                const reviewDoc = snapshot.docs[0];
+                const data = reviewDoc.data();
+                setReviewId(reviewDoc.id);
+                setRecommendation(data.recommendation || '');
+                setCommentsForEditor(data.commentsForEditor || '');
+                setCommentsForAuthor(data.commentsForAuthor || '');
+                setAttachmentUrl(data.attachmentUrl || '');
+                setAttachmentName(data.attachmentName || '');
+            }
+        }).catch(err => console.error("Error fetching existing review:", err));
+    }, [user, submission.id]);
+
+    if (!myReviewAssignment || myReviewAssignment.status === 'Invited') {
         return null;
+    }
+
+    const isSubmitted = myReviewAssignment.status === 'Review Submitted';
+
+    if (isSubmitted && !isEditing) {
+        return (
+            <Card>
+                <CardHeader>
+                    <CardTitle className="font-headline">Review Submitted</CardTitle>
+                    <CardDescription>You have successfully submitted your review for this manuscript. You can update your feedback if needed.</CardDescription>
+                </CardHeader>
+                <CardFooter>
+                    <Button variant="outline" onClick={() => setIsEditing(true)}>Edit Your Review</Button>
+                </CardFooter>
+            </Card>
+        );
     }
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -143,59 +181,79 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
         };
 
         const submissionRef = doc(db, 'submissions', submission.id);
-        const reviewRef = collection(db, 'submissions', submission.id, 'reviews');
+        
+        if (reviewId) {
+            const reviewRef = doc(db, 'submissions', submission.id, 'reviews', reviewId);
+            updateDoc(reviewRef, reviewData)
+                .then(async () => {
+                    await logSubmissionEvent({
+                        submissionId: submission.id,
+                        eventType: 'REVIEW_SUBMITTED',
+                        context: { reviewerName: userProfile?.displayName || 'A reviewer', action: 'updated' }
+                    });
+                    toast({ title: "Review Updated" });
+                    setIsEditing(false);
+                    onReviewSubmit();
+                })
+                .catch(async (serverError) => {
+                    errorEmitter.emit('permission-error', new FirestorePermissionError({
+                        path: reviewRef.path,
+                        operation: 'update',
+                        requestResourceData: reviewData
+                    }));
+                })
+                .finally(() => setIsSubmitting(false));
+        } else {
+            const reviewsCollectionRef = collection(db, 'submissions', submission.id, 'reviews');
+            addDoc(reviewsCollectionRef, reviewData)
+                .then(async () => {
+                    const updatedReviewers = submission.reviewers?.map(r => {
+                        const isMe = r.id === user?.uid || (userEmail && r.email?.toLowerCase().trim() === userEmail);
+                        return isMe ? { ...r, id: user?.uid, status: 'Review Submitted' as const } : r;
+                    });
+                    await updateDoc(submissionRef, { reviewers: updatedReviewers });
 
-        addDoc(reviewRef, reviewData)
-            .then(async () => {
-                const updatedReviewers = submission.reviewers?.map(r => {
-                    const isMe = r.id === user?.uid || (userEmail && r.email?.toLowerCase().trim() === userEmail);
-                    return isMe ? { ...r, id: user?.uid, status: 'Review Submitted' as const } : r;
-                });
-                await updateDoc(submissionRef, { reviewers: updatedReviewers });
+                    await logSubmissionEvent({
+                        submissionId: submission.id,
+                        eventType: 'REVIEW_SUBMITTED',
+                        context: { reviewerName: userProfile?.displayName || 'A reviewer' }
+                    });
+                    
+                    await generateNotification({
+                        userId: 'Admins',
+                        submissionId: submission.id,
+                        eventType: 'REVIEW_SUBMITTED',
+                        context: { 
+                            submissionTitle: submission.title,
+                            reviewerName: userProfile?.displayName || 'a reviewer'
+                        }
+                    });
 
-                await logSubmissionEvent({
-                    submissionId: submission.id,
-                    eventType: 'REVIEW_SUBMITTED',
-                    context: { reviewerName: userProfile?.displayName || 'A reviewer' }
-                });
-                
-                await generateNotification({
-                    userId: 'Admins',
-                    submissionId: submission.id,
-                    eventType: 'REVIEW_SUBMITTED',
-                    context: { 
-                        submissionTitle: submission.title,
-                        reviewerName: userProfile?.displayName || 'a reviewer'
-                    }
-                });
-
-                await generateNotification({
-                    userId: submission.author.id,
-                    submissionId: submission.id,
-                    eventType: 'REVIEW_SUBMITTED',
-                    context: { submissionTitle: submission.title }
-                });
-                
-                toast({ title: "Review Submitted", description: "The editor has been notified." });
-                onReviewSubmit();
-            })
-            .catch(async (serverError) => {
-                const permissionError = new FirestorePermissionError({
-                    path: reviewRef.path,
-                    operation: 'create',
-                    requestResourceData: reviewData
-                } satisfies SecurityRuleContext);
-                errorEmitter.emit('permission-error', permissionError);
-            })
-            .finally(() => {
-                setIsSubmitting(false);
-            });
+                    await generateNotification({
+                        userId: submission.author.id,
+                        submissionId: submission.id,
+                        eventType: 'REVIEW_SUBMITTED',
+                        context: { submissionTitle: submission.title }
+                    });
+                    
+                    toast({ title: "Review Submitted" });
+                    onReviewSubmit();
+                })
+                .catch(async (serverError) => {
+                    errorEmitter.emit('permission-error', new FirestorePermissionError({
+                        path: reviewsCollectionRef.path,
+                        operation: 'create',
+                        requestResourceData: reviewData
+                    }));
+                })
+                .finally(() => setIsSubmitting(false));
+        }
     }
 
     return (
         <Card id="review-form">
             <CardHeader>
-                <CardTitle className="font-headline">Submit Review Report</CardTitle>
+                <CardTitle className="font-headline">{reviewId ? 'Update Your Review' : 'Submit Review Report'}</CardTitle>
                 <CardDescription>Provide your expert recommendation and feedback.</CardDescription>
             </CardHeader>
             <form onSubmit={handleSubmit}>
@@ -252,10 +310,13 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
                         />
                     </div>
                 </CardContent>
-                <CardFooter>
+                <CardFooter className="gap-2">
                     <Button type="submit" disabled={isSubmitting}>
-                        {isSubmitting ? 'Submitting...' : 'Submit Report'}
+                        {isSubmitting ? 'Submitting...' : reviewId ? 'Update Review' : 'Submit Report'}
                     </Button>
+                    {isEditing && (
+                        <Button type="button" variant="ghost" onClick={() => setIsEditing(false)}>Cancel</Button>
+                    )}
                 </CardFooter>
             </form>
         </Card>
@@ -302,12 +363,11 @@ function AcceptInvitationCard({ submission, onAccept }: { submission: Submission
             toast({ title: "Invitation Accepted", description: "You can now access the full manuscript and submit your review." });
             onAccept();
         } catch (error: any) {
-            const permissionError = new FirestorePermissionError({
+            errorEmitter.emit('permission-error', new FirestorePermissionError({
                 path: submissionRef.path,
                 operation: 'write',
                 requestResourceData: { action: 'accept_invitation' }
-            });
-            errorEmitter.emit('permission-error', permissionError);
+            }));
         } finally {
             setIsAccepting(false);
         }
@@ -385,12 +445,11 @@ function AuthorRevisionForm({ submission, onRevisionSubmit }: { submission: Subm
                 onRevisionSubmit();
             })
             .catch(async (serverError) => {
-                const permissionError = new FirestorePermissionError({
+                errorEmitter.emit('permission-error', new FirestorePermissionError({
                     path: submissionRef.path,
                     operation: 'update',
                     requestResourceData: updateData
-                } satisfies SecurityRuleContext);
-                errorEmitter.emit('permission-error', permissionError);
+                }));
             })
             .finally(() => {
                 setIsSubmitting(false);
@@ -448,12 +507,11 @@ function AuthorEditForm({ submission, onUpdate, onCancel }: { submission: Submis
                 onUpdate();
             })
             .catch(async (serverError) => {
-                const permissionError = new FirestorePermissionError({
+                errorEmitter.emit('permission-error', new FirestorePermissionError({
                     path: submissionRef.path,
                     operation: 'update',
                     requestResourceData: updateData,
-                } satisfies SecurityRuleContext);
-                errorEmitter.emit('permission-error', permissionError);
+                }));
             })
             .finally(() => {
                 setIsSubmitting(false);
@@ -493,12 +551,11 @@ function PageCountDialog({ submission, onUpdate }: { submission: Submission; onU
                 onUpdate();
             })
             .catch(async (serverError) => {
-                const permissionError = new FirestorePermissionError({
+                errorEmitter.emit('permission-error', new FirestorePermissionError({
                     path: submissionRef.path,
                     operation: 'update',
                     requestResourceData: updateData,
-                } satisfies SecurityRuleContext);
-                errorEmitter.emit('permission-error', permissionError);
+                }));
             })
             .finally(() => {
                 setIsSaving(false);
@@ -581,11 +638,10 @@ export default function SubmissionDetailPage() {
                 setAvailableReviewers(list);
             })
             .catch(async (serverError) => {
-                const permissionError = new FirestorePermissionError({
+                errorEmitter.emit('permission-error', new FirestorePermissionError({
                     path: usersRef.path,
                     operation: 'list',
-                } satisfies SecurityRuleContext);
-                errorEmitter.emit('permission-error', permissionError);
+                }));
             });
     }
     fetchReviewers();
@@ -608,11 +664,10 @@ export default function SubmissionDetailPage() {
             }
         })
         .catch(async (serverError) => {
-            const permissionError = new FirestorePermissionError({
+            errorEmitter.emit('permission-error', new FirestorePermissionError({
                 path: docRef.path,
                 operation: 'get',
-            } satisfies SecurityRuleContext);
-            errorEmitter.emit('permission-error', permissionError);
+            }));
         })
         .finally(() => {
             setLoading(false);
@@ -639,8 +694,7 @@ export default function SubmissionDetailPage() {
             setRefetchTrigger(prev => prev + 1);
         })
         .catch(async (serverError) => {
-            const permissionError = new FirestorePermissionError({ path: submissionRef.path, operation: 'update', requestResourceData: updateData } satisfies SecurityRuleContext);
-            errorEmitter.emit('permission-error', permissionError);
+            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: submissionRef.path, operation: 'update', requestResourceData: updateData }));
         })
         .finally(() => {
             setIsUpdating(false);
@@ -658,8 +712,7 @@ export default function SubmissionDetailPage() {
         router.push('/dashboard/author');
     })
     .catch(async (serverError) => {
-        const permissionError = new FirestorePermissionError({ path: submissionRef.path, operation: 'delete' } satisfies SecurityRuleContext);
-        errorEmitter.emit('permission-error', permissionError);
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: submissionRef.path, operation: 'delete' }));
     });
   };
 
@@ -686,8 +739,7 @@ export default function SubmissionDetailPage() {
             setRefetchTrigger(prev => prev + 1);
         })
         .catch(async (serverError) => {
-            const permissionError = new FirestorePermissionError({ path: submissionRef.path, operation: 'update', requestResourceData: updateData } satisfies SecurityRuleContext);
-            errorEmitter.emit('permission-error', permissionError);
+            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: submissionRef.path, operation: 'update', requestResourceData: updateData }));
         })
         .finally(() => { setIsUpdating(false); });
   }
@@ -749,8 +801,7 @@ export default function SubmissionDetailPage() {
         setRefetchTrigger(prev => prev + 1);
 
     } catch (error: any) {
-        const permissionError = new FirestorePermissionError({ path: 'users or submissions', operation: 'write', requestResourceData: { email: emailNorm } });
-        errorEmitter.emit('permission-error', permissionError);
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: 'users or submissions', operation: 'write', requestResourceData: { email: emailNorm } }));
     } finally {
         setIsUpdating(false);
     }
@@ -800,12 +851,11 @@ export default function SubmissionDetailPage() {
         setRefetchTrigger(prev => prev + 1);
             
     } catch (error) {
-        const permissionError = new FirestorePermissionError({
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
             path: `submissions/${submission.id} or reviewInvitations`,
             operation: 'write',
             requestResourceData: { action: 'remove_reviewer', email: emailNorm }
-        });
-        errorEmitter.emit('permission-error', permissionError);
+        }));
     } finally {
         setIsUpdating(false);
     }
@@ -822,12 +872,11 @@ export default function SubmissionDetailPage() {
         toast({ title: "ID Assigned", description: newId });
         setRefetchTrigger(prev => prev + 1);
     } catch (error: any) { 
-        const permissionError = new FirestorePermissionError({
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
             path: submissionRef.path,
             operation: 'update',
             requestResourceData: { action: 'assign_id' }
-        });
-        errorEmitter.emit('permission-error', permissionError);
+        }));
     }
     finally { setIsUpdating(false); }
   };
@@ -846,8 +895,7 @@ export default function SubmissionDetailPage() {
             setRefetchTrigger(p => p + 1);
         })
         .catch(async (serverError) => { 
-            const permissionError = new FirestorePermissionError({ path: submissionRef.path, operation: 'update', requestResourceData: updateData } satisfies SecurityRuleContext);
-            errorEmitter.emit('permission-error', permissionError); 
+            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: submissionRef.path, operation: 'update', requestResourceData: updateData })); 
         })
         .finally(() => { setIsUpdating(false); });
   }
@@ -937,7 +985,7 @@ export default function SubmissionDetailPage() {
             <ReviewSubmissionForm submission={submission} onReviewSubmit={() => setRefetchTrigger(p => p + 1)} />
         )}
 
-        {(isEditor || (isAuthor && (needsRevision || submission.status.includes('Review')))) && <SubmittedReviews submissionId={submission.id} showForAuthor={isAuthor} />}
+        {(isEditor || (isAuthor && (needsRevision || submission.status.includes('Review'))) || (isReviewer && submission.reviewers?.some(r => r.id === user?.uid && r.status === 'Review Submitted'))) && <SubmittedReviews submissionId={submission.id} showForAuthor={isAuthor} />}
         {isAuthor && needsRevision && <AuthorRevisionForm submission={submission} onRevisionSubmit={() => setRefetchTrigger(p => p + 1)} />}
       </div>
 
