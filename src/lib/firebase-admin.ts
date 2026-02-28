@@ -1,23 +1,26 @@
-import { getApps, initializeApp, cert, App } from "firebase-admin/app";
+import { getApps, initializeApp, cert, applicationDefault, App } from "firebase-admin/app";
+import { existsSync } from "node:fs";
 import * as admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 
 let adminApp: App | undefined;
 const firebaseProjectId = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+const hasCredentialsFile = !!credentialsPath && existsSync(credentialsPath);
 const hasServiceAccountEnv =
   !!firebaseProjectId &&
   !!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL &&
   !!process.env.GOOGLE_PRIVATE_KEY;
 
-// ADC is typically present in managed GCP runtimes even without explicit service-account env vars.
-const hasRuntimeAdcHints =
-  !!process.env.GOOGLE_APPLICATION_CREDENTIALS ||
+// ADC is typically present in managed GCP runtimes; local ADC is valid only when the file exists.
+const hasGcpRuntimeHints =
   !!process.env.K_SERVICE ||
   !!process.env.FUNCTION_TARGET ||
   !!process.env.FUNCTION_NAME ||
   !!process.env.GAE_ENV;
+const hasRuntimeAdc = hasGcpRuntimeHints || hasCredentialsFile;
 
-const canUseAdminFirestore = hasServiceAccountEnv || hasRuntimeAdcHints;
+const canUseAdminFirestore = hasServiceAccountEnv || hasRuntimeAdc;
 
 if (!getApps().length) {
   try {
@@ -33,14 +36,23 @@ if (!getApps().length) {
             projectId: serviceAccount.projectId,
         });
         console.log("[Firebase Admin] Initialized with Service Account.");
+    } else if (hasRuntimeAdc) {
+        adminApp = initializeApp({
+            credential: applicationDefault(),
+            ...(firebaseProjectId ? { projectId: firebaseProjectId } : {}),
+        });
+        if (hasCredentialsFile) {
+          console.log("[Firebase Admin] Initialized with Application Default Credentials from GOOGLE_APPLICATION_CREDENTIALS.");
+        } else {
+          console.log("[Firebase Admin] Initialized with Application Default Credentials from GCP runtime.");
+        }
     } else if (firebaseProjectId) {
         // Local/dev mode: project ID is enough for auth token verification.
         adminApp = initializeApp({ projectId: firebaseProjectId });
-        if (hasRuntimeAdcHints) {
-          console.log("[Firebase Admin] Initialized with projectId and Application Default Credentials.");
-        } else {
-          console.warn("[Firebase Admin] Initialized without service account. Auth token verification is available, Firestore admin features may be disabled.");
+        if (credentialsPath && !hasCredentialsFile) {
+          console.warn(`[Firebase Admin] GOOGLE_APPLICATION_CREDENTIALS is set but file does not exist at: ${credentialsPath}`);
         }
+        console.warn("[Firebase Admin] Initialized without credentials. Auth token verification is available, Firestore admin features are disabled.");
     } else {
         // Fallback app init enables services such as auth token verification.
         adminApp = initializeApp();
