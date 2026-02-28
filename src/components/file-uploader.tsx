@@ -40,9 +40,10 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, value,
         onUploadError(new Error("Upload failed: No response from server."));
         return;
       };
+      const uploadedUrl = (res[0] as any).ufsUrl || (res[0] as any).ufssUrl || res[0].url;
       setFileName(res[0].name);
-      setLocalValue(res[0].url);
-      onUploadComplete(res[0].url, res[0].name);
+      setLocalValue(uploadedUrl);
+      onUploadComplete(uploadedUrl, res[0].name);
       setUploadProgress(0); // Reset progress
     },
     onUploadError,

@@ -3,32 +3,38 @@
 importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js');
 
-// Your web app's Firebase configuration
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
-};
+async function initMessaging() {
+  let firebaseConfig = null;
 
-// Initialize Firebase
-firebase.initializeApp(firebaseConfig);
+  // On Firebase Hosting, this endpoint provides web config for the active site.
+  try {
+    const response = await fetch('/__/firebase/init.json');
+    if (response.ok) {
+      firebaseConfig = await response.json();
+    }
+  } catch (error) {
+    // No-op: local/dev or non-Firebase-hosting environments may not expose this endpoint.
+  }
 
-// Retrieve an instance of Firebase Messaging so that it can handle background
-// messages.
-const messaging = firebase.messaging();
+  if (!firebaseConfig || !firebaseConfig.apiKey) {
+    console.warn('[firebase-messaging-sw.js] Firebase config unavailable; background messaging disabled.');
+    return;
+  }
 
-messaging.onBackgroundMessage((payload) => {
-  console.log('[firebase-messaging-sw.js] Received background message ', payload);
-  
-  const notificationTitle = payload.notification.title;
-  const notificationOptions = {
-    body: payload.notification.body,
-    icon: '/icons/apple/apple-touch-icon-180x180.png'
-  };
+  firebase.initializeApp(firebaseConfig);
+  const messaging = firebase.messaging();
 
-  self.registration.showNotification(notificationTitle, notificationOptions);
-});
+  messaging.onBackgroundMessage((payload) => {
+    console.log('[firebase-messaging-sw.js] Received background message ', payload);
+
+    const notificationTitle = payload?.notification?.title || 'MJSTEM Update';
+    const notificationOptions = {
+      body: payload?.notification?.body || '',
+      icon: '/icons/apple/apple-touch-icon-180x180.png',
+    };
+
+    self.registration.showNotification(notificationTitle, notificationOptions);
+  });
+}
+
+initMessaging();

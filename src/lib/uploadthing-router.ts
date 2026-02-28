@@ -1,7 +1,7 @@
 
 import 'dotenv/config';
 import { createUploadthing, type FileRouter } from "uploadthing/next";
-import admin from '@/lib/firebase-admin'; // Import the initialized admin app
+import admin, { firebaseProjectId } from '@/lib/firebase-admin'; // Import the initialized admin app
 
 const f = createUploadthing({
     errorFormatter: (err) => {
@@ -14,6 +14,10 @@ const f = createUploadthing({
 // Auth middleware for UploadThing
 const handleAuth = async ({ req }: { req: Request }) => {
   try {
+    if (!firebaseProjectId) {
+      throw new Error("Server configuration missing Firebase project ID. Set FIREBASE_PROJECT_ID (or NEXT_PUBLIC_FIREBASE_PROJECT_ID).");
+    }
+
     const authHeader = req.headers.get("authorization");
     if (!authHeader?.startsWith("Bearer ")) {
         throw new Error("Unauthorized: No token provided");
@@ -41,7 +45,9 @@ export const ourFileRouter = {
     .middleware(handleAuth)
     .onUploadComplete(async ({ metadata, file }) => {
       console.log("Upload complete for userId:", metadata.userId);
-      return { uploadedBy: metadata.userId, url: file.url };
+      const fileWithMaybeUfs = file as typeof file & { ufsUrl?: string; ufssUrl?: string };
+      const fileUrl = fileWithMaybeUfs.ufsUrl ?? fileWithMaybeUfs.ufssUrl ?? file.url;
+      return { uploadedBy: metadata.userId, url: fileUrl };
     }),
 
   generalDocumentUploader: f({
@@ -56,7 +62,9 @@ export const ourFileRouter = {
     .middleware(handleAuth)
     .onUploadComplete(async ({ metadata, file }) => {
         console.log("General doc upload complete for userId:", metadata.userId);
-        return { uploadedBy: metadata.userId, url: file.url };
+        const fileWithMaybeUfs = file as typeof file & { ufsUrl?: string; ufssUrl?: string };
+        const fileUrl = fileWithMaybeUfs.ufsUrl ?? fileWithMaybeUfs.ufssUrl ?? file.url;
+        return { uploadedBy: metadata.userId, url: fileUrl };
     }),
 
   imageUploader: f({
@@ -65,8 +73,10 @@ export const ourFileRouter = {
     .middleware(handleAuth)
     .onUploadComplete(async ({ metadata, file }) => {
       console.log("Image upload complete for userId:", metadata.userId);
-      console.log("file url", file.url);
-      return { uploadedBy: metadata.userId, url: file.url };
+      const fileWithMaybeUfs = file as typeof file & { ufsUrl?: string; ufssUrl?: string };
+      const fileUrl = fileWithMaybeUfs.ufsUrl ?? fileWithMaybeUfs.ufssUrl ?? file.url;
+      console.log("file url", fileUrl);
+      return { uploadedBy: metadata.userId, url: fileUrl };
     }),
 } satisfies FileRouter;
 

@@ -7,6 +7,16 @@
 import { adminDb } from '@/lib/firebase-admin';
 import * as admin from 'firebase-admin';
 
+let claimInvitationsDisabledDueToPermission = false;
+
+function isPermissionDeniedError(error: any): boolean {
+  return (
+    error?.code === 7 ||
+    error?.code === 'permission-denied' ||
+    (typeof error?.details === 'string' && error.details.toLowerCase().includes('missing or insufficient permissions'))
+  );
+}
+
 interface ClaimInvitationsInput {
   uid: string;
   email: string;
@@ -19,9 +29,14 @@ export async function claimReviewerInvitations(input: ClaimInvitationsInput): Pr
   if (!adminDb || !emailNorm) {
     return { success: false, message: 'Invalid input or configuration.', count: 0 };
   }
+  const dbRef = adminDb;
+
+  if (claimInvitationsDisabledDueToPermission) {
+    return { success: false, message: 'Invitation claiming is currently disabled by server permissions.', count: 0 };
+  }
 
   try {
-    const invitesSnapshot = await adminDb.collection('reviewInvitations')
+    const invitesSnapshot = await dbRef.collection('reviewInvitations')
       .where('emailNorm', '==', emailNorm)
       .where('status', '==', 'pending')
       .get();
@@ -32,18 +47,26 @@ export async function claimReviewerInvitations(input: ClaimInvitationsInput): Pr
 
     let processedCount = 0;
 
-    await adminDb.runTransaction(async (transaction) => {
-      const userRef = adminDb.collection('users').doc(uid);
+    await dbRef.runTransaction(async (transaction) => {
+      const userRef = dbRef.collection('users').doc(uid);
       const userDoc = await transaction.get(userRef);
       const userData = userDoc.data();
       
       const isEligibleForPromotion = !userData || userData.role === 'Author';
+      const inviteEntries = invitesSnapshot.docs.map((inviteDoc) => ({
+        ref: inviteDoc.ref,
+        data: inviteDoc.data(),
+      }));
+      const submissionRefs = inviteEntries.map((invite) =>
+        dbRef.collection('submissions').doc(invite.data.submissionId)
+      );
+      const submissionDocs = await Promise.all(submissionRefs.map((subRef) => transaction.get(subRef)));
+      let localProcessedCount = 0;
 
-      for (const inviteDoc of invitesSnapshot.docs) {
-        const inviteData = inviteDoc.data();
-        const submissionId = inviteData.submissionId;
-        const subRef = adminDb.collection('submissions').doc(submissionId);
-        const subDoc = await transaction.get(subRef);
+      for (let i = 0; i < inviteEntries.length; i++) {
+        const invite = inviteEntries[i];
+        const subRef = submissionRefs[i];
+        const subDoc = submissionDocs[i];
 
         if (subDoc.exists) {
           const subData = subDoc.data() || {};
@@ -74,19 +97,21 @@ export async function claimReviewerInvitations(input: ClaimInvitationsInput): Pr
             invitedReviewerEmails: admin.firestore.FieldValue.arrayRemove(emailNorm)
           });
           
-          processedCount++;
+          localProcessedCount++;
         }
 
-        transaction.update(inviteDoc.ref, {
+        transaction.update(invite.ref, {
           status: 'claimed',
           claimedByUid: uid,
           claimedAt: admin.firestore.FieldValue.serverTimestamp()
         });
       }
 
-      if (isEligibleForPromotion && processedCount > 0) {
+      if (isEligibleForPromotion && localProcessedCount > 0) {
         transaction.set(userRef, { role: 'Reviewer' }, { merge: true });
       }
+
+      processedCount = localProcessedCount;
     });
 
     return { 
@@ -96,7 +121,12 @@ export async function claimReviewerInvitations(input: ClaimInvitationsInput): Pr
     };
 
   } catch (error: any) {
-    console.error("[Claim Invitations] Error:", error);
+    if (isPermissionDeniedError(error)) {
+      claimInvitationsDisabledDueToPermission = true;
+      console.warn("[Claim Invitations] Disabled: service account lacks Firestore permission for review invitation queries.");
+      return { success: false, message: 'Invitation claiming disabled due to service-account permissions.', count: 0 };
+    }
+    console.error("[Claim Invitations] Error:", error?.message || error);
     return { success: false, message: error.message, count: 0 };
   }
 }

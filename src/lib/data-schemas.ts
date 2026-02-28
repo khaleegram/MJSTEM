@@ -20,6 +20,13 @@ export const EditorAttachmentSchema = z.object({
   uploadedAt: z.any(),
 });
 
+export const RevisionManuscriptSchema = z.object({
+  revision: z.number().int().nonnegative(),
+  url: z.string().url(),
+  uploadedAt: z.any().optional(),
+  replaced: z.boolean().optional(),
+});
+
 export const NewSubmissionSchema = z.object({
   title: z.string().min(10, 'Title must be at least 10 characters long.'),
   abstract: z.string().min(50, 'Abstract must be at least 50 characters long.'),
@@ -83,6 +90,7 @@ export const SubmissionSchema = z.object({
   originalSubmissionDate: z.date().optional().nullable(),
   pageCount: z.number().optional(),
   revision: z.number().default(0),
+  revisionManuscripts: z.array(RevisionManuscriptSchema).optional(),
   editorAttachments: z.array(EditorAttachmentSchema).optional(),
 });
 

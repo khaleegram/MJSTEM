@@ -1,4 +1,4 @@
-
+﻿
 'use client';
 
 import { useForm } from 'react-hook-form';
@@ -152,7 +152,14 @@ export default function LoginPage() {
             {loadingLogo ? (
                 <Skeleton className="h-10 w-10 mx-auto mb-2" />
             ) : logoUrl ? (
-                <Image src={logoUrl} alt="Journal Logo" width={40} height={40} className="object-contain mx-auto mb-2" />
+                <Image
+                  src={logoUrl}
+                  alt="Journal Logo"
+                  width={40}
+                  height={40}
+                  className="object-contain mx-auto mb-2"
+                  style={{ width: 'auto', height: 'auto' }}
+                />
             ) : (
                 <Icons.logo className="h-10 w-10 text-primary mx-auto mb-2" />
             )}
@@ -179,7 +186,7 @@ export default function LoginPage() {
                   <FormItem>
                     <FormLabel>Email</FormLabel>
                     <FormControl>
-                      <Input type="email" placeholder="you@example.com" {...field} />
+                      <Input type="email" autoComplete="email" placeholder="you@example.com" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -205,6 +212,7 @@ export default function LoginPage() {
                             </AlertDialogHeader>
                             <Input
                               type="email"
+                              autoComplete="email"
                               placeholder="you@example.com"
                               value={resetEmail}
                               onChange={(e) => setResetEmail(e.target.value)}
@@ -217,7 +225,7 @@ export default function LoginPage() {
                         </AlertDialog>
                     </div>
                     <FormControl>
-                      <Input type="password" placeholder="••••••••" {...field} />
+                      <Input type="password" autoComplete="current-password" placeholder="********" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -244,3 +252,4 @@ export default function LoginPage() {
     </div>
   );
 }
+

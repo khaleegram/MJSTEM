@@ -2,31 +2,297 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // ===========================
-    // PERMISSIVE MODE: UNBLOCK DEVELOPMENT
-    // ===========================
-    // Allows any authenticated user to perform any operation.
-    // This resolves ownership mismatches and complex rule failures.
-    
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+
+    // ---------------------------
+    // Common helpers
+    // ---------------------------
+    function isSignedIn() {
+      return request.auth != null;
     }
 
-    // Special case for public reading of accepted articles and journal info
-    match /submissions/{submissionId} {
-      allow read: if true;
+    function authUid() {
+      return request.auth.uid;
     }
+
+    function authEmail() {
+      return isSignedIn() && request.auth.token.email is string
+        ? request.auth.token.email
+        : null;
+    }
+
+    function currentUserDocPath() {
+      return /databases/$(database)/documents/users/$(authUid());
+    }
+
+    function currentUserData() {
+      return isSignedIn() && exists(currentUserDocPath())
+        ? get(currentUserDocPath()).data
+        : null;
+    }
+
+    function currentUserRole() {
+      let data = currentUserData();
+      return data != null && data.role is string ? data.role : 'Author';
+    }
+
+    function isEditorialMember() {
+      return isSignedIn() &&
+        (currentUserRole() == 'Editor' ||
+         currentUserRole() == 'Managing Editor' ||
+         currentUserRole() == 'Admin');
+    }
+
+    function isRoleManager() {
+      return isSignedIn() &&
+        (currentUserRole() == 'Managing Editor' || currentUserRole() == 'Admin');
+    }
+
+    function isOwnUserDoc(userId) {
+      return isSignedIn() && userId == authUid();
+    }
+
+    function isOwnEmailDoc(userId) {
+      return isSignedIn() && authEmail() != null && userId == authEmail();
+    }
+
+    // ---------------------------
+    // Submission helpers
+    // ---------------------------
+    function hasAuthor(data) {
+      return data != null && data.author is map && data.author.id is string;
+    }
+
+    function isSubmissionAuthor(data) {
+      return hasAuthor(data) && isSignedIn() && data.author.id == authUid();
+    }
+
+    function isAssignedReviewer(data) {
+      return data != null && isSignedIn() && (
+        (data.reviewerIds is list && authUid() in data.reviewerIds) ||
+        (authEmail() != null &&
+          data.invitedReviewerEmails is list &&
+          authEmail() in data.invitedReviewerEmails)
+      );
+    }
+
+    function canReadSubmission(data) {
+      return data != null && (
+        data.status == 'Accepted' ||
+        isEditorialMember() ||
+        isSubmissionAuthor(data) ||
+        isAssignedReviewer(data)
+      );
+    }
+
+    function canReadSubmissionAsParticipant(data) {
+      return data != null && (
+        isEditorialMember() ||
+        isSubmissionAuthor(data) ||
+        isAssignedReviewer(data)
+      );
+    }
+
+    function authorCanCreateSubmission() {
+      return isSignedIn() &&
+        request.resource.data.author is map &&
+        request.resource.data.author.id == authUid() &&
+        request.resource.data.status == 'Submitted';
+    }
+
+    function authorStatusAndRevisionValid() {
+      let oldRevision = resource.data.revision is int ? resource.data.revision : 0;
+      let statusChanged = request.resource.data.status != resource.data.status;
+      let revisionChanged = request.resource.data.revision != resource.data.revision;
+
+      return (!statusChanged && !revisionChanged) || (
+        resource.data.status in [
+          'Minor Revision',
+          'Major Revision',
+          'Awaiting Revision: Similarity Issues'
+        ] &&
+        request.resource.data.status in ['Under Review-R1', 'Under Review-R2'] &&
+        request.resource.data.revision is int &&
+        request.resource.data.revision == oldRevision + 1
+      );
+    }
+
+    function authorCanUpdateSubmission() {
+      return isSubmissionAuthor(resource.data) &&
+        request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          'title',
+          'abstract',
+          'keywords',
+          'manuscriptUrl',
+          'supplementaryFileUrl',
+          'contributors',
+          'pageCount',
+          'status',
+          'revision',
+          'originalManuscriptUrl',
+          'revisionManuscripts'
+        ]) &&
+        authorStatusAndRevisionValid();
+    }
+
+    function reviewerCanUpdateSubmission() {
+      return isAssignedReviewer(resource.data) &&
+        request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          'reviewers',
+          'reviewerIds',
+          'invitedReviewerEmails'
+        ]);
+    }
+
+    // ---------------------------
+    // users
+    // ---------------------------
+    match /users/{userId} {
+      allow get: if isEditorialMember() || isOwnUserDoc(userId) || isOwnEmailDoc(userId);
+
+      allow list: if isEditorialMember() || (
+        isSignedIn() && (
+          (resource.data.uid is string && resource.data.uid == authUid()) ||
+          (authEmail() != null &&
+            resource.data.email is string &&
+            resource.data.email == authEmail())
+        )
+      );
+
+      // Own UID doc (normal signup/login) or editorial-created placeholders.
+      allow create: if (isOwnUserDoc(userId) && request.resource.data.uid == authUid()) ||
+        isEditorialMember();
+
+      // Role changes are restricted to role managers.
+      allow update: if isRoleManager() || (
+        isOwnUserDoc(userId) &&
+        request.resource.data.uid == resource.data.uid &&
+        request.resource.data.role == resource.data.role
+      );
+
+      // Allow own UID doc deletion, role-manager deletion, or own placeholder cleanup.
+      allow delete: if isRoleManager() ||
+        isOwnUserDoc(userId) ||
+        (
+          isSignedIn() &&
+          resource.data.isPlaceholder == true &&
+          authEmail() != null &&
+          resource.data.email is string &&
+          resource.data.email == authEmail()
+        );
+    }
+
+    // ---------------------------
+    // submissions
+    // ---------------------------
+    match /submissions/{submissionId} {
+      allow get: if canReadSubmission(resource.data);
+
+      // Split list rules explicitly; this is friendlier to Firestore query evaluation.
+      allow list: if resource.data.status == 'Accepted';
+      allow list: if isEditorialMember();
+      allow list: if isSubmissionAuthor(resource.data);
+      allow list: if isSignedIn() &&
+        resource.data.reviewerIds is list &&
+        authUid() in resource.data.reviewerIds;
+      allow list: if isSignedIn() &&
+        authEmail() != null &&
+        resource.data.invitedReviewerEmails is list &&
+        authEmail() in resource.data.invitedReviewerEmails;
+
+      allow create: if isEditorialMember() || authorCanCreateSubmission();
+
+      allow update: if isEditorialMember() ||
+        authorCanUpdateSubmission() ||
+        reviewerCanUpdateSubmission();
+
+      allow delete: if isEditorialMember() ||
+        (isSubmissionAuthor(resource.data) && resource.data.status == 'Submitted');
+
+      match /reviews/{reviewId} {
+        function parentSubmission() {
+          return get(/databases/$(database)/documents/submissions/$(submissionId)).data;
+        }
+
+        allow get, list: if isSignedIn() && canReadSubmissionAsParticipant(parentSubmission());
+
+        allow create: if isSignedIn() &&
+          isAssignedReviewer(parentSubmission()) &&
+          request.resource.data.reviewerId == authUid();
+
+        allow update: if isEditorialMember() || (
+          isSignedIn() &&
+          resource.data.reviewerId == authUid() &&
+          request.resource.data.reviewerId == authUid()
+        );
+
+        allow delete: if isEditorialMember();
+      }
+
+      match /history/{historyId} {
+        function parentSubmission() {
+          return get(/databases/$(database)/documents/submissions/$(submissionId)).data;
+        }
+
+        allow get, list: if isSignedIn() && canReadSubmissionAsParticipant(parentSubmission());
+
+        // History is written by trusted server flows (Admin SDK bypasses rules).
+        allow create: if false;
+        allow update, delete: if false;
+      }
+    }
+
+    // ---------------------------
+    // reviewer invitations
+    // ---------------------------
+    match /reviewInvitations/{inviteId} {
+      allow get, list, create, update, delete: if isEditorialMember();
+    }
+
+    // ---------------------------
+    // notifications
+    // ---------------------------
+    match /notifications/{notificationId} {
+      allow get, list: if isSignedIn() && resource.data.userId == authUid();
+
+      allow update: if isSignedIn() &&
+        resource.data.userId == authUid() &&
+        request.resource.data.userId == resource.data.userId &&
+        request.resource.data.diff(resource.data).changedKeys().hasOnly(['read']);
+
+      // Created by trusted server flows.
+      allow create: if false;
+      allow delete: if false;
+    }
+
+    // ---------------------------
+    // publication/public content
+    // ---------------------------
     match /volumes/{volumeId} {
       allow read: if true;
+      allow write: if isEditorialMember();
     }
+
     match /editorialBoard/{memberId} {
       allow read: if true;
+      allow write: if isEditorialMember();
     }
+
     match /indexingServices/{serviceId} {
       allow read: if true;
+      allow write: if isRoleManager();
     }
+
+    // ---------------------------
+    // settings
+    // ---------------------------
+    // Used by client-side submission ID generation in current app flow.
+    match /settings/submissionCounter {
+      allow read, write: if isSignedIn();
+    }
+
     match /settings/{settingId} {
       allow read: if true;
+      allow write: if isRoleManager();
     }
   }
 }

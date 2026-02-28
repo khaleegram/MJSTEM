@@ -23,6 +23,15 @@ export function NotificationPermissionManager() {
     }
 
     const checkAndRequestPermission = async () => {
+      if (typeof window === 'undefined') return;
+      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        // Avoid noisy SW registration failures in local development.
+        return;
+      }
+      if (!window.isSecureContext || !('serviceWorker' in navigator)) {
+        return;
+      }
+
       const isSupportedByBrowser = await isSupported();
       if (!isSupportedByBrowser) {
         console.log("Push notifications not supported by this browser.");
@@ -48,12 +57,12 @@ export function NotificationPermissionManager() {
           localStorage.setItem('lastNotificationPrompt', now.toString());
 
           if (newPermission === 'granted') {
-            const messaging = getMessaging(app);
             const vapidKey = process.env.NEXT_PUBLIC_VAPID_KEY;
             if (!vapidKey) {
               throw new Error("VAPID key is not configured in environment variables.");
             }
-            
+            const messaging = getMessaging(app);
+             
             const currentToken = await getToken(messaging, { vapidKey });
 
             if (currentToken) {

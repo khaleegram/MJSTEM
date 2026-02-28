@@ -11,6 +11,16 @@ import { z } from 'zod';
 import { UserRole } from '@/types';
 import { sendPushNotification } from './send-push-notification';
 
+let notificationsDisabledDueToPermission = false;
+
+function isPermissionDeniedError(error: any): boolean {
+  return (
+    error?.code === 7 ||
+    error?.code === 'permission-denied' ||
+    (typeof error?.details === 'string' && error.details.toLowerCase().includes('missing or insufficient permissions'))
+  );
+}
+
 const NotificationInputSchema = z.object({
   userId: z.string().describe("The UID of the user who should receive the notification, or a role group like 'Admins'."),
   submissionId: z.string(),
@@ -86,29 +96,40 @@ async function createNotification(userId: string, submissionId: string, message:
 
 export async function generateNotification(input: NotificationInput): Promise<void> {
   if (!adminDb) return;
+  if (notificationsDisabledDueToPermission) return;
 
-  const { message, icon } = generateNotificationDetails(input);
-  let targetUids: string[] = [];
+  try {
+    const { message, icon } = generateNotificationDetails(input);
+    let targetUids: string[] = [];
 
-  if (input.userId === 'Admins') {
-      const adminUids = await getUidsForRoles(['Admin', 'Managing Editor']);
-      targetUids = adminUids;
-      for (const uid of adminUids) {
-          await createNotification(uid, input.submissionId, message, icon);
-      }
-  } else {
-    targetUids = [input.userId];
-    await createNotification(input.userId, input.submissionId, message, icon);
-  }
+    if (input.userId === 'Admins') {
+        const adminUids = await getUidsForRoles(['Admin', 'Managing Editor']);
+        targetUids = adminUids;
+        for (const uid of adminUids) {
+            await createNotification(uid, input.submissionId, message, icon);
+        }
+    } else {
+      targetUids = [input.userId];
+      await createNotification(input.userId, input.submissionId, message, icon);
+    }
 
-  if (targetUids.length > 0) {
-    sendPushNotification({
-        userIds: targetUids,
-        title: 'MJSTEM Update',
-        body: message,
-        link: `/dashboard/submissions/${input.submissionId}`,
-    }).catch(error => {
-        console.error("[Push Notification] Failed:", error);
-    });
+    if (targetUids.length > 0) {
+      sendPushNotification({
+          userIds: targetUids,
+          title: 'MJSTEM Update',
+          body: message,
+          link: `/dashboard/submissions/${input.submissionId}`,
+      }).catch(error => {
+          console.error("[Push Notification] Failed:", error);
+      });
+    }
+  } catch (error) {
+    // Notifications are best-effort and must never break the calling action.
+    if (isPermissionDeniedError(error)) {
+      notificationsDisabledDueToPermission = true;
+      console.warn('[Notification] Disabled: service account lacks Firestore permission for notifications/users query.');
+      return;
+    }
+    console.error('[Notification] Failed to generate notification:', (error as any)?.message || error);
   }
 }

@@ -9,6 +9,16 @@ import { adminDb } from '@/lib/firebase-admin';
 import * as admin from 'firebase-admin';
 import { z } from 'zod';
 
+let loggingDisabledDueToPermission = false;
+
+function isPermissionDeniedError(error: any): boolean {
+  return (
+    error?.code === 7 ||
+    error?.code === 'permission-denied' ||
+    (typeof error?.details === 'string' && error.details.toLowerCase().includes('missing or insufficient permissions'))
+  );
+}
+
 const LogEventInputSchema = z.object({
   submissionId: z.string(),
   eventType: z.enum(['SUBMISSION_CREATED', 'STATUS_CHANGED', 'REVIEWER_ASSIGNED', 'REVIEW_SUBMITTED', 'REVIEWER_INVITED']),
@@ -58,7 +68,11 @@ function generateLogDetails(input: LogEventInput): { message: string, icon: stri
 
 export async function logSubmissionEvent(input: LogEventInput): Promise<void> {
   if (!adminDb) {
-      console.error("[Log Event] Admin DB not initialized.");
+      console.warn("[Log Event] Skipped: Admin Firestore is not available.");
+      return;
+  }
+
+  if (loggingDisabledDueToPermission) {
       return;
   }
 
@@ -72,7 +86,12 @@ export async function logSubmissionEvent(input: LogEventInput): Promise<void> {
           icon: icon,
           timestamp: admin.firestore.FieldValue.serverTimestamp(),
       });
-  } catch (error) {
-      console.error("[Log Event] Failed to log event via Admin SDK:", error);
+  } catch (error: any) {
+      if (isPermissionDeniedError(error)) {
+          loggingDisabledDueToPermission = true;
+          console.warn("[Log Event] Disabled: service account lacks Firestore write permission for submission history.");
+          return;
+      }
+      console.error("[Log Event] Failed to log event via Admin SDK:", error?.message || error);
   }
 }

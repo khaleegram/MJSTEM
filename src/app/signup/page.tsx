@@ -1,4 +1,4 @@
-
+﻿
 'use client';
 
 import { useForm } from 'react-hook-form';
@@ -120,7 +120,14 @@ function SignUpFormComponent() {
             {loadingLogo ? (
                 <Skeleton className="h-10 w-10 mx-auto mb-2" />
             ) : logoUrl ? (
-                <Image src={logoUrl} alt="Journal Logo" width={40} height={40} className="object-contain mx-auto mb-2" />
+                <Image
+                  src={logoUrl}
+                  alt="Journal Logo"
+                  width={40}
+                  height={40}
+                  className="object-contain mx-auto mb-2"
+                  style={{ width: 'auto', height: 'auto' }}
+                />
             ) : (
                 <Icons.logo className="h-10 w-10 text-primary mx-auto mb-2" />
             )}
@@ -160,7 +167,7 @@ function SignUpFormComponent() {
                   <FormItem>
                     <FormLabel>Email</FormLabel>
                     <FormControl>
-                      <Input type="email" placeholder="you@example.com" {...field} />
+                      <Input type="email" autoComplete="email" placeholder="you@example.com" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -173,7 +180,7 @@ function SignUpFormComponent() {
                   <FormItem>
                     <FormLabel>Password</FormLabel>
                     <FormControl>
-                      <Input type="password" placeholder="••••••••" {...field} />
+                      <Input type="password" autoComplete="new-password" placeholder="********" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -205,3 +212,4 @@ export default function SignUpPage() {
         </Suspense>
     )
 }
+
