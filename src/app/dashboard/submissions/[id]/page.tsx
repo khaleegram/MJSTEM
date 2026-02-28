@@ -99,6 +99,80 @@ function normalizeFirestoreDate(value: any): Date | null {
     return isNaN(parsed.getTime()) ? null : parsed;
 }
 
+type RevisionDocumentCategory =
+    | 'revised_manuscript_clean'
+    | 'response_to_reviewers'
+    | 'tracked_changes'
+    | 'supplementary'
+    | 'figure_table'
+    | 'ethics'
+    | 'cover_letter'
+    | 'additional';
+
+type UploadedRevisionFile = {
+    url: string;
+    fileName: string;
+};
+
+type RevisionExtraDocDraft = {
+    id: string;
+    category: RevisionDocumentCategory;
+    label: string;
+    url: string;
+    fileName: string;
+    visibleToReviewers: boolean;
+    uploaderKey: number;
+};
+
+const REVISION_DOC_CATEGORY_LABELS: Record<RevisionDocumentCategory, string> = {
+    revised_manuscript_clean: 'Revised Manuscript (Clean)',
+    response_to_reviewers: 'Response to Reviewers',
+    tracked_changes: 'Tracked Changes Manuscript',
+    supplementary: 'Supplementary Material',
+    figure_table: 'Figures/Tables',
+    ethics: 'Ethics/Data/Consent Document',
+    cover_letter: 'Cover Letter to Editor',
+    additional: 'Additional Document',
+};
+
+const EXTRA_REVISION_DOC_OPTIONS: Array<{
+    value: RevisionDocumentCategory;
+    label: string;
+}> = [
+    { value: 'additional', label: 'Additional Document' },
+    { value: 'supplementary', label: 'Supplementary Material' },
+    { value: 'figure_table', label: 'Figures/Tables' },
+    { value: 'ethics', label: 'Ethics/Data/Consent' },
+    { value: 'cover_letter', label: 'Cover Letter to Editor' },
+];
+
+function getRevisionDocumentLabel(category: RevisionDocumentCategory): string {
+    return REVISION_DOC_CATEGORY_LABELS[category];
+}
+
+function normalizeRevisionCategory(value: unknown): RevisionDocumentCategory {
+    if (typeof value !== 'string') return 'additional';
+    return value in REVISION_DOC_CATEGORY_LABELS
+        ? (value as RevisionDocumentCategory)
+        : 'additional';
+}
+
+function createRevisionDraftId(prefix: string): string {
+    return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function createExtraRevisionDocDraft(): RevisionExtraDocDraft {
+    return {
+        id: createRevisionDraftId('revision-doc'),
+        category: 'additional',
+        label: '',
+        url: '',
+        fileName: '',
+        visibleToReviewers: true,
+        uploaderKey: 0,
+    };
+}
+
 function DetailPageSkeleton() {
     return (
         <div className="grid gap-8 lg:grid-cols-3">
@@ -454,38 +528,108 @@ function AcceptInvitationCard({ submission, onAccept }: { submission: Submission
 function AuthorRevisionForm({ submission, onRevisionSubmit }: { submission: Submission, onRevisionSubmit: () => void }) {
     const { toast } = useToast();
     const [isSubmitting, setIsSubmitting] = React.useState(false);
-    const [fileUrl, setFileUrl] = React.useState<string | null>(null);
-    const [uploaderInstance, setUploaderInstance] = React.useState(0);
+    const [cleanManuscript, setCleanManuscript] = React.useState<UploadedRevisionFile | null>(null);
+    const [responseToReviewers, setResponseToReviewers] = React.useState<UploadedRevisionFile | null>(null);
+    const [trackedChanges, setTrackedChanges] = React.useState<UploadedRevisionFile | null>(null);
+    const [extraDocs, setExtraDocs] = React.useState<RevisionExtraDocDraft[]>([createExtraRevisionDocDraft()]);
+    const [formResetSeed, setFormResetSeed] = React.useState(0);
     const { userProfile } = useAuth();
-
-    const handleFileUploadComplete = React.useCallback(async (url: string) => {
-        if (!url) return;
-        setFileUrl(url);
-      }, []);
+    
+    const updateExtraDoc = React.useCallback((docId: string, patch: Partial<RevisionExtraDocDraft>) => {
+        setExtraDocs((prev) => prev.map((doc) => (doc.id === docId ? { ...doc, ...patch } : doc)));
+    }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!fileUrl) {
-            toast({ title: "No file uploaded", description: "Please upload your revised manuscript.", variant: "destructive" });
+        if (!cleanManuscript || !responseToReviewers) {
+            toast({
+                title: "Required Files Missing",
+                description: "Upload both Revised Manuscript (Clean) and Response to Reviewers before submitting.",
+                variant: "destructive"
+            });
             return;
         }
+
+        const populatedExtraDocs = extraDocs.filter((doc) => !!doc.url);
+        const unlabeledExtraDoc = populatedExtraDocs.find((doc) => doc.label.trim().length === 0);
+        if (unlabeledExtraDoc) {
+            toast({
+                title: "Missing Document Label",
+                description: "Please give each uploaded additional document a clear label.",
+                variant: "destructive"
+            });
+            return;
+        }
+
         setIsSubmitting(true);
         
         const currentRevision = submission.revision || 0;
         const newRevision = currentRevision + 1;
-
         const submissionRef = doc(db, 'submissions', submission.id);
         const newStatus: SubmissionStatus = newRevision >= 2 ? 'Under Review-R2' : 'Under Review-R1';
+        const now = new Date();
+
+        const packageDocuments = [
+            {
+                category: 'revised_manuscript_clean' as const,
+                label: getRevisionDocumentLabel('revised_manuscript_clean'),
+                url: cleanManuscript.url,
+                fileName: cleanManuscript.fileName || getRevisionDocumentLabel('revised_manuscript_clean'),
+                required: true,
+                visibleToReviewers: true,
+            },
+            {
+                category: 'response_to_reviewers' as const,
+                label: getRevisionDocumentLabel('response_to_reviewers'),
+                url: responseToReviewers.url,
+                fileName: responseToReviewers.fileName || getRevisionDocumentLabel('response_to_reviewers'),
+                required: true,
+                visibleToReviewers: true,
+            },
+            ...(trackedChanges ? [{
+                category: 'tracked_changes' as const,
+                label: getRevisionDocumentLabel('tracked_changes'),
+                url: trackedChanges.url,
+                fileName: trackedChanges.fileName || getRevisionDocumentLabel('tracked_changes'),
+                required: false,
+                visibleToReviewers: true,
+            }] : []),
+            ...populatedExtraDocs.map((doc) => ({
+                category: doc.category,
+                label: doc.label.trim(),
+                url: doc.url,
+                fileName: doc.fileName || doc.label.trim() || getRevisionDocumentLabel(doc.category),
+                required: false,
+                visibleToReviewers: doc.visibleToReviewers,
+            })),
+        ].map((document, index) => ({
+            ...document,
+            id: `r${newRevision}-d${index + 1}`,
+            uploadedAt: now,
+        }));
+
+        const revisionPackage = {
+            round: newRevision,
+            status: 'submitted' as const,
+            submittedAt: now,
+            submittedBy: {
+                id: userProfile?.uid || submission.author.id,
+                name: userProfile?.displayName || submission.author.name,
+                email: userProfile?.email || submission.author.email,
+            },
+            documents: packageDocuments,
+        };
         
         const updateData: any = {
-            manuscriptUrl: fileUrl,
+            manuscriptUrl: cleanManuscript.url,
             status: newStatus,
             revision: newRevision,
             revisionManuscripts: arrayUnion({
                 revision: newRevision,
-                url: fileUrl,
-                uploadedAt: new Date(),
+                url: cleanManuscript.url,
+                uploadedAt: now,
             }),
+            revisionPackages: arrayUnion(revisionPackage),
         };
 
         if (!submission.originalManuscriptUrl) {
@@ -517,7 +661,8 @@ function AuthorRevisionForm({ submission, onRevisionSubmit }: { submission: Subm
                 eventType: 'REVISION_SUBMITTED',
                 context: {
                     submissionTitle: submission.title,
-                    authorName: userProfile?.displayName || 'the author'
+                    authorName: userProfile?.displayName || 'the author',
+                    filesCount: packageDocuments.length,
                 }
             });
         } catch (error) {
@@ -525,10 +670,15 @@ function AuthorRevisionForm({ submission, onRevisionSubmit }: { submission: Subm
         }
 
         toast({ 
-            title: "Done! Revision Received", 
-            description: "Your updated manuscript has been sent to the editor for review.",
+            title: "Revision Package Submitted",
+            description: `Submitted Round R${newRevision} with ${packageDocuments.length} document(s).`,
             className: "bg-green-600 text-white border-none"
         });
+        setCleanManuscript(null);
+        setResponseToReviewers(null);
+        setTrackedChanges(null);
+        setExtraDocs([createExtraRevisionDocDraft()]);
+        setFormResetSeed((prev) => prev + 1);
         onRevisionSubmit();
         setIsSubmitting(false);
     }
@@ -536,55 +686,174 @@ function AuthorRevisionForm({ submission, onRevisionSubmit }: { submission: Subm
     return (
         <Card>
             <CardHeader>
-                <CardTitle className="font-headline">Submit Revised Manuscript</CardTitle>
-                <CardDescription>Upload your updated research file based on reviewer feedback.</CardDescription>
+                <CardTitle className="font-headline">Submit Revision Package</CardTitle>
+                <CardDescription>
+                    Round-based revision package: required files plus any additional supporting documents.
+                </CardDescription>
             </CardHeader>
             <form onSubmit={handleSubmit}>
                 <CardContent className="space-y-4">
-                    <FileUploader 
-                        key={uploaderInstance}
-                        endpoint="documentUploader" 
-                        onUploadComplete={handleFileUploadComplete} 
-                        onUploadError={(err) => toast({ title: "Upload Error", description: err.message, variant: "destructive"})}
-                        description="Upload revised manuscript (.doc, .docx)."
-                    />
-                    {fileUrl && (
-                        <div className="rounded-lg border bg-secondary/30 p-4 space-y-3">
+                    <div className="rounded-md border bg-secondary/20 p-4 space-y-4">
+                        <div>
+                            <h4 className="font-semibold text-sm">Required Documents</h4>
+                            <p className="text-xs text-muted-foreground">Both files are mandatory to submit this revision round.</p>
+                        </div>
+                        <div className="space-y-2">
+                            <Label className="text-sm">Revised Manuscript (Clean) *</Label>
+                            <FileUploader
+                                key={`clean-${formResetSeed}`}
+                                endpoint="documentUploader"
+                                onUploadComplete={(url, name) =>
+                                    setCleanManuscript(url ? { url, fileName: name || getRevisionDocumentLabel('revised_manuscript_clean') } : null)
+                                }
+                                onUploadError={(err) => toast({ title: "Upload Error", description: err.message, variant: "destructive" })}
+                                description="Upload revised manuscript clean version (.doc, .docx)."
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label className="text-sm">Response to Reviewers *</Label>
+                            <FileUploader
+                                key={`response-${formResetSeed}`}
+                                endpoint="generalDocumentUploader"
+                                onUploadComplete={(url, name) =>
+                                    setResponseToReviewers(url ? { url, fileName: name || getRevisionDocumentLabel('response_to_reviewers') } : null)
+                                }
+                                onUploadError={(err) => toast({ title: "Upload Error", description: err.message, variant: "destructive" })}
+                                description="Upload response letter (.pdf, .doc, .docx, .txt)."
+                            />
+                        </div>
+                    </div>
+
+                    <div className="rounded-md border p-4 space-y-3">
+                        <div>
+                            <h4 className="font-semibold text-sm">Optional Reviewer-Facing File</h4>
+                            <p className="text-xs text-muted-foreground">Add tracked changes manuscript if available.</p>
+                        </div>
+                        <FileUploader
+                            key={`tracked-${formResetSeed}`}
+                            endpoint="documentUploader"
+                            onUploadComplete={(url, name) =>
+                                setTrackedChanges(url ? { url, fileName: name || getRevisionDocumentLabel('tracked_changes') } : null)
+                            }
+                            onUploadError={(err) => toast({ title: "Upload Error", description: err.message, variant: "destructive" })}
+                            description="Upload tracked changes manuscript (.doc, .docx)."
+                        />
+                    </div>
+
+                    <div className="rounded-md border p-4 space-y-3">
+                        <div className="flex items-center justify-between gap-2">
                             <div>
-                                <h4 className="font-semibold text-sm">Revised Manuscript Ready</h4>
-                                <p className="text-xs text-muted-foreground">Review the uploaded revision, then submit it to the editor.</p>
+                                <h4 className="font-semibold text-sm">Additional Documents</h4>
+                                <p className="text-xs text-muted-foreground">Add as many additional documents as needed for this round.</p>
                             </div>
-                            <div className="flex flex-wrap gap-2">
-                                <Button asChild size="sm">
-                                    <Link href={`https://docs.google.com/gview?url=${fileUrl}&embedded=true`} target="_blank">
-                                        <BookText className="mr-2 h-4 w-4" />
-                                        Read Online
-                                    </Link>
-                                </Button>
-                                <Button variant="outline" size="sm" asChild>
-                                    <Link href={fileUrl} target="_blank">
-                                        <Download className="mr-2 h-4 w-4" />
-                                        Download File
-                                    </Link>
-                                </Button>
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => {
-                                        setFileUrl(null);
-                                        setUploaderInstance(v => v + 1);
-                                    }}
-                                >
-                                    Replace File
-                                </Button>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setExtraDocs((prev) => [...prev, createExtraRevisionDocDraft()])}
+                            >
+                                <PlusCircle className="mr-2 h-4 w-4" />
+                                Add Document
+                            </Button>
+                        </div>
+
+                        <div className="space-y-3">
+                            {extraDocs.map((extraDoc, index) => (
+                                <div key={extraDoc.id} className="rounded-md border bg-background/80 p-3 space-y-3">
+                                    <div className="flex flex-wrap gap-2 items-center">
+                                        <div className="w-full md:w-[200px]">
+                                            <Label className="text-xs">Type</Label>
+                                            <Select
+                                                value={extraDoc.category}
+                                                onValueChange={(value) => {
+                                                    const category = value as RevisionDocumentCategory;
+                                                    updateExtraDoc(extraDoc.id, {
+                                                        category,
+                                                        label: extraDoc.label.trim().length ? extraDoc.label : getRevisionDocumentLabel(category),
+                                                    });
+                                                }}
+                                            >
+                                                <SelectTrigger className="h-9">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {EXTRA_REVISION_DOC_OPTIONS.map((option) => (
+                                                        <SelectItem key={option.value} value={option.value}>
+                                                            {option.label}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="flex-1 min-w-[220px]">
+                                            <Label className="text-xs">Label</Label>
+                                            <Input
+                                                value={extraDoc.label}
+                                                onChange={(event) => updateExtraDoc(extraDoc.id, { label: event.target.value })}
+                                                placeholder={`Document ${index + 1} label`}
+                                                className="h-9"
+                                            />
+                                        </div>
+                                        <div className="flex items-end gap-2">
+                                            <label className="flex items-center gap-2 text-xs text-muted-foreground pb-2">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={extraDoc.visibleToReviewers}
+                                                    onChange={(event) => updateExtraDoc(extraDoc.id, { visibleToReviewers: event.target.checked })}
+                                                />
+                                                Visible to reviewers
+                                            </label>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => setExtraDocs((prev) => prev.filter((doc) => doc.id !== extraDoc.id))}
+                                                disabled={extraDocs.length === 1}
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    </div>
+
+                                    <FileUploader
+                                        key={`extra-${extraDoc.id}-${extraDoc.uploaderKey}-${formResetSeed}`}
+                                        endpoint="generalDocumentUploader"
+                                        onUploadComplete={(url, name) =>
+                                            updateExtraDoc(extraDoc.id, {
+                                                url: url || '',
+                                                fileName: name || '',
+                                            })
+                                        }
+                                        onUploadError={(err) => toast({ title: "Upload Error", description: err.message, variant: "destructive" })}
+                                        description="Upload supporting document (.pdf, .doc, .docx, .txt, .rtf, .ppt, .pptx)."
+                                    />
+                                    {extraDoc.url && (
+                                        <Button variant="outline" size="sm" asChild>
+                                            <Link href={extraDoc.url} target="_blank">
+                                                <Download className="mr-2 h-4 w-4" />
+                                                Download {extraDoc.fileName || extraDoc.label || 'Document'}
+                                            </Link>
+                                        </Button>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {(cleanManuscript || responseToReviewers || trackedChanges) && (
+                        <div className="rounded-lg border bg-secondary/30 p-4 space-y-2">
+                            <h4 className="font-semibold text-sm">Ready for Submission</h4>
+                            <div className="text-xs text-muted-foreground space-y-1">
+                                <p>Clean manuscript: {cleanManuscript ? 'Uploaded' : 'Missing'}</p>
+                                <p>Response to reviewers: {responseToReviewers ? 'Uploaded' : 'Missing'}</p>
+                                {trackedChanges && <p>Tracked changes: Uploaded</p>}
                             </div>
                         </div>
                     )}
                 </CardContent>
                 <CardFooter>
-                    <Button type="submit" disabled={isSubmitting || !fileUrl}>
-                        {isSubmitting ? 'Submitting...' : 'Submit Revision'}
+                    <Button type="submit" disabled={isSubmitting || !cleanManuscript || !responseToReviewers}>
+                        {isSubmitting ? 'Submitting...' : 'Submit Revision Package'}
                     </Button>
                 </CardFooter>
             </form>
@@ -1128,7 +1397,11 @@ export default function SubmissionDetailPage() {
   const needsRevision = ['Minor Revision', 'Major Revision', 'Awaiting Revision: Similarity Issues'].includes(submission.status);
   const canAuthorEdit = isAuthor && !isDecisionMade;
   const canAuthorDelete = isAuthor && submission.status === 'Submitted';
+  const rawRevisionPackages = Array.isArray((submission as any).revisionPackages)
+    ? ((submission as any).revisionPackages as any[])
+    : [];
   const hasSubmittedRevision =
+    rawRevisionPackages.length > 0 ||
     !!submission.originalManuscriptUrl ||
     (submission.revision ?? 0) > 0 ||
     submission.status === 'Under Review-R1' ||
@@ -1166,6 +1439,65 @@ export default function SubmissionDetailPage() {
       const aTime = a.uploadedAt ? a.uploadedAt.getTime() : 0;
       return bTime - aTime;
     });
+  })();
+  const revisionPackageHistory = (() => {
+    const parsed = rawRevisionPackages
+      .map((pkg: any, pkgIndex: number) => {
+        const round = typeof pkg?.round === 'number' ? pkg.round : pkgIndex + 1;
+        const submittedAt = normalizeFirestoreDate(pkg?.submittedAt);
+        const docsRaw = Array.isArray(pkg?.documents) ? pkg.documents : [];
+        const documents = docsRaw
+          .filter((doc: any) => doc && typeof doc.url === 'string' && doc.url.length > 0)
+          .map((doc: any, docIndex: number) => {
+            const category = normalizeRevisionCategory(doc.category);
+            const defaultLabel = getRevisionDocumentLabel(category);
+            return {
+              id: typeof doc.id === 'string' ? doc.id : `r${round}-d${docIndex + 1}`,
+              category,
+              label: typeof doc.label === 'string' && doc.label.trim().length > 0 ? doc.label.trim() : defaultLabel,
+              url: doc.url as string,
+              fileName: typeof doc.fileName === 'string' && doc.fileName.trim().length > 0 ? doc.fileName.trim() : defaultLabel,
+              uploadedAt: normalizeFirestoreDate(doc.uploadedAt),
+              visibleToReviewers: doc.visibleToReviewers !== false,
+              required: doc.required === true,
+            };
+          });
+
+        return {
+          id: `round-${round}-${pkgIndex}`,
+          round,
+          submittedAt,
+          documents,
+        };
+      })
+      .filter((pkg) => pkg.documents.length > 0);
+
+    if (parsed.length > 0) {
+      return parsed.sort((a, b) => {
+        if (b.round !== a.round) return b.round - a.round;
+        const bTime = b.submittedAt ? b.submittedAt.getTime() : 0;
+        const aTime = a.submittedAt ? a.submittedAt.getTime() : 0;
+        return bTime - aTime;
+      });
+    }
+
+    return revisionManuscriptHistory.map((entry, index) => ({
+      id: `legacy-round-${entry.revision}-${index}`,
+      round: entry.revision,
+      submittedAt: entry.uploadedAt,
+      documents: [
+        {
+          id: `legacy-doc-${entry.revision}-${index}`,
+          category: 'revised_manuscript_clean' as RevisionDocumentCategory,
+          label: getRevisionDocumentLabel('revised_manuscript_clean'),
+          url: entry.url,
+          fileName: `Revision R${entry.revision} Manuscript`,
+          uploadedAt: entry.uploadedAt,
+          visibleToReviewers: true,
+          required: true,
+        },
+      ],
+    }));
   })();
 
   return (
@@ -1272,26 +1604,46 @@ export default function SubmissionDetailPage() {
                             {showRevisionReplaceUploader ? 'Cancel Replace' : 'Replace Revised File'}
                         </Button>
                     </div>
-                    {revisionManuscriptHistory.length > 0 && (
-                        <div className="rounded-md border bg-background/70 p-3 space-y-2">
-                            <p className="text-xs text-muted-foreground">Revision file history</p>
-                            <div className="space-y-2">
-                                {revisionManuscriptHistory.map((entry) => (
-                                    <div key={entry.id} className="flex flex-wrap items-center justify-between gap-2">
-                                        <div className="text-xs text-muted-foreground">
-                                            <span className="font-medium text-foreground">Revision R{entry.revision}</span>
-                                            {entry.uploadedAt && <span> - {format(entry.uploadedAt, 'PPP p')}</span>}
-                                            {entry.url === submission.manuscriptUrl && <span> - Latest</span>}
+                    {revisionPackageHistory.length > 0 ? (
+                        <div className="space-y-3">
+                            {revisionPackageHistory.map((pkg) => (
+                                <div key={pkg.id} className="rounded-md border bg-background/70 p-3 space-y-3">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div>
+                                            <p className="text-sm font-semibold">Revision Round R{pkg.round}</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {pkg.submittedAt ? `Submitted ${format(pkg.submittedAt, 'PPP p')}` : 'Submitted date not recorded'}
+                                            </p>
                                         </div>
-                                        <Button variant="outline" size="sm" asChild>
-                                            <Link href={entry.url} target="_blank">
-                                                <Download className="mr-2 h-4 w-4" />
-                                                Download Revised Manuscript R{entry.revision}
-                                            </Link>
-                                        </Button>
+                                        <Badge variant="outline">{pkg.documents.length} file{pkg.documents.length === 1 ? '' : 's'}</Badge>
                                     </div>
-                                ))}
-                            </div>
+                                    <div className="space-y-2">
+                                        {pkg.documents.map((doc) => (
+                                            <div key={doc.id} className="flex flex-wrap items-center justify-between gap-2 rounded border p-2">
+                                                <div className="text-xs space-y-1">
+                                                    <p className="font-medium text-foreground">{doc.label}</p>
+                                                    <div className="flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground">
+                                                        <span>{getRevisionDocumentLabel(doc.category)}</span>
+                                                        {doc.required && <span>Required</span>}
+                                                        <span>{doc.visibleToReviewers ? 'Visible to reviewers' : 'Editor only'}</span>
+                                                        {doc.url === submission.manuscriptUrl && <span>Latest manuscript</span>}
+                                                    </div>
+                                                </div>
+                                                <Button variant="outline" size="sm" asChild>
+                                                    <Link href={doc.url} target="_blank">
+                                                        <Download className="mr-2 h-4 w-4" />
+                                                        Download
+                                                    </Link>
+                                                </Button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="rounded-md border bg-background/70 p-3 text-xs text-muted-foreground">
+                            No revision package history recorded yet.
                         </div>
                     )}
                 </CardContent>
