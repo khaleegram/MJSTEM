@@ -2,8 +2,6 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { collection, query, orderBy, Timestamp, onSnapshot, where } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -11,8 +9,6 @@ import { Shield, MessageSquare, User, Paperclip, Download } from 'lucide-react';
 import { Badge } from './ui/badge';
 import { format } from 'date-fns';
 import { useAuth } from '@/contexts/auth-context';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
 import { Button } from './ui/button';
 import Link from 'next/link';
 
@@ -39,7 +35,15 @@ const getRecommendationVariant = (recommendation: string) => {
     }
 }
 
-export const SubmittedReviews = ({ submissionId, showForAuthor = false }: { submissionId: string; showForAuthor?: boolean }) => {
+export const SubmittedReviews = ({
+    submissionId,
+    showForAuthor = false,
+    refreshKey = 0,
+}: {
+    submissionId: string;
+    showForAuthor?: boolean;
+    refreshKey?: number;
+}) => {
     const [reviews, setReviews] = useState<Review[]>([]);
     const [loading, setLoading] = useState(true);
     const { user, userProfile } = useAuth();
@@ -47,46 +51,58 @@ export const SubmittedReviews = ({ submissionId, showForAuthor = false }: { subm
 
     useEffect(() => {
         if (!submissionId || !user) {
+            setReviews([]);
             setLoading(false);
             return;
         }
 
-        const reviewsCollectionRef = collection(db, 'submissions', submissionId, 'reviews');
-        
-        let reviewsQuery;
-        // In permissive mode, the query filter doesn't strictly matter for security,
-        // but it's kept for logical clarity in the UI.
-        if (isEditor || showForAuthor) {
-            reviewsQuery = query(reviewsCollectionRef, orderBy('submittedAt', 'desc'));
-        } else {
-            reviewsQuery = query(reviewsCollectionRef, where('reviewerId', '==', user.uid), orderBy('submittedAt', 'desc'));
-        }
-        
-        const unsubscribe = onSnapshot(reviewsQuery, (querySnapshot) => {
-            const fetchedReviews = querySnapshot.docs.map(doc => {
-                const data = doc.data();
-                const submittedAt = data.submittedAt instanceof Timestamp 
-                    ? data.submittedAt.toDate() 
-                    : new Date(data.submittedAt);
-                return {
-                    id: doc.id,
-                    ...data,
-                    submittedAt,
-                } as Review;
-            });
-            setReviews(fetchedReviews);
-            setLoading(false);
-        }, (serverError) => {
-            const permissionError = new FirestorePermissionError({
-                path: `submissions/${submissionId}/reviews`,
-                operation: 'list',
-            });
-            errorEmitter.emit('permission-error', permissionError);
-            setLoading(false);
-        });
+        let cancelled = false;
 
-        return () => unsubscribe();
-    }, [submissionId, user, isEditor, showForAuthor]);
+        const loadReviews = async () => {
+            setLoading(true);
+            try {
+                const token = await user.getIdToken(true);
+                const scope = isEditor || showForAuthor ? 'all' : 'mine';
+                const response = await fetch(`/api/submissions/${submissionId}/reviews?scope=${scope}`, {
+                    method: 'GET',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                    cache: 'no-store',
+                });
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(payload?.error || 'Failed to load reviews.');
+                }
+
+                const fetchedReviews = (Array.isArray(payload?.reviews) ? payload.reviews : []).map((review: any) => {
+                    const submittedAt = review?.submittedAt ? new Date(review.submittedAt) : new Date();
+                    const safeSubmittedAt = Number.isNaN(submittedAt.getTime()) ? new Date() : submittedAt;
+                    return {
+                        ...review,
+                        submittedAt: safeSubmittedAt,
+                    } as Review;
+                });
+
+                if (cancelled) return;
+                setReviews(fetchedReviews);
+            } catch (error) {
+                console.warn('[SubmittedReviews] Could not load reviews via API:', error);
+                if (cancelled) return;
+                setReviews([]);
+            } finally {
+                if (!cancelled) {
+                    setLoading(false);
+                }
+            }
+        };
+
+        loadReviews();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [submissionId, user?.uid, user?.email, isEditor, showForAuthor, refreshKey]);
     
     const reviewerIdToAnonymousNameMap = useMemo(() => {
         if (!showForAuthor) return new Map();

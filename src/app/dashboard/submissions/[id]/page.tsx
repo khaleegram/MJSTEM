@@ -88,6 +88,17 @@ function getStatusVariant(status: SubmissionStatus) {
     }
 }
 
+function normalizeFirestoreDate(value: any): Date | null {
+    if (!value) return null;
+    if (value instanceof Date) return value;
+    if (typeof value?.toDate === 'function') {
+        const date = value.toDate();
+        return date instanceof Date && !isNaN(date.getTime()) ? date : null;
+    }
+    const parsed = new Date(value);
+    return isNaN(parsed.getTime()) ? null : parsed;
+}
+
 function DetailPageSkeleton() {
     return (
         <div className="grid gap-8 lg:grid-cols-3">
@@ -123,23 +134,51 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
 
     React.useEffect(() => {
         if (!user || !submission.id) return;
-        
-        const reviewsRef = collection(db, 'submissions', submission.id, 'reviews');
-        const q = query(reviewsRef, where('reviewerId', '==', user.uid));
-        
-        getDocs(q).then(snapshot => {
-            if (!snapshot.empty) {
-                const reviewDoc = snapshot.docs[0];
-                const data = reviewDoc.data();
-                setReviewId(reviewDoc.id);
-                setRecommendation(data.recommendation || '');
-                setCommentsForEditor(data.commentsForEditor || '');
-                setCommentsForAuthor(data.commentsForAuthor || '');
-                setAttachmentUrl(data.attachmentUrl || '');
-                setAttachmentName(data.attachmentName || '');
+
+        let cancelled = false;
+        setReviewId(null);
+        setRecommendation('');
+        setCommentsForEditor('');
+        setCommentsForAuthor('');
+        setAttachmentUrl('');
+        setAttachmentName('');
+
+        const loadExistingReview = async () => {
+            try {
+                const token = await user.getIdToken(true);
+                const response = await fetch(`/api/submissions/${submission.id}/reviews?scope=mine`, {
+                    method: 'GET',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                    cache: 'no-store',
+                });
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(payload?.error || 'Failed to load your existing review.');
+                }
+
+                const myReviews = Array.isArray(payload?.reviews) ? payload.reviews : [];
+                if (myReviews.length === 0 || cancelled) return;
+
+                const existingReview = myReviews[0];
+                setReviewId(existingReview.id || null);
+                setRecommendation(existingReview.recommendation || '');
+                setCommentsForEditor(existingReview.commentsForEditor || '');
+                setCommentsForAuthor(existingReview.commentsForAuthor || '');
+                setAttachmentUrl(existingReview.attachmentUrl || '');
+                setAttachmentName(existingReview.attachmentName || '');
+            } catch (err) {
+                console.error("Error fetching existing review:", err);
             }
-        }).catch(err => console.error("Error fetching existing review:", err));
-    }, [user, submission.id]);
+        };
+
+        loadExistingReview();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [user?.uid, submission.id]);
 
     if (!myReviewAssignment || myReviewAssignment.status === 'Invited') {
         return null;
@@ -184,77 +223,89 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
         
         if (reviewId) {
             const reviewRef = doc(db, 'submissions', submission.id, 'reviews', reviewId);
-            updateDoc(reviewRef, reviewData)
-                .then(async () => {
-                    await logSubmissionEvent({
-                        submissionId: submission.id,
-                        eventType: 'REVIEW_SUBMITTED',
-                        context: { reviewerName: userProfile?.displayName || 'A reviewer', action: 'updated' }
-                    });
-                    toast({ 
-                        title: "Done! Review Updated", 
-                        description: "Your changes have been saved successfully.",
-                        className: "bg-green-600 text-white border-none"
-                    });
-                    setIsEditing(false);
-                    onReviewSubmit();
-                })
-                .catch(async (serverError) => {
-                    errorEmitter.emit('permission-error', new FirestorePermissionError({
-                        path: reviewRef.path,
-                        operation: 'update',
-                        requestResourceData: reviewData
-                    }));
-                })
-                .finally(() => setIsSubmitting(false));
+            try {
+                await updateDoc(reviewRef, reviewData);
+            } catch (serverError) {
+                errorEmitter.emit('permission-error', new FirestorePermissionError({
+                    path: reviewRef.path,
+                    operation: 'update',
+                    requestResourceData: reviewData
+                }));
+                setIsSubmitting(false);
+                return;
+            }
+
+            try {
+                await logSubmissionEvent({
+                    submissionId: submission.id,
+                    eventType: 'REVIEW_SUBMITTED',
+                    context: { reviewerName: userProfile?.displayName || 'A reviewer', action: 'updated' }
+                });
+            } catch (error) {
+                console.error('[Review] Post-update side effects failed:', error);
+            }
+
+            toast({ 
+                title: "Review Updated Successfully!", 
+                description: "Your changes have been saved and the editor has been updated.",
+                className: "bg-green-600 text-white border-none"
+            });
+            setIsEditing(false);
+            onReviewSubmit();
+            setIsSubmitting(false);
         } else {
             const reviewsCollectionRef = collection(db, 'submissions', submission.id, 'reviews');
-            addDoc(reviewsCollectionRef, reviewData)
-                .then(async () => {
-                    const updatedReviewers = submission.reviewers?.map(r => {
-                        const isMe = r.id === user?.uid || (userEmail && r.email?.toLowerCase().trim() === userEmail);
-                        return isMe ? { ...r, id: user?.uid, status: 'Review Submitted' as const } : r;
-                    });
-                    await updateDoc(submissionRef, { reviewers: updatedReviewers });
+            try {
+                await addDoc(reviewsCollectionRef, reviewData);
+                const updatedReviewers = submission.reviewers?.map(r => {
+                    const isMe = r.id === user?.uid || (userEmail && r.email?.toLowerCase().trim() === userEmail);
+                    return isMe ? { ...r, id: user?.uid, status: 'Review Submitted' as const } : r;
+                });
+                await updateDoc(submissionRef, { reviewers: updatedReviewers });
+            } catch (serverError) {
+                errorEmitter.emit('permission-error', new FirestorePermissionError({
+                    path: reviewsCollectionRef.path,
+                    operation: 'create',
+                    requestResourceData: reviewData
+                }));
+                setIsSubmitting(false);
+                return;
+            }
 
-                    await logSubmissionEvent({
-                        submissionId: submission.id,
-                        eventType: 'REVIEW_SUBMITTED',
-                        context: { reviewerName: userProfile?.displayName || 'A reviewer' }
-                    });
-                    
-                    await generateNotification({
-                        userId: 'Admins',
-                        submissionId: submission.id,
-                        eventType: 'REVIEW_SUBMITTED',
-                        context: { 
-                            submissionTitle: submission.title,
-                            reviewerName: userProfile?.displayName || 'a reviewer'
-                        }
-                    });
+            try {
+                await logSubmissionEvent({
+                    submissionId: submission.id,
+                    eventType: 'REVIEW_SUBMITTED',
+                    context: { reviewerName: userProfile?.displayName || 'A reviewer' }
+                });
+                
+                await generateNotification({
+                    userId: 'Admins',
+                    submissionId: submission.id,
+                    eventType: 'REVIEW_SUBMITTED',
+                    context: { 
+                        submissionTitle: submission.title,
+                        reviewerName: userProfile?.displayName || 'a reviewer'
+                    }
+                });
 
-                    await generateNotification({
-                        userId: submission.author.id,
-                        submissionId: submission.id,
-                        eventType: 'REVIEW_SUBMITTED',
-                        context: { submissionTitle: submission.title }
-                    });
-                    
-                    toast({ 
-                        title: "Done! Review Submitted", 
-                        description: "Your expert report has been received. Thank you.",
-                        className: "bg-green-600 text-white border-none"
-                    });
-                    onReviewSubmit();
-                })
-                .catch(async (serverError) => {
-                    errorEmitter.emit('permission-error', new FirestorePermissionError({
-                        path: reviewsCollectionRef.path,
-                        operation: 'create',
-                        requestResourceData: reviewData
-                    }));
-                })
-                .finally(() => setIsSubmitting(false));
+                await generateNotification({
+                    userId: submission.author.id,
+                    submissionId: submission.id,
+                    eventType: 'REVIEW_SUBMITTED',
+                    context: { submissionTitle: submission.title }
+                });
+            } catch (error) {
+                console.error('[Review] Post-submit side effects failed:', error);
+            }
+            
+            toast({ 
+                title: "Done! Review Submitted", 
+                description: "Your expert report has been received. Thank you for your contribution.",
+                className: "bg-green-600 text-white border-none"
+            });
+            onReviewSubmit();
+            setIsSubmitting(false);
         }
     }
 
@@ -404,6 +455,7 @@ function AuthorRevisionForm({ submission, onRevisionSubmit }: { submission: Subm
     const { toast } = useToast();
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const [fileUrl, setFileUrl] = React.useState<string | null>(null);
+    const [uploaderInstance, setUploaderInstance] = React.useState(0);
     const { userProfile } = useAuth();
 
     const handleFileUploadComplete = React.useCallback(async (url: string) => {
@@ -429,47 +481,56 @@ function AuthorRevisionForm({ submission, onRevisionSubmit }: { submission: Subm
             manuscriptUrl: fileUrl,
             status: newStatus,
             revision: newRevision,
+            revisionManuscripts: arrayUnion({
+                revision: newRevision,
+                url: fileUrl,
+                uploadedAt: new Date(),
+            }),
         };
 
         if (!submission.originalManuscriptUrl) {
             updateData.originalManuscriptUrl = submission.manuscriptUrl;
         }
 
-        updateDoc(submissionRef, updateData)
-            .then(async () => {
-                await logSubmissionEvent({
-                    submissionId: submission.id,
-                    eventType: 'STATUS_CHANGED',
-                    context: { actorName: userProfile?.displayName || 'Author', status: `Revision Submitted (${submission.status})` }
-                });
-                
-                await generateNotification({
-                    userId: 'Admins',
-                    submissionId: submission.id,
-                    eventType: 'REVISION_SUBMITTED',
-                    context: {
-                        submissionTitle: submission.title,
-                        authorName: userProfile?.displayName || 'the author'
-                    }
-                });
+        try {
+            await updateDoc(submissionRef, updateData);
+        } catch (serverError) {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({
+                path: submissionRef.path,
+                operation: 'update',
+                requestResourceData: updateData
+            }));
+            setIsSubmitting(false);
+            return;
+        }
 
-                toast({ 
-                    title: "Done! Revision Received", 
-                    description: "Your updated manuscript has been sent to the editor for review.",
-                    className: "bg-green-600 text-white border-none"
-                });
-                onRevisionSubmit();
-            })
-            .catch(async (serverError) => {
-                errorEmitter.emit('permission-error', new FirestorePermissionError({
-                    path: submissionRef.path,
-                    operation: 'update',
-                    requestResourceData: updateData
-                }));
-            })
-            .finally(() => {
-                setIsSubmitting(false);
+        try {
+            await logSubmissionEvent({
+                submissionId: submission.id,
+                eventType: 'STATUS_CHANGED',
+                context: { actorName: userProfile?.displayName || 'Author', status: `Revision Submitted (${submission.status})` }
             });
+            
+            await generateNotification({
+                userId: 'Admins',
+                submissionId: submission.id,
+                eventType: 'REVISION_SUBMITTED',
+                context: {
+                    submissionTitle: submission.title,
+                    authorName: userProfile?.displayName || 'the author'
+                }
+            });
+        } catch (error) {
+            console.error('[Revision] Post-submit side effects failed:', error);
+        }
+
+        toast({ 
+            title: "Done! Revision Received", 
+            description: "Your updated manuscript has been sent to the editor for review.",
+            className: "bg-green-600 text-white border-none"
+        });
+        onRevisionSubmit();
+        setIsSubmitting(false);
     }
     
     return (
@@ -481,11 +542,45 @@ function AuthorRevisionForm({ submission, onRevisionSubmit }: { submission: Subm
             <form onSubmit={handleSubmit}>
                 <CardContent className="space-y-4">
                     <FileUploader 
+                        key={uploaderInstance}
                         endpoint="documentUploader" 
                         onUploadComplete={handleFileUploadComplete} 
                         onUploadError={(err) => toast({ title: "Upload Error", description: err.message, variant: "destructive"})}
                         description="Upload revised manuscript (.doc, .docx)."
                     />
+                    {fileUrl && (
+                        <div className="rounded-lg border bg-secondary/30 p-4 space-y-3">
+                            <div>
+                                <h4 className="font-semibold text-sm">Revised Manuscript Ready</h4>
+                                <p className="text-xs text-muted-foreground">Review the uploaded revision, then submit it to the editor.</p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                <Button asChild size="sm">
+                                    <Link href={`https://docs.google.com/gview?url=${fileUrl}&embedded=true`} target="_blank">
+                                        <BookText className="mr-2 h-4 w-4" />
+                                        Read Online
+                                    </Link>
+                                </Button>
+                                <Button variant="outline" size="sm" asChild>
+                                    <Link href={fileUrl} target="_blank">
+                                        <Download className="mr-2 h-4 w-4" />
+                                        Download File
+                                    </Link>
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                        setFileUrl(null);
+                                        setUploaderInstance(v => v + 1);
+                                    }}
+                                >
+                                    Replace File
+                                </Button>
+                            </div>
+                        </div>
+                    )}
                 </CardContent>
                 <CardFooter>
                     <Button type="submit" disabled={isSubmitting || !fileUrl}>
@@ -631,6 +726,10 @@ export default function SubmissionDetailPage() {
   const { user, userProfile } = useAuth();
   const [refetchTrigger, setRefetchTrigger] = React.useState(0);
   const [isAuthorEditing, setIsAuthorEditing] = React.useState(false);
+  const [showRevisionReplaceUploader, setShowRevisionReplaceUploader] = React.useState(false);
+  const [revisionReplacementUrl, setRevisionReplacementUrl] = React.useState('');
+  const [revisionReplaceUploaderKey, setRevisionReplaceUploaderKey] = React.useState(0);
+  const [isReplacingRevision, setIsReplacingRevision] = React.useState(false);
   const router = useRouter();
 
   const inviteForm = useForm<z.infer<typeof inviteReviewerSchema>>({
@@ -703,29 +802,95 @@ export default function SubmissionDetailPage() {
   }, [fetchSubmission, refetchTrigger]);
 
   const handleDecision = async (status: SubmissionStatus) => {
-    if(!submission || !userProfile || !submission.uniqueId) return;
+    if(!submission || !userProfile) return;
     setIsUpdating(true);
     const submissionRef = doc(db, 'submissions', submission.id);
     const updateData = { status };
-    
-    updateDoc(submissionRef, updateData)
-        .then(async () => {
-            await logSubmissionEvent({ submissionId: submission.id, eventType: 'STATUS_CHANGED', context: { actorName: userProfile.displayName, status } });
-            await generateNotification({ userId: submission.author.id, submissionId: submission.id, eventType: 'STATUS_CHANGED', context: { status, submissionTitle: submission.title } });
-            await sendDecisionEmail({ authorEmail: submission.author.email, authorName: submission.author.name, manuscriptTitle: submission.title, submissionId: submission.id, uniqueId: submission.uniqueId, decision: status });
-            toast({ 
-                title: "Done! Decision Recorded", 
-                description: `Status updated to '${status}'.`,
-                className: "bg-green-600 text-white border-none"
-            });
-            setRefetchTrigger(prev => prev + 1);
-        })
-        .catch(async (serverError) => {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: submissionRef.path, operation: 'update', requestResourceData: updateData }));
-        })
-        .finally(() => {
-            setIsUpdating(false);
+
+    try {
+        await updateDoc(submissionRef, updateData);
+    } catch (serverError) {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: submissionRef.path, operation: 'update', requestResourceData: updateData }));
+        setIsUpdating(false);
+        return;
+    }
+
+    let sideEffectsFailed = false;
+    try {
+        await logSubmissionEvent({ submissionId: submission.id, eventType: 'STATUS_CHANGED', context: { actorName: userProfile.displayName, status } });
+        await generateNotification({ userId: submission.author.id, submissionId: submission.id, eventType: 'STATUS_CHANGED', context: { status, submissionTitle: submission.title } });
+        await sendDecisionEmail({ authorEmail: submission.author.email, authorName: submission.author.name, manuscriptTitle: submission.title, submissionId: submission.id, uniqueId: submission.uniqueId || submission.id, decision: status });
+    } catch (error) {
+        sideEffectsFailed = true;
+        console.error('[Decision] Post-update side effects failed:', error);
+    }
+
+    toast({ 
+        title: "Decision Recorded!", 
+        description: sideEffectsFailed
+            ? `Status changed to '${status}', but some notifications/emails could not be sent.`
+            : `Author has been notified of the '${status}' status.`,
+        className: "bg-green-600 text-white border-none"
+    });
+    setRefetchTrigger(prev => prev + 1);
+    setIsUpdating(false);
+  }
+
+  const handleReplaceRevisedManuscript = async () => {
+    if (!submission || !userProfile || !revisionReplacementUrl || (!isAuthor && !isEditor)) return;
+    setIsReplacingRevision(true);
+
+    const submissionRef = doc(db, 'submissions', submission.id);
+    const updateData: Record<string, unknown> = {
+        manuscriptUrl: revisionReplacementUrl,
+        revisionManuscripts: arrayUnion({
+            revision: Math.max(submission.revision ?? 1, 1),
+            url: revisionReplacementUrl,
+            uploadedAt: new Date(),
+            replaced: true,
+        }),
+    };
+
+    if (!submission.originalManuscriptUrl) {
+        updateData.originalManuscriptUrl = submission.manuscriptUrl;
+    }
+
+    try {
+        await updateDoc(submissionRef, updateData);
+    } catch (serverError) {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: submissionRef.path,
+            operation: 'update',
+            requestResourceData: updateData
+        }));
+        setIsReplacingRevision(false);
+        return;
+    }
+
+    try {
+        await logSubmissionEvent({
+            submissionId: submission.id,
+            eventType: 'STATUS_CHANGED',
+            context: {
+                actorName: userProfile.displayName,
+                status: 'Revised Manuscript File Replaced'
+            }
         });
+    } catch (error) {
+        console.error('[Revision Replace] Post-update side effects failed:', error);
+    }
+
+    toast({
+        title: "Revised Manuscript Updated",
+        description: "The revised manuscript file has been replaced successfully.",
+        className: "bg-green-600 text-white border-none"
+    });
+
+    setShowRevisionReplaceUploader(false);
+    setRevisionReplacementUrl('');
+    setRevisionReplaceUploaderKey(v => v + 1);
+    setRefetchTrigger(prev => prev + 1);
+    setIsReplacingRevision(false);
   }
   
   const handleDeleteSubmission = async () => {
@@ -963,6 +1128,45 @@ export default function SubmissionDetailPage() {
   const needsRevision = ['Minor Revision', 'Major Revision', 'Awaiting Revision: Similarity Issues'].includes(submission.status);
   const canAuthorEdit = isAuthor && !isDecisionMade;
   const canAuthorDelete = isAuthor && submission.status === 'Submitted';
+  const hasSubmittedRevision =
+    !!submission.originalManuscriptUrl ||
+    (submission.revision ?? 0) > 0 ||
+    submission.status === 'Under Review-R1' ||
+    submission.status === 'Under Review-R2';
+  const canViewRevisionContainer = hasSubmittedRevision && (isAuthor || isEditor);
+  const hasDistinctOriginalManuscript =
+    !!submission.originalManuscriptUrl &&
+    submission.originalManuscriptUrl !== submission.manuscriptUrl;
+  const revisionManuscriptHistory = (() => {
+    const rawHistory = Array.isArray((submission as any).revisionManuscripts)
+      ? ((submission as any).revisionManuscripts as any[])
+      : [];
+
+    const parsed = rawHistory
+      .filter((item) => item && typeof item.url === 'string' && item.url.length > 0)
+      .map((item, index) => ({
+        id: `${item.url}-${index}`,
+        revision: typeof item.revision === 'number' ? item.revision : (submission.revision ?? 1),
+        url: item.url as string,
+        uploadedAt: normalizeFirestoreDate(item.uploadedAt),
+      }));
+
+    if (hasSubmittedRevision && submission.manuscriptUrl && !parsed.some((item) => item.url === submission.manuscriptUrl)) {
+      parsed.push({
+        id: `latest-${submission.id}`,
+        revision: submission.revision ?? 1,
+        url: submission.manuscriptUrl,
+        uploadedAt: null,
+      });
+    }
+
+    return parsed.sort((a, b) => {
+      if (b.revision !== a.revision) return b.revision - a.revision;
+      const bTime = b.uploadedAt ? b.uploadedAt.getTime() : 0;
+      const aTime = a.uploadedAt ? a.uploadedAt.getTime() : 0;
+      return bTime - aTime;
+    });
+  })();
 
   return (
     <div className="grid gap-8 lg:grid-cols-3">
@@ -1020,12 +1224,116 @@ export default function SubmissionDetailPage() {
             )}
           <CardFooter className="flex-wrap gap-2 justify-between">
              <div className="flex-wrap gap-2 flex">
-                <Button asChild><Link href={`https://docs.google.com/gview?url=${submission.manuscriptUrl}&embedded=true`} target="_blank"><BookText className="mr-2 h-4 w-4" /> Read Online</Link></Button>
-                {submission.manuscriptUrl && <Button variant="outline" asChild><Link href={submission.manuscriptUrl} target="_blank"><Download className="mr-2 h-4 w-4" /> Download Manuscript</Link></Button>}
+                <Button asChild><Link href={`https://docs.google.com/gview?url=${submission.manuscriptUrl}&embedded=true`} target="_blank"><BookText className="mr-2 h-4 w-4" /> Read Latest Manuscript</Link></Button>
+                {submission.manuscriptUrl && <Button variant="outline" asChild><Link href={submission.manuscriptUrl} target="_blank"><Download className="mr-2 h-4 w-4" /> Download Latest Manuscript</Link></Button>}
             </div>
             {canAuthorEdit && !isAuthorEditing && <Button variant="secondary" onClick={() => setIsAuthorEditing(true)}><Edit className="mr-2 h-4 w-4" /> Edit Details</Button>}
           </CardFooter>
         </Card>
+
+        {canViewRevisionContainer && (
+            <Card className="border-primary/30 bg-primary/5">
+                <CardHeader>
+                    <CardTitle className="font-headline text-lg">Revised Manuscript Versions</CardTitle>
+                    <CardDescription>
+                        The top manuscript buttons are always the latest file. This section tracks revised versions.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                    <div className="flex flex-wrap gap-2">
+                        <Button asChild size="sm">
+                            <Link href={`https://docs.google.com/gview?url=${submission.manuscriptUrl}&embedded=true`} target="_blank">
+                                <BookText className="mr-2 h-4 w-4" />
+                                Read Revised Manuscript (Latest)
+                            </Link>
+                        </Button>
+                        {hasDistinctOriginalManuscript && (
+                            <Button variant="ghost" size="sm" asChild>
+                                <Link href={submission.originalManuscriptUrl!} target="_blank">
+                                    <Download className="mr-2 h-4 w-4" />
+                                    Download Original Manuscript
+                                </Link>
+                            </Button>
+                        )}
+                        <Button
+                            type="button"
+                            variant={showRevisionReplaceUploader ? "ghost" : "secondary"}
+                            size="sm"
+                            onClick={() => {
+                                if (showRevisionReplaceUploader) {
+                                    setShowRevisionReplaceUploader(false);
+                                    setRevisionReplacementUrl('');
+                                    setRevisionReplaceUploaderKey(v => v + 1);
+                                    return;
+                                }
+                                setShowRevisionReplaceUploader(true);
+                            }}
+                        >
+                            {showRevisionReplaceUploader ? 'Cancel Replace' : 'Replace Revised File'}
+                        </Button>
+                    </div>
+                    {revisionManuscriptHistory.length > 0 && (
+                        <div className="rounded-md border bg-background/70 p-3 space-y-2">
+                            <p className="text-xs text-muted-foreground">Revision file history</p>
+                            <div className="space-y-2">
+                                {revisionManuscriptHistory.map((entry) => (
+                                    <div key={entry.id} className="flex flex-wrap items-center justify-between gap-2">
+                                        <div className="text-xs text-muted-foreground">
+                                            <span className="font-medium text-foreground">Revision R{entry.revision}</span>
+                                            {entry.uploadedAt && <span> - {format(entry.uploadedAt, 'PPP p')}</span>}
+                                            {entry.url === submission.manuscriptUrl && <span> - Latest</span>}
+                                        </div>
+                                        <Button variant="outline" size="sm" asChild>
+                                            <Link href={entry.url} target="_blank">
+                                                <Download className="mr-2 h-4 w-4" />
+                                                Download Revised Manuscript R{entry.revision}
+                                            </Link>
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </CardContent>
+                {showRevisionReplaceUploader && (
+                    <CardContent className="pt-0 space-y-3">
+                        <div className="rounded-md border p-3 space-y-3">
+                            <FileUploader
+                                key={revisionReplaceUploaderKey}
+                                endpoint="documentUploader"
+                                onUploadComplete={(url) => setRevisionReplacementUrl(url || '')}
+                                onUploadError={(err) => toast({ title: "Upload Error", description: err.message, variant: "destructive" })}
+                                description="Upload new revised manuscript (.doc, .docx)."
+                            />
+                            {revisionReplacementUrl && (
+                                <div className="flex flex-wrap gap-2">
+                                    <Button asChild size="sm">
+                                        <Link href={`https://docs.google.com/gview?url=${revisionReplacementUrl}&embedded=true`} target="_blank">
+                                            <BookText className="mr-2 h-4 w-4" />
+                                            Read Replacement
+                                        </Link>
+                                    </Button>
+                                    <Button variant="outline" size="sm" asChild>
+                                        <Link href={revisionReplacementUrl} target="_blank">
+                                            <Download className="mr-2 h-4 w-4" />
+                                            Download Replacement
+                                        </Link>
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        onClick={handleReplaceRevisedManuscript}
+                                        disabled={isReplacingRevision}
+                                    >
+                                        {isReplacingRevision ? 'Saving...' : 'Save Replacement'}
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+                    </CardContent>
+                )}
+            </Card>
+        )}
 
         {needsToAcceptInvite && (
             <AcceptInvitationCard submission={submission} onAccept={() => setRefetchTrigger(p => p + 1)} />
@@ -1035,7 +1343,7 @@ export default function SubmissionDetailPage() {
             <ReviewSubmissionForm submission={submission} onReviewSubmit={() => setRefetchTrigger(p => p + 1)} />
         )}
 
-        {(isEditor || (isAuthor && (needsRevision || submission.status.includes('Review'))) || (isReviewer && submission.reviewers?.some(r => r.id === user?.uid && r.status === 'Review Submitted'))) && <SubmittedReviews submissionId={submission.id} showForAuthor={isAuthor} />}
+        {(isEditor || (isAuthor && (needsRevision || submission.status.includes('Review'))) || (isReviewer && submission.reviewers?.some(r => r.id === user?.uid && r.status === 'Review Submitted'))) && <SubmittedReviews submissionId={submission.id} showForAuthor={isAuthor} refreshKey={refetchTrigger} />}
         {isAuthor && needsRevision && <AuthorRevisionForm submission={submission} onRevisionSubmit={() => setRefetchTrigger(p => p + 1)} />}
       </div>
 
