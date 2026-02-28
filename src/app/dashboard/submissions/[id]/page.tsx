@@ -15,7 +15,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { User, Calendar, PlusCircle, Download, BookText, Edit, MessageSquare, Shield, Clock, CheckCircle2, Info, Paperclip, Trash2 } from 'lucide-react';
+import { User, Calendar, PlusCircle, Download, BookText, Edit, MessageSquare, Shield, Clock, CheckCircle2, Info, Paperclip, Trash2, CheckCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { SubmissionStatus, Submission, UserProfile } from '@/types';
 import React from 'react';
@@ -191,7 +191,11 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
                         eventType: 'REVIEW_SUBMITTED',
                         context: { reviewerName: userProfile?.displayName || 'A reviewer', action: 'updated' }
                     });
-                    toast({ title: "Review Updated" });
+                    toast({ 
+                        title: "Review Updated!", 
+                        description: "Your changes have been saved successfully.",
+                        className: "bg-green-600 text-white border-none"
+                    });
                     setIsEditing(false);
                     onReviewSubmit();
                 })
@@ -236,7 +240,11 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
                         context: { submissionTitle: submission.title }
                     });
                     
-                    toast({ title: "Review Submitted" });
+                    toast({ 
+                        title: "Review Submitted!", 
+                        description: "Your expert report has been received.",
+                        className: "bg-green-600 text-white border-none"
+                    });
                     onReviewSubmit();
                 })
                 .catch(async (serverError) => {
@@ -360,7 +368,11 @@ function AcceptInvitationCard({ submission, onAccept }: { submission: Submission
                 context: { actorName: userProfile.displayName, status: 'Review Invitation Accepted' }
             });
 
-            toast({ title: "Invitation Accepted", description: "You can now access the full manuscript and submit your review." });
+            toast({ 
+                title: "Invitation Accepted!", 
+                description: "You can now access the full manuscript and submit your review.",
+                className: "bg-green-600 text-white border-none"
+            });
             onAccept();
         } catch (error: any) {
             errorEmitter.emit('permission-error', new FirestorePermissionError({
@@ -441,7 +453,11 @@ function AuthorRevisionForm({ submission, onRevisionSubmit }: { submission: Subm
                     }
                 });
 
-                toast({ title: "Revision Submitted", description: "Your updated manuscript has been sent." });
+                toast({ 
+                    title: "Revision Submitted!", 
+                    description: "Your updated manuscript has been sent to the editor.",
+                    className: "bg-green-600 text-white border-none"
+                });
                 onRevisionSubmit();
             })
             .catch(async (serverError) => {
@@ -503,7 +519,11 @@ function AuthorEditForm({ submission, onUpdate, onCancel }: { submission: Submis
 
         updateDoc(submissionRef, updateData)
             .then(() => {
-                toast({ title: 'Submission Updated' });
+                toast({ 
+                    title: "Changes Saved!", 
+                    description: "Manuscript details have been updated.",
+                    className: "bg-green-600 text-white border-none"
+                });
                 onUpdate();
             })
             .catch(async (serverError) => {
@@ -547,7 +567,11 @@ function PageCountDialog({ submission, onUpdate }: { submission: Submission; onU
         const updateData = { pageCount: Number(pageCount) || null };
         updateDoc(submissionRef, updateData)
             .then(() => {
-                toast({ title: 'Page Count Updated' });
+                toast({ 
+                    title: "Updated!", 
+                    description: "Page count saved.",
+                    className: "bg-green-600 text-white border-none"
+                });
                 onUpdate();
             })
             .catch(async (serverError) => {
@@ -690,7 +714,11 @@ export default function SubmissionDetailPage() {
             await logSubmissionEvent({ submissionId: submission.id, eventType: 'STATUS_CHANGED', context: { actorName: userProfile.displayName, status } });
             await generateNotification({ userId: submission.author.id, submissionId: submission.id, eventType: 'STATUS_CHANGED', context: { status, submissionTitle: submission.title } });
             await sendDecisionEmail({ authorEmail: submission.author.email, authorName: submission.author.name, manuscriptTitle: submission.title, submissionId: submission.id, uniqueId: submission.uniqueId, decision: status });
-            toast({ title: "Status Updated", description: `Author notified.` });
+            toast({ 
+                title: "Decision Recorded!", 
+                description: `Author has been notified of the '${status}' status.`,
+                className: "bg-green-600 text-white border-none"
+            });
             setRefetchTrigger(prev => prev + 1);
         })
         .catch(async (serverError) => {
@@ -708,7 +736,11 @@ export default function SubmissionDetailPage() {
         transaction.delete(submissionRef);
     })
     .then(() => {
-        toast({ title: "Deleted" });
+        toast({ 
+            title: "Submission Deleted", 
+            description: "The manuscript has been withdrawn.",
+            className: "bg-red-600 text-white border-none"
+        });
         router.push('/dashboard/author');
     })
     .catch(async (serverError) => {
@@ -735,7 +767,11 @@ export default function SubmissionDetailPage() {
             logSubmissionEvent({ submissionId: submission.id, eventType: 'REVIEWER_ASSIGNED', context: { reviewerName: reviewer.displayName, actorName: userProfile.displayName } });
             generateNotification({ userId: reviewer.uid, submissionId: submission.id, eventType: 'REVIEWER_ASSIGNED', context: { submissionTitle: submission.title } });
             sendReviewerAssignmentEmail({ reviewerEmail: reviewer.email, reviewerName: reviewer.displayName, manuscriptTitle: submission.title, submissionId: submission.id });
-            toast({ title: "Reviewer Assigned" });
+            toast({ 
+                title: "Reviewer Assigned!", 
+                description: `${reviewer.displayName} has been notified.`,
+                className: "bg-green-600 text-white border-none"
+            });
             setRefetchTrigger(prev => prev + 1);
         })
         .catch(async (serverError) => {
@@ -796,7 +832,11 @@ export default function SubmissionDetailPage() {
         await logSubmissionEvent({ submissionId: submission.id, eventType: 'REVIEWER_INVITED', context: { reviewerName: values.name, reviewerEmail: values.email, actorName: userProfile.displayName } });
         await sendReviewerInvitationEmail({ reviewerEmail: values.email, reviewerName: values.name, manuscriptTitle: submission.title, submissionId: submission.id });
         
-        toast({ title: "Invitation Sent", description: "A placeholder account has been created for the reviewer." });
+        toast({ 
+            title: "Invitation Sent!", 
+            description: "Reviewer has been invited via email.",
+            className: "bg-green-600 text-white border-none"
+        });
         inviteForm.reset();
         setRefetchTrigger(prev => prev + 1);
 
@@ -847,7 +887,11 @@ export default function SubmissionDetailPage() {
 
         await batch.commit();
         await logSubmissionEvent({ submissionId: submission.id, eventType: 'STATUS_CHANGED', context: { actorName: userProfile.displayName, status: `Reviewer Removed (${reviewer.email})` } });
-        toast({ title: "Reviewer Removed" });
+        toast({ 
+            title: "Reviewer Removed", 
+            description: "The assignment has been canceled.",
+            className: "bg-orange-600 text-white border-none"
+        });
         setRefetchTrigger(prev => prev + 1);
             
     } catch (error) {
@@ -869,7 +913,11 @@ export default function SubmissionDetailPage() {
         const newId = await getNextSubmissionId();
         const updateData = { uniqueId: newId };
         await updateDoc(submissionRef, updateData);
-        toast({ title: "ID Assigned", description: newId });
+        toast({ 
+            title: "ID Assigned!", 
+            description: `New ID: ${newId}`,
+            className: "bg-green-600 text-white border-none"
+        });
         setRefetchTrigger(prev => prev + 1);
     } catch (error: any) { 
         errorEmitter.emit('permission-error', new FirestorePermissionError({
@@ -890,7 +938,11 @@ export default function SubmissionDetailPage() {
     
     updateDoc(submissionRef, updateData)
         .then(async () => {
-            toast({ title: "File Shared with Author" });
+            toast({ 
+                title: "File Shared!", 
+                description: "The author has been notified of the attachment.",
+                className: "bg-green-600 text-white border-none"
+            });
             sendAttachmentNotificationEmail({ authorEmail: submission.author.email, authorName: submission.author.name, editorName: userProfile.displayName, submissionId: submission.id, manuscriptTitle: submission.title, fileName: newAttachment.name });
             setRefetchTrigger(p => p + 1);
         })
