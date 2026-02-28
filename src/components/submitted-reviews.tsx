@@ -183,7 +183,7 @@ export const SubmittedReviews = ({ submissionId, showForAuthor = false }: { subm
                                     </div>
                                )}
                                {(isEditor || isMyReview || showForAuthor) && review.attachmentUrl && (
-                                    <div>
+                                    <div className="pt-4">
                                         <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
                                             <Paperclip className="w-4 h-4" />
                                             Reviewer's Attachment
