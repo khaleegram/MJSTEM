@@ -1,12 +1,14 @@
+'use client';
 
-import { Check, ArrowRight, Download } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { PublicHeader } from '@/components/public-header';
+import { Check, Download } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { getDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-
+import { useEffect, useState } from 'react';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 const ChecklistItem = ({ children }: { children: React.ReactNode }) => (
   <li className="flex items-start gap-3">
@@ -22,22 +24,28 @@ const StructuredAbstractItem = ({ title, description }: { title: string, descrip
     </div>
 )
 
-async function getJournalInfo() {
-    try {
+export default function AuthorGuidelinesPage() {
+  const [submissionTemplateUrl, setSubmissionTemplateUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchJournalInfo = async () => {
         const docRef = doc(db, 'settings', 'journalInfo');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-            return docSnap.data();
-        }
-    } catch (e) {
-        console.error("Could not fetch journal info", e);
-    }
-    return { submissionTemplateUrl: null };
-}
-
-export default async function AuthorGuidelinesPage() {
-
-  const journalInfo = await getJournalInfo();
+        getDoc(docRef)
+            .then((docSnap) => {
+                if (docSnap.exists()) {
+                    setSubmissionTemplateUrl(docSnap.data().submissionTemplateUrl || null);
+                }
+            })
+            .catch(async (serverError) => {
+                const permissionError = new FirestorePermissionError({
+                    path: docRef.path,
+                    operation: 'get',
+                });
+                errorEmitter.emit('permission-error', permissionError);
+            });
+    };
+    fetchJournalInfo();
+  }, []);
 
   return (
     <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -178,9 +186,9 @@ export default async function AuthorGuidelinesPage() {
                             <p className="text-muted-foreground">
                                 Register as a user, download the official manuscript template, and follow the instructions on the submission page.
                             </p>
-                            {journalInfo?.submissionTemplateUrl && (
+                            {submissionTemplateUrl && (
                                 <Button asChild className="mt-4">
-                                    <Link href={journalInfo.submissionTemplateUrl} target="_blank">
+                                    <Link href={submissionTemplateUrl} target="_blank">
                                         <Download className="mr-2" /> Download Submission Template
                                     </Link>
                                 </Button>

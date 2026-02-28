@@ -1,137 +1,123 @@
+'use client';
+
 import { doc, getDoc, collection, query, where, limit, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { notFound } from 'next/navigation';
+import { notFound, useParams } from 'next/navigation';
 import { Submission, Article } from '@/types';
-import { PublicHeader } from '@/components/public-header';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { Download, Calendar, Users, FileText, Info, BookText } from 'lucide-react';
+import { Download, Calendar, Users, Info, BookText } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
-import { Metadata, ResolvingMetadata } from 'next';
 import { CitationExporter } from '@/components/citation-exporter';
+import { useEffect, useState } from 'react';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
+import { Skeleton } from '@/components/ui/skeleton';
 
-type Props = {
-  params: { id: string }
-}
+export default function ArticlePage() {
+  const params = useParams();
+  const id = params.id as string;
+  const [submission, setSubmission] = useState<Submission | null>(null);
+  const [relatedArticles, setRelatedArticles] = useState<Article[]>([]);
+  const [loading, setLoading] = useState(true);
 
-// This function generates the metadata for the page
-export async function generateMetadata(
-  { params }: Props,
-  parent: ResolvingMetadata
-): Promise<Metadata> {
-  const id = params.id
-  const submission = await getSubmission(id);
+  useEffect(() => {
+    if (!id) return;
 
-  if (!submission) {
-    return {
-      title: 'Article Not Found',
-    }
-  }
-
-  const previousImages = (await parent).openGraph?.images || []
-
-  return {
-    title: `${submission.title} | MJSTEM`,
-    description: submission.abstract,
-    keywords: submission.keywords.split(',').map(k => k.trim()),
-    authors: submission.contributors?.map(c => ({ name: c.name })),
-    openGraph: {
-      title: submission.title,
-      description: submission.abstract,
-      type: 'article',
-      publishedTime: new Date(submission.submittedAt).toISOString(),
-      authors: submission.contributors?.map(c => c.name || ''),
-      images: [...previousImages],
-    },
-    // Google Scholar metadata tags
-    other: {
-        'citation_title': submission.title,
-        'citation_author': submission.contributors?.map(c => c.name).join(', ') || '',
-        'citation_publication_date': format(new Date(submission.submittedAt), 'yyyy/MM/dd'),
-        'citation_journal_title': 'Multidisciplinary Journal of Science, Technology, Education and Management (MJSTEM)',
-        'citation_pdf_url': submission.manuscriptUrl,
-        'citation_keywords': submission.keywords,
-        'citation_doi': submission.uniqueId || '',
-    }
-  }
-}
-
-async function getSubmission(id: string): Promise<Submission | null> {
-    try {
+    const fetchArticle = async () => {
+        setLoading(true);
         const docRef = doc(db, 'submissions', id);
-        const docSnap = await getDoc(docRef);
+        getDoc(docRef)
+            .then((docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    if (data.status === 'Accepted') {
+                        const sub = {
+                            id: docSnap.id,
+                            ...data,
+                            submittedAt: data.submittedAt.toDate(),
+                        } as Submission;
+                        setSubmission(sub);
+                        fetchRelated(sub.keywords, sub.id);
+                    } else {
+                        setSubmission(null);
+                    }
+                } else {
+                    setSubmission(null);
+                }
+            })
+            .catch(async (serverError) => {
+                const permissionError = new FirestorePermissionError({
+                    path: docRef.path,
+                    operation: 'get',
+                });
+                errorEmitter.emit('permission-error', permissionError);
+            })
+            .finally(() => {
+                setLoading(false);
+            });
+    };
 
-        if (docSnap.exists()) {
-            const data = docSnap.data();
-            // Only return if it's an accepted article
-            if (data.status === 'Accepted') {
-                const { submittedAt, originalSubmissionDate, ...rest } = data;
-                return {
-                    id: docSnap.id,
-                    ...rest,
-                    submittedAt: submittedAt.toDate(),
-                    originalSubmissionDate: originalSubmissionDate ? originalSubmissionDate.toDate() : null,
-                } as Submission;
-            }
-        }
-        return null;
-    } catch (e) {
-        console.error("Could not fetch article", e);
-        return null;
-    }
-}
+    const fetchRelated = async (keywords: string, currentId: string) => {
+        if (!keywords) return;
+        const keywordList = keywords.split(',').map(k => k.trim()).filter(Boolean);
+        if (keywordList.length === 0) return;
 
-async function getRelatedArticles(keywords: string, currentId: string): Promise<Article[]> {
-    if (!keywords) return [];
-    
-    const keywordList = keywords.split(',').map(k => k.trim()).filter(Boolean);
-    if (keywordList.length === 0) return [];
-
-    try {
+        const subsRef = collection(db, 'submissions');
         const q = query(
-            collection(db, 'submissions'),
+            subsRef,
             where('status', '==', 'Accepted'),
-            where('keywords', 'array-contains-any', keywordList.slice(0, 10)), // Firestore limit of 10 for array-contains-any
-            limit(4) // Fetch a bit more to filter out the current article
+            where('keywords', 'array-contains-any', keywordList.slice(0, 10)),
+            limit(4)
         );
 
-        const querySnapshot = await getDocs(q);
-        const articles: Article[] = [];
-        querySnapshot.forEach(doc => {
-            if (doc.id !== currentId) {
-                const data = doc.data();
-                articles.push({
-                    id: doc.id,
-                    title: data.title,
-                    contributors: data.contributors,
-                    manuscriptUrl: data.manuscriptUrl,
-                    authorName: data.author.name,
-                } as Article)
-            }
-        });
-        
-        return articles.slice(0, 3); // Return at most 3 related articles
-    } catch (error) {
-        console.error("Error fetching related articles: ", error);
-        return [];
-    }
-}
+        getDocs(q)
+            .then((querySnapshot) => {
+                const articles: Article[] = [];
+                querySnapshot.forEach(doc => {
+                    if (doc.id !== currentId) {
+                        const data = doc.data();
+                        articles.push({
+                            id: doc.id,
+                            title: data.title,
+                            contributors: data.contributors,
+                            manuscriptUrl: data.manuscriptUrl,
+                            authorName: data.author.name,
+                        } as Article);
+                    }
+                });
+                setRelatedArticles(articles.slice(0, 3));
+            })
+            .catch(async (serverError) => {
+                const permissionError = new FirestorePermissionError({
+                    path: subsRef.path,
+                    operation: 'list',
+                });
+                errorEmitter.emit('permission-error', permissionError);
+            });
+    };
 
+    fetchArticle();
+  }, [id]);
 
-export default async function ArticlePage({ params }: { params: { id: string } }) {
-  const submission = await getSubmission(params.id);
+  if (loading) {
+      return (
+          <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
+              <div className="grid lg:grid-cols-4 gap-12">
+                  <div className="lg:col-span-3"><Skeleton className="h-[600px] w-full" /></div>
+                  <div className="lg:col-span-1"><Skeleton className="h-[400px] w-full" /></div>
+              </div>
+          </main>
+      );
+  }
 
   if (!submission) {
     notFound();
   }
-  
-  const relatedArticles = submission ? await getRelatedArticles(submission.keywords, submission.id) : [];
 
-  // Create a plain, serializable object to pass to Client Components.
-  // This avoids the "Only plain objects can be passed" error with Date objects.
   const serializableSubmission = JSON.parse(JSON.stringify(submission));
 
   return (
