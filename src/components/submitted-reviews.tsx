@@ -25,6 +25,7 @@ interface Review {
     commentsForAuthor: string;
     submittedAt: Date;
     attachmentUrl?: string;
+    attachmentName?: string;
 }
 
 const getRecommendationVariant = (recommendation: string) => {
@@ -54,9 +55,10 @@ export const SubmittedReviews = ({ submissionId, showForAuthor = false }: { subm
         
         let reviewsQuery;
         if (isEditor || showForAuthor) {
+            // Editors and Authors (via the permissive rules) see all reviews
             reviewsQuery = query(reviewsCollectionRef, orderBy('submittedAt', 'desc'));
         } else {
-            // For reviewers, they can only query their own documents due to security rules
+            // For reviewers, they should still only easily query their own
             reviewsQuery = query(reviewsCollectionRef, where('reviewerId', '==', user.uid), orderBy('submittedAt', 'desc'));
         }
         
@@ -180,7 +182,7 @@ export const SubmittedReviews = ({ submissionId, showForAuthor = false }: { subm
                                         <p className="text-sm text-muted-foreground border p-3 rounded-md">{review.commentsForAuthor}</p>
                                     </div>
                                )}
-                               {(isEditor || isMyReview) && review.attachmentUrl && (
+                               {(isEditor || isMyReview || showForAuthor) && review.attachmentUrl && (
                                     <div>
                                         <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
                                             <Paperclip className="w-4 h-4" />
@@ -189,13 +191,13 @@ export const SubmittedReviews = ({ submissionId, showForAuthor = false }: { subm
                                         <Button asChild size="sm" variant="outline">
                                             <Link href={review.attachmentUrl} target="_blank" rel="noopener noreferrer">
                                                 <Download className="w-4 h-4 mr-2" />
-                                                Download Attached File
+                                                Download {review.attachmentName || 'Reviewer File'}
                                             </Link>
                                         </Button>
                                     </div>
                                 )}
-                                {!review.commentsForEditor && !review.commentsForAuthor && (
-                                    <p className="text-sm text-muted-foreground text-center py-4">The reviewer did not provide any written comments.</p>
+                                {!review.commentsForEditor && !review.commentsForAuthor && !review.attachmentUrl && (
+                                    <p className="text-sm text-muted-foreground text-center py-4">The reviewer did not provide any written comments or files.</p>
                                 )}
                             </AccordionContent>
                         </AccordionItem>

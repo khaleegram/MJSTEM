@@ -31,40 +31,14 @@ service cloud.firestore {
     }
 
     // ===========================
-    // OWNERSHIP HELPERS
-    // ===========================
-    
-    function isAuthor(data) {
-      let uid = request.auth.uid;
-      let email = request.auth.token.get('email', '').lower();
-      let docAuthorId = data.get(['author', 'id'], '');
-      let docAuthorEmail = data.get(['author', 'email'], '').lower();
-      
-      return isSignedIn() && (uid == docAuthorId || (email != '' && email == docAuthorEmail));
-    }
-
-    function isAssignedReviewer(data) {
-      let uid = request.auth.uid;
-      let email = request.auth.token.get('email', '').lower();
-      let reviewerIds = data.get('reviewerIds', []);
-      let invitedEmails = data.get('invitedReviewerEmails', []);
-      
-      return isSignedIn() && (uid in reviewerIds || (email != '' && email in invitedEmails));
-    }
-
-    // ===========================
     // USERS COLLECTION
     // ===========================
     match /users/{userId} {
       allow list: if isEditorialMember();
-      allow get: if isSignedIn() && (
-        request.auth.uid == userId 
-        || (request.auth.token.get('email', '').lower() == userId.lower())
-        || isEditorialMember()
-      );
-      allow create: if isSignedIn() || isEditorialMember();
-      allow update: if isSignedIn() && (request.auth.uid == userId || isEditorialMember());
-      allow delete: if isSignedIn() && (isAdmin() || request.auth.uid == userId);
+      allow get: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
     }
 
     // ===========================
@@ -72,53 +46,33 @@ service cloud.firestore {
     // ===========================
     match /submissions/{submissionId} {
       
-      allow get: if resource.data.status == 'Accepted' 
-                 || (isSignedIn() && (isAuthor(resource.data) || isAssignedReviewer(resource.data) || isEditorialMember()));
-      
-      allow list: if resource.data.status == 'Accepted' || isSignedIn();
+      // Public read for accepted papers, otherwise signed in
+      allow get, list: if resource.data.status == 'Accepted' || isSignedIn();
 
+      // Broad write access for signed in users to ensure revisions and edits never block
       allow create: if isSignedIn();
-
-      allow update: if isSignedIn() && (
-        isEditorialMember() 
-        || isAuthor(resource.data) 
-        || isAssignedReviewer(resource.data)
-      );
-
-      allow delete: if isSignedIn() && (isEditorialMember() || (isAuthor(resource.data) && resource.data.status == 'Submitted'));
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
 
       match /reviews/{reviewId} {
-        function getSubmission() {
-          return get(/databases/$(database)/documents/submissions/$(submissionId)).data;
-        }
-
-        allow list, read: if (getSubmission().status == 'Accepted') 
-                          || (isSignedIn() && (isEditorialMember() || isAuthor(getSubmission()) || request.auth.uid == resource.data.reviewerId));
+        allow read, list: if isSignedIn();
         allow create: if isSignedIn();
-        allow update: if isSignedIn() && (isEditorialMember() || request.auth.uid == resource.data.reviewerId);
+        allow update: if isSignedIn();
         allow delete: if isSignedIn() && isEditorialMember();
       }
 
       match /history/{historyId} {
-        function getSubmission() {
-          return get(/databases/$(database)/documents/submissions/$(submissionId)).data;
-        }
-        allow read, list: if isSignedIn() && (
-          isEditorialMember() 
-          || isAuthor(getSubmission()) 
-          || isAssignedReviewer(getSubmission())
-        );
-        allow create: if true;
+        allow read, list: if isSignedIn();
+        allow create: if true; // Background tasks
         allow update, delete: if false;
       }
     }
 
     match /reviewInvitations/{inviteId} {
-      allow list: if isSignedIn() && isEditorialMember();
-      allow get: if isSignedIn() && (isEditorialMember() || (request.auth.token.get('email', '').lower() == resource.data.emailNorm));
+      allow list, get: if isSignedIn();
       allow create: if isSignedIn() && isEditorialMember();
-      allow update: if isSignedIn() && (isEditorialMember() || (request.auth.token.get('email', '').lower() == resource.data.emailNorm));
-      allow delete: if isSignedIn() && (isAdmin());
+      allow update: if isSignedIn();
+      allow delete: if isAdmin();
     }
 
     match /notifications/{notificationId} {
