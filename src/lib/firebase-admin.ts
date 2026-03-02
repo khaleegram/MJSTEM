@@ -44,6 +44,7 @@ const hasGcpRuntimeHints =
 const hasRuntimeAdc = hasGcpRuntimeHints || hasCredentialsFile;
 
 const canUseAdminFirestore = hasServiceAccountEnv || hasRuntimeAdc;
+let credentialProbePromise: Promise<void> | null = null;
 
 if (!getApps().length) {
   try {
@@ -97,6 +98,46 @@ if (!canUseAdminFirestore) {
 
 const adminDb = adminApp && canUseAdminFirestore ? getFirestore(adminApp) : undefined;
 
+function maskEmail(email: string | undefined): string {
+  if (!email || !email.includes('@')) return 'unknown';
+  const [local, domain] = email.split('@');
+  const safeLocal = local.length <= 2 ? `${local[0] || '*'}*` : `${local.slice(0, 2)}***`;
+  return `${safeLocal}@${domain}`;
+}
+
+async function logAdminCredentialProbe(context: string): Promise<void> {
+  if (!adminApp) {
+    console.warn(`[Firebase Admin] Credential probe skipped (${context}): admin app is not initialized.`);
+    return;
+  }
+
+  if (credentialProbePromise) {
+    return credentialProbePromise;
+  }
+
+  credentialProbePromise = (async () => {
+    try {
+      const credential = adminApp?.options?.credential as { getAccessToken?: () => Promise<any> } | undefined;
+      if (!credential || typeof credential.getAccessToken !== 'function') {
+        console.warn(`[Firebase Admin] Credential probe skipped (${context}): no credential.getAccessToken() available.`);
+        return;
+      }
+
+      const tokenInfo = await credential.getAccessToken();
+      const expiry = tokenInfo?.expirationTime || tokenInfo?.expireTime || 'unknown';
+      console.log(
+        `[Firebase Admin] Credential probe success (${context}): project=${firebaseProjectId || 'unknown'}, serviceAccount=${maskEmail(serviceAccountEmail)}, tokenExpiry=${expiry}`
+      );
+    } catch (error: any) {
+      console.error(
+        `[Firebase Admin] Credential probe failed (${context}): project=${firebaseProjectId || 'unknown'}, serviceAccount=${maskEmail(serviceAccountEmail)}, code=${error?.code || 'unknown'}, message=${error?.message || error}`
+      );
+    }
+  })();
+
+  return credentialProbePromise;
+}
+
 export { adminDb };
-export { firebaseProjectId, canUseAdminFirestore };
+export { firebaseProjectId, canUseAdminFirestore, logAdminCredentialProbe };
 export default admin;

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import admin, { adminDb } from '@/lib/firebase-admin';
+import admin, { adminDb, firebaseProjectId, logAdminCredentialProbe } from '@/lib/firebase-admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,6 +31,8 @@ function serializeForJson(value: any): any {
 
 export async function GET(request: NextRequest) {
   try {
+    await logAdminCredentialProbe('reviewer-assignments-api');
+
     if (!adminDb) {
       return NextResponse.json(
         { error: 'Server Firestore is not configured. Set Firebase Admin credentials.' },
@@ -84,6 +86,24 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ assignments });
   } catch (error: any) {
+    if (
+      error?.code === 7 ||
+      error?.code === 'permission-denied' ||
+      (typeof error?.message === 'string' && error.message.includes('PERMISSION_DENIED'))
+    ) {
+      console.error(
+        `[Reviewer Assignments API] Firestore IAM denied: project=${firebaseProjectId || 'unknown'}; serviceAccount=${process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || 'unknown'}; action=Grant roles/datastore.user`
+      );
+      console.error('[Reviewer Assignments API] Underlying permission error:', error);
+      return NextResponse.json(
+        {
+          error:
+            'Server service account is authenticated but lacks Firestore IAM permission. Grant roles/datastore.user to the service account in this Firebase project.',
+        },
+        { status: 500 }
+      );
+    }
+
     console.error('[Reviewer Assignments API] Error:', error);
     return NextResponse.json(
       { error: error?.message || 'Failed to load reviewer assignments.' },
