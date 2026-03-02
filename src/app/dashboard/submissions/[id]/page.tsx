@@ -1057,14 +1057,26 @@ export default function SubmissionDetailPage() {
 
   const isEditor = userProfile?.role === 'Editor' || userProfile?.role === 'Admin' || userProfile?.role === 'Managing Editor';
   const userEmail = user?.email?.toLowerCase().trim();
+  const reviewerEntries = Array.isArray(submission?.reviewers) ? submission.reviewers : [];
   
   const isAuthor = userProfile?.uid === submission?.author.id || 
                    (userEmail && submission?.author.email && userEmail === submission.author.email.toLowerCase().trim());
-  
-  const isReviewer = submission?.reviewerIds?.includes(user?.uid || '') || 
-                     (userEmail && submission?.invitedReviewerEmails?.some(e => e.toLowerCase().trim() === userEmail));
 
-  const needsToAcceptInvite = isReviewer && !submission?.reviewerIds?.includes(user?.uid || '');
+  const myReviewerEntry = reviewerEntries.find((reviewer) => {
+    const reviewerId = typeof reviewer?.id === 'string' ? reviewer.id : '';
+    const reviewerEmail = typeof reviewer?.email === 'string' ? reviewer.email.toLowerCase().trim() : '';
+    return reviewerId === (user?.uid || '') || (!!userEmail && reviewerEmail === userEmail);
+  });
+  
+  const isReviewer = !!(
+    submission?.reviewerIds?.includes(user?.uid || '') ||
+    (userEmail && submission?.invitedReviewerEmails?.some(e => e.toLowerCase().trim() === userEmail)) ||
+    myReviewerEntry
+  );
+
+  const needsToAcceptInvite = isReviewer &&
+    !submission?.reviewerIds?.includes(user?.uid || '') &&
+    myReviewerEntry?.status === 'Invited';
 
   React.useEffect(() => {
     const fetchReviewers = () => {
@@ -1466,13 +1478,17 @@ export default function SubmissionDetailPage() {
   const rawRevisionPackages = Array.isArray((submission as any).revisionPackages)
     ? ((submission as any).revisionPackages as any[])
     : [];
+  const rawRevisionManuscripts = Array.isArray((submission as any).revisionManuscripts)
+    ? ((submission as any).revisionManuscripts as any[])
+    : [];
   const hasSubmittedRevision =
     rawRevisionPackages.length > 0 ||
+    rawRevisionManuscripts.length > 0 ||
     !!submission.originalManuscriptUrl ||
     (submission.revision ?? 0) > 0 ||
     submission.status === 'Under Review-R1' ||
     submission.status === 'Under Review-R2';
-  const canViewRevisionContainer = hasSubmittedRevision && (isAuthor || isEditor);
+  const canViewRevisionContainer = hasSubmittedRevision && (isAuthor || isEditor || isReviewer);
   const hasDistinctOriginalManuscript =
     !!submission.originalManuscriptUrl &&
     submission.originalManuscriptUrl !== submission.manuscriptUrl;
@@ -1564,6 +1580,18 @@ export default function SubmissionDetailPage() {
         },
       ],
     }));
+  })();
+
+  const visibleRevisionPackageHistory = (() => {
+    if (isEditor || isAuthor) return revisionPackageHistory;
+    if (!isReviewer) return [];
+
+    return revisionPackageHistory
+      .map((pkg) => ({
+        ...pkg,
+        documents: pkg.documents.filter((doc) => doc.visibleToReviewers),
+      }))
+      .filter((pkg) => pkg.documents.length > 0);
   })();
 
   const editorAttachmentHistory = (() => {
@@ -1711,26 +1739,28 @@ export default function SubmissionDetailPage() {
                                 </Button>
                             </>
                         )}
-                        <Button
-                            type="button"
-                            variant={showRevisionReplaceUploader ? "ghost" : "secondary"}
-                            size="sm"
-                            onClick={() => {
-                                if (showRevisionReplaceUploader) {
-                                    setShowRevisionReplaceUploader(false);
-                                    setRevisionReplacementUrl('');
-                                    setRevisionReplaceUploaderKey(v => v + 1);
-                                    return;
-                                }
-                                setShowRevisionReplaceUploader(true);
-                            }}
-                        >
-                            {showRevisionReplaceUploader ? 'Cancel Replace' : 'Replace Revised File'}
-                        </Button>
+                        {(isAuthor || isEditor) && (
+                            <Button
+                                type="button"
+                                variant={showRevisionReplaceUploader ? "ghost" : "secondary"}
+                                size="sm"
+                                onClick={() => {
+                                    if (showRevisionReplaceUploader) {
+                                        setShowRevisionReplaceUploader(false);
+                                        setRevisionReplacementUrl('');
+                                        setRevisionReplaceUploaderKey(v => v + 1);
+                                        return;
+                                    }
+                                    setShowRevisionReplaceUploader(true);
+                                }}
+                            >
+                                {showRevisionReplaceUploader ? 'Cancel Replace' : 'Replace Revised File'}
+                            </Button>
+                        )}
                     </div>
-                    {revisionPackageHistory.length > 0 ? (
+                    {visibleRevisionPackageHistory.length > 0 ? (
                         <div className="space-y-3">
-                            {revisionPackageHistory.map((pkg) => (
+                            {visibleRevisionPackageHistory.map((pkg) => (
                                 <div key={pkg.id} className="rounded-md border bg-background/70 p-3 space-y-3">
                                     <div className="flex items-start justify-between gap-2">
                                         <div>
