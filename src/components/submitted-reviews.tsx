@@ -5,7 +5,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Shield, MessageSquare, User, Paperclip, Download } from 'lucide-react';
+import { Shield, MessageSquare, User, Paperclip, Download, BookText } from 'lucide-react';
 import { Badge } from './ui/badge';
 import { format } from 'date-fns';
 import { useAuth } from '@/contexts/auth-context';
@@ -34,6 +34,9 @@ const getRecommendationVariant = (recommendation: string) => {
         default: return 'outline';
     }
 }
+
+const getOnlineReaderUrl = (url: string) =>
+    `https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`;
 
 export const SubmittedReviews = ({
     submissionId,
@@ -196,18 +199,26 @@ export const SubmittedReviews = ({
                                         <p className="text-sm text-muted-foreground border p-3 rounded-md">{review.commentsForAuthor}</p>
                                     </div>
                                )}
-                               {(isEditor || isMyReview || showForAuthor) && review.attachmentUrl && (
-                                    <div className="pt-4">
+                                {(isEditor || isMyReview || showForAuthor) && review.attachmentUrl && (
+                                     <div className="pt-4">
                                         <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
                                             <Paperclip className="w-4 h-4" />
                                             Reviewer's Attachment
                                         </h4>
-                                        <Button asChild size="sm" variant="outline">
-                                            <Link href={review.attachmentUrl} target="_blank" rel="noopener noreferrer">
-                                                <Download className="w-4 h-4 mr-2" />
-                                                Download {review.attachmentName || 'Reviewer File'}
-                                            </Link>
-                                        </Button>
+                                        <div className="flex flex-wrap gap-2">
+                                            <Button asChild size="sm">
+                                                <Link href={getOnlineReaderUrl(review.attachmentUrl)} target="_blank" rel="noopener noreferrer">
+                                                    <BookText className="w-4 h-4 mr-2" />
+                                                    Read Online
+                                                </Link>
+                                            </Button>
+                                            <Button asChild size="sm" variant="outline">
+                                                <Link href={review.attachmentUrl} target="_blank" rel="noopener noreferrer">
+                                                    <Download className="w-4 h-4 mr-2" />
+                                                    Download {review.attachmentName || 'Reviewer File'}
+                                                </Link>
+                                            </Button>
+                                        </div>
                                     </div>
                                 )}
                                 {!review.commentsForEditor && !review.commentsForAuthor && !review.attachmentUrl && (

@@ -15,7 +15,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { User, Calendar, PlusCircle, Download, BookText, Edit, MessageSquare, Shield, Clock, CheckCircle2, Info, Paperclip, Trash2 } from 'lucide-react';
+import { User, Calendar, PlusCircle, Download, BookOpen, BookText, Edit, MessageSquare, Shield, Clock, CheckCircle2, Info, Paperclip, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { SubmissionStatus, Submission, UserProfile } from '@/types';
 import React from 'react';
@@ -97,6 +97,10 @@ function normalizeFirestoreDate(value: any): Date | null {
     }
     const parsed = new Date(value);
     return isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function getOnlineReaderUrl(url: string): string {
+    return `https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`;
 }
 
 type RevisionDocumentCategory =
@@ -828,12 +832,20 @@ function AuthorRevisionForm({ submission, onRevisionSubmit }: { submission: Subm
                                         description="Upload supporting document (.pdf, .doc, .docx, .txt, .rtf, .ppt, .pptx)."
                                     />
                                     {extraDoc.url && (
-                                        <Button variant="outline" size="sm" asChild>
-                                            <Link href={extraDoc.url} target="_blank">
-                                                <Download className="mr-2 h-4 w-4" />
-                                                Download {extraDoc.fileName || extraDoc.label || 'Document'}
-                                            </Link>
-                                        </Button>
+                                        <div className="flex flex-wrap gap-2">
+                                            <Button size="sm" asChild>
+                                                <Link href={getOnlineReaderUrl(extraDoc.url)} target="_blank" rel="noopener noreferrer">
+                                                    <BookText className="mr-2 h-4 w-4" />
+                                                    Read Online
+                                                </Link>
+                                            </Button>
+                                            <Button variant="outline" size="sm" asChild>
+                                                <Link href={extraDoc.url} target="_blank">
+                                                    <Download className="mr-2 h-4 w-4" />
+                                                    Download {extraDoc.fileName || extraDoc.label || 'Document'}
+                                                </Link>
+                                            </Button>
+                                        </div>
                                     )}
                                 </div>
                             ))}
@@ -1546,9 +1558,14 @@ export default function SubmissionDetailPage() {
                         <div className="mt-8 p-4 bg-secondary/30 border rounded-lg">
                             <h3 className="font-semibold mb-2 font-headline flex items-center gap-2"><Paperclip className="w-4 h-4" /> Supplementary Data</h3>
                             <p className="text-sm text-muted-foreground mb-4">Supporting datasets or additional materials provided by the author.</p>
-                            <Button variant="outline" asChild size="sm">
-                                <Link href={submission.supplementaryFileUrl} target="_blank"><Download className="mr-2 h-4 w-4" /> Download Material</Link>
-                            </Button>
+                            <div className="flex flex-wrap gap-2">
+                                <Button size="sm" asChild>
+                                    <Link href={getOnlineReaderUrl(submission.supplementaryFileUrl)} target="_blank" rel="noopener noreferrer"><BookText className="mr-2 h-4 w-4" /> Read Material</Link>
+                                </Button>
+                                <Button variant="outline" asChild size="sm">
+                                    <Link href={submission.supplementaryFileUrl} target="_blank"><Download className="mr-2 h-4 w-4" /> Download Material</Link>
+                                </Button>
+                            </div>
                         </div>
                     )}
                 </CardContent>
@@ -1556,7 +1573,7 @@ export default function SubmissionDetailPage() {
             )}
           <CardFooter className="flex-wrap gap-2 justify-between">
              <div className="flex-wrap gap-2 flex">
-                <Button asChild><Link href={`https://docs.google.com/gview?url=${submission.manuscriptUrl}&embedded=true`} target="_blank"><BookText className="mr-2 h-4 w-4" /> Read Latest Manuscript</Link></Button>
+                <Button asChild><Link href={getOnlineReaderUrl(submission.manuscriptUrl)} target="_blank"><BookText className="mr-2 h-4 w-4" /> Read Latest Manuscript</Link></Button>
                 {submission.manuscriptUrl && <Button variant="outline" asChild><Link href={submission.manuscriptUrl} target="_blank"><Download className="mr-2 h-4 w-4" /> Download Latest Manuscript</Link></Button>}
             </div>
             {canAuthorEdit && !isAuthorEditing && <Button variant="secondary" onClick={() => setIsAuthorEditing(true)}><Edit className="mr-2 h-4 w-4" /> Edit Details</Button>}
@@ -1574,18 +1591,26 @@ export default function SubmissionDetailPage() {
                 <CardContent className="space-y-3">
                     <div className="flex flex-wrap gap-2">
                         <Button asChild size="sm">
-                            <Link href={`https://docs.google.com/gview?url=${submission.manuscriptUrl}&embedded=true`} target="_blank">
+                            <Link href={getOnlineReaderUrl(submission.manuscriptUrl)} target="_blank">
                                 <BookText className="mr-2 h-4 w-4" />
                                 Read Revised Manuscript (Latest)
                             </Link>
                         </Button>
                         {hasDistinctOriginalManuscript && (
-                            <Button variant="ghost" size="sm" asChild>
-                                <Link href={submission.originalManuscriptUrl!} target="_blank">
-                                    <Download className="mr-2 h-4 w-4" />
-                                    Download Original Manuscript
-                                </Link>
-                            </Button>
+                            <>
+                                <Button variant="secondary" size="sm" asChild>
+                                    <Link href={getOnlineReaderUrl(submission.originalManuscriptUrl!)} target="_blank" rel="noopener noreferrer">
+                                        <BookText className="mr-2 h-4 w-4" />
+                                        Read Original Manuscript
+                                    </Link>
+                                </Button>
+                                <Button variant="ghost" size="sm" asChild>
+                                    <Link href={submission.originalManuscriptUrl!} target="_blank">
+                                        <Download className="mr-2 h-4 w-4" />
+                                        Download Original Manuscript
+                                    </Link>
+                                </Button>
+                            </>
                         )}
                         <Button
                             type="button"
@@ -1629,12 +1654,19 @@ export default function SubmissionDetailPage() {
                                                         {doc.url === submission.manuscriptUrl && <span>Latest manuscript</span>}
                                                     </div>
                                                 </div>
-                                                <Button variant="outline" size="sm" asChild>
-                                                    <Link href={doc.url} target="_blank">
-                                                        <Download className="mr-2 h-4 w-4" />
-                                                        Download
-                                                    </Link>
-                                                </Button>
+                                                <div className="flex items-center gap-2">
+                                                    <Button variant="ghost" size="icon" asChild>
+                                                        <Link href={getOnlineReaderUrl(doc.url)} target="_blank" rel="noopener noreferrer" aria-label={`Read ${doc.label} online`}>
+                                                            <BookOpen className="h-4 w-4" />
+                                                        </Link>
+                                                    </Button>
+                                                    <Button variant="outline" size="sm" asChild>
+                                                        <Link href={doc.url} target="_blank">
+                                                            <Download className="mr-2 h-4 w-4" />
+                                                            Download
+                                                        </Link>
+                                                    </Button>
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
@@ -1660,7 +1692,7 @@ export default function SubmissionDetailPage() {
                             {revisionReplacementUrl && (
                                 <div className="flex flex-wrap gap-2">
                                     <Button asChild size="sm">
-                                        <Link href={`https://docs.google.com/gview?url=${revisionReplacementUrl}&embedded=true`} target="_blank">
+                                        <Link href={getOnlineReaderUrl(revisionReplacementUrl)} target="_blank">
                                             <BookText className="mr-2 h-4 w-4" />
                                             Read Replacement
                                         </Link>
