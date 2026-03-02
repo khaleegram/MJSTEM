@@ -33,6 +33,7 @@ import { logSubmissionEvent } from '@/ai/flows/log-submission-event';
 import Link from 'next/link';
 import { generateNotification } from '@/ai/flows/generate-notification';
 import { sendConfirmationEmail } from '@/ai/flows/send-confirmation-email';
+import { sendWorkflowNotificationEmail } from '@/ai/flows/send-workflow-notification-email';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 const formSchema = NewSubmissionSchema;
@@ -229,6 +230,12 @@ export default function NewSubmissionPage() {
                 authorName: primaryContact.name,
                 manuscriptTitle: values.title,
                 uniqueId: uniqueId,
+            });
+            await sendWorkflowNotificationEmail({
+                event: 'NEW_SUBMISSION_EDITOR_ALERT',
+                submissionId: docRef.id,
+                manuscriptTitle: values.title,
+                actorName: primaryContact.name,
             });
         } catch (backgroundError) {
             console.error("Failed to send post-submission notifications/emails:", backgroundError);

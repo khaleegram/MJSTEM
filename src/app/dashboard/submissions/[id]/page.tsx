@@ -53,6 +53,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { sendReviewerInvitationEmail } from '@/ai/flows/send-reviewer-invitation-email';
 import { sendAttachmentNotificationEmail } from '@/ai/flows/send-attachment-notification-email';
+import { sendWorkflowNotificationEmail } from '@/ai/flows/send-workflow-notification-email';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
 const inviteReviewerSchema = z.object({
@@ -346,6 +347,14 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
                     eventType: 'REVIEW_SUBMITTED',
                     context: { reviewerName: userProfile?.displayName || 'A reviewer', action: `updated (${formatRoundLabel(currentReviewRound)})` }
                 });
+                await sendWorkflowNotificationEmail({
+                    event: 'REVIEW_UPDATED',
+                    submissionId: submission.id,
+                    manuscriptTitle: submission.title,
+                    actorName: userProfile?.displayName || 'A reviewer',
+                    round: currentReviewRound,
+                    recommendation,
+                });
             } catch (error) {
                 console.error('[Review] Post-update side effects failed:', error);
             }
@@ -408,6 +417,14 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
                     submissionId: submission.id,
                     eventType: 'REVIEW_SUBMITTED',
                     context: { submissionTitle: submission.title }
+                });
+                await sendWorkflowNotificationEmail({
+                    event: 'REVIEW_SUBMITTED',
+                    submissionId: submission.id,
+                    manuscriptTitle: submission.title,
+                    actorName: userProfile?.displayName || 'A reviewer',
+                    round: currentReviewRound,
+                    recommendation,
                 });
             } catch (error) {
                 console.error('[Review] Post-submit side effects failed:', error);
@@ -531,6 +548,12 @@ function AcceptInvitationCard({ submission, onAccept }: { submission: Submission
                 submissionId: submission.id,
                 eventType: 'STATUS_CHANGED',
                 context: { actorName: userProfile.displayName, status: 'Review Invitation Accepted' }
+            });
+            await sendWorkflowNotificationEmail({
+                event: 'REVIEWER_INVITATION_ACCEPTED',
+                submissionId: submission.id,
+                manuscriptTitle: submission.title,
+                actorName: userProfile.displayName,
             });
 
             toast({ 
@@ -704,6 +727,13 @@ function AuthorRevisionForm({ submission, onRevisionSubmit }: { submission: Subm
                     authorName: userProfile?.displayName || 'the author',
                     filesCount: packageDocuments.length,
                 }
+            });
+            await sendWorkflowNotificationEmail({
+                event: 'REVISION_SUBMITTED',
+                submissionId: submission.id,
+                manuscriptTitle: submission.title,
+                actorName: userProfile?.displayName || 'Author',
+                round: newRevision,
             });
         } catch (error) {
             console.error('[Revision] Post-submit side effects failed:', error);
@@ -1206,6 +1236,13 @@ export default function SubmissionDetailPage() {
                 status: 'Revised Manuscript File Replaced'
             }
         });
+        await sendWorkflowNotificationEmail({
+            event: 'REVISION_REPLACED',
+            submissionId: submission.id,
+            manuscriptTitle: submission.title,
+            actorName: userProfile.displayName,
+            round: Math.max(submission.revision ?? 1, 1),
+        });
     } catch (error) {
         console.error('[Revision Replace] Post-update side effects failed:', error);
     }
@@ -1451,7 +1488,16 @@ export default function SubmissionDetailPage() {
                 description: `Attachment shared for ${formatRoundLabel(toRound(submission.revision))}.`,
                 className: "bg-green-600 text-white border-none"
             });
-            sendAttachmentNotificationEmail({ authorEmail: submission.author.email, authorName: submission.author.name, editorName: userProfile.displayName, submissionId: submission.id, manuscriptTitle: submission.title, fileName: newAttachment.name });
+            await sendAttachmentNotificationEmail({ authorEmail: submission.author.email, authorName: submission.author.name, editorName: userProfile.displayName, submissionId: submission.id, manuscriptTitle: submission.title, fileName: newAttachment.name });
+            await sendWorkflowNotificationEmail({
+                event: 'EDITOR_ATTACHMENT_SHARED_REVIEWERS',
+                submissionId: submission.id,
+                manuscriptTitle: submission.title,
+                actorName: userProfile.displayName,
+                round: toRound(submission.revision),
+                fileName: newAttachment.name,
+                visibleToReviewers: editorAttachmentVisibleToReviewers,
+            });
             setEditorAttachmentVisibleToReviewers(false);
             setRefetchTrigger(p => p + 1);
         })
