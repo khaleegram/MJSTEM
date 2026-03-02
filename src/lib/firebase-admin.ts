@@ -4,13 +4,36 @@ import * as admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 
 let adminApp: App | undefined;
-const firebaseProjectId = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+function normalizeEnvString(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+}
+
+function normalizePrivateKey(value: string | undefined): string | undefined {
+  const normalized = normalizeEnvString(value);
+  if (!normalized) return undefined;
+  // Support both escaped and real newline formats.
+  return normalized.replace(/\\n/g, "\n").replace(/\r\n/g, "\n");
+}
+
+const firebaseProjectId = normalizeEnvString(
+  process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
+);
 const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
 const hasCredentialsFile = !!credentialsPath && existsSync(credentialsPath);
+const serviceAccountEmail = normalizeEnvString(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL);
+const serviceAccountPrivateKey = normalizePrivateKey(process.env.GOOGLE_PRIVATE_KEY);
 const hasServiceAccountEnv =
   !!firebaseProjectId &&
-  !!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL &&
-  !!process.env.GOOGLE_PRIVATE_KEY;
+  !!serviceAccountEmail &&
+  !!serviceAccountPrivateKey;
 
 // ADC is typically present in managed GCP runtimes; local ADC is valid only when the file exists.
 const hasGcpRuntimeHints =
@@ -26,11 +49,14 @@ if (!getApps().length) {
   try {
     const serviceAccount = {
         projectId: firebaseProjectId,
-        clientEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-        privateKey: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+        clientEmail: serviceAccountEmail,
+        privateKey: serviceAccountPrivateKey,
     };
 
     if (serviceAccount.privateKey && serviceAccount.clientEmail && serviceAccount.projectId) {
+        if (!serviceAccount.privateKey.includes("BEGIN PRIVATE KEY")) {
+          console.warn("[Firebase Admin] GOOGLE_PRIVATE_KEY format looks invalid (missing BEGIN PRIVATE KEY).");
+        }
         adminApp = initializeApp({
             credential: cert(serviceAccount),
             projectId: serviceAccount.projectId,
