@@ -18,6 +18,13 @@ export const EditorAttachmentSchema = z.object({
   url: z.string().url(),
   name: z.string(),
   uploadedAt: z.any(),
+  round: z.number().int().nonnegative().optional(),
+  visibleToReviewers: z.boolean().optional(),
+  uploadedBy: z.object({
+    id: z.string().optional(),
+    name: z.string().optional(),
+    email: z.string().email().optional(),
+  }).optional(),
 });
 
 export const RevisionManuscriptSchema = z.object({
@@ -85,6 +92,8 @@ export const AssignedReviewerSchema = z.object({
   name: z.string(),
   email: z.string().email(),
   status: z.enum(['Pending', 'Review Submitted', 'Invited']),
+  lastReviewedRound: z.number().int().nonnegative().optional(),
+  lastReviewedAt: z.any().optional(),
 });
 
 export const SubmissionSchema = z.object({

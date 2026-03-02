@@ -125,16 +125,20 @@ export default function ReviewerPage() {
                   const myReviewAssignment = submission.reviewers?.find(
                     (r) => r.id === user?.uid || r.email?.toLowerCase().trim() === user?.email?.toLowerCase().trim()
                   );
-                  const status = myReviewAssignment?.status || 'Invited';
+                  const status = (submission as any).myReviewStatus || myReviewAssignment?.status || 'Invited';
                   const hasReviewed = status === 'Review Submitted';
                   const isPendingInvite = status === 'Invited';
+                  const currentRound = typeof (submission as any).myReviewRound === 'number'
+                    ? (submission as any).myReviewRound
+                    : (typeof submission.revision === 'number' ? submission.revision : 0);
+                  const roundLabel = currentRound > 0 ? `R${currentRound}` : 'Initial';
 
                   return (
                     <TableRow key={submission.id}>
                       <TableCell className="font-medium max-w-xs truncate">{submission.title}</TableCell>
                       <TableCell>
                         <Badge variant={isPendingInvite ? 'default' : hasReviewed ? 'success' : 'outline'}>
-                          {status}
+                          {isPendingInvite ? status : `${status} (${roundLabel})`}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">

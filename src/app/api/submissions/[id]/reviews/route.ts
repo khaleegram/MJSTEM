@@ -41,6 +41,12 @@ function toMillis(value: unknown): number {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
+function toRound(value: unknown): number {
+  const num = typeof value === 'number' ? value : Number(value);
+  if (!Number.isInteger(num) || num < 0) return 0;
+  return num;
+}
+
 export async function GET(
   request: NextRequest,
   context: { params: { id: string } | Promise<{ id: string }> }
@@ -110,6 +116,9 @@ export async function GET(
     }
 
     const scope = request.nextUrl.searchParams.get('scope');
+    const roundParam = request.nextUrl.searchParams.get('round');
+    const hasRoundFilter = roundParam !== null;
+    const requestedRound = hasRoundFilter ? toRound(roundParam) : 0;
     const canReadAll = isEditorialMember || isAuthor;
     const readAll = scope === 'all' && canReadAll;
 
@@ -118,9 +127,10 @@ export async function GET(
       ? await reviewsRef.get()
       : await reviewsRef.where('reviewerId', '==', uid).get();
 
-    const reviews = reviewsSnap.docs
+    let reviews = reviewsSnap.docs
       .map((reviewDoc) => {
         const serialized = { id: reviewDoc.id, ...serializeForJson(reviewDoc.data()) } as Record<string, any>;
+        serialized.round = toRound(serialized.round);
 
         if (isAuthor && !isEditorialMember) {
           // Do not expose editor-only/private review content to authors via API payload.
@@ -131,7 +141,15 @@ export async function GET(
 
         return serialized;
       })
-      .sort((a, b) => toMillis(b?.submittedAt) - toMillis(a?.submittedAt));
+      .sort((a, b) => {
+        const roundDiff = toRound(b?.round) - toRound(a?.round);
+        if (roundDiff !== 0) return roundDiff;
+        return toMillis(b?.submittedAt) - toMillis(a?.submittedAt);
+      });
+
+    if (hasRoundFilter) {
+      reviews = reviews.filter((review) => toRound(review?.round) === requestedRound);
+    }
 
     return NextResponse.json({ reviews });
   } catch (error: any) {

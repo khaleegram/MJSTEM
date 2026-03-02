@@ -29,6 +29,16 @@ function serializeForJson(value: any): any {
   return value;
 }
 
+function normalizeEmail(value: unknown): string {
+  return typeof value === 'string' ? value.toLowerCase().trim() : '';
+}
+
+function toRound(value: unknown): number {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0) return 0;
+  return parsed;
+}
+
 export async function GET(request: NextRequest) {
   try {
     await logAdminCredentialProbe('reviewer-assignments-api');
@@ -64,19 +74,52 @@ export async function GET(request: NextRequest) {
 
     const merged = new Map<string, any>();
 
-    for (const doc of byIdSnap.docs) {
-      merged.set(doc.id, { id: doc.id, ...serializeForJson(doc.data()) });
+    for (const submissionDoc of byIdSnap.docs) {
+      merged.set(submissionDoc.id, submissionDoc);
     }
 
     if (byEmailSnap) {
-      for (const doc of byEmailSnap.docs) {
-        if (!merged.has(doc.id)) {
-          merged.set(doc.id, { id: doc.id, ...serializeForJson(doc.data()) });
+      for (const submissionDoc of byEmailSnap.docs) {
+        if (!merged.has(submissionDoc.id)) {
+          merged.set(submissionDoc.id, submissionDoc);
         }
       }
     }
 
-    const assignments = Array.from(merged.values()).sort((a, b) => {
+    const assignments = await Promise.all(
+      Array.from(merged.values()).map(async (submissionDoc) => {
+        const data = submissionDoc.data() || {};
+        const serialized = { id: submissionDoc.id, ...serializeForJson(data) } as Record<string, any>;
+
+        const currentRound = toRound(serialized.revision);
+        const reviewers = Array.isArray(data.reviewers) ? data.reviewers : [];
+        const reviewerIds = Array.isArray(data.reviewerIds) ? data.reviewerIds : [];
+
+        const myReviewerEntry = reviewers.find((reviewer: any) => {
+          const reviewerId = typeof reviewer?.id === 'string' ? reviewer.id : '';
+          const reviewerEmail = normalizeEmail(reviewer?.email);
+          return reviewerId === uid || (emailNorm !== '' && reviewerEmail === emailNorm);
+        });
+
+        const invitedOnly = !reviewerIds.includes(uid) && myReviewerEntry?.status === 'Invited';
+        const ownReviewsSnap = await submissionDoc.ref.collection('reviews').where('reviewerId', '==', uid).get();
+        const submittedForCurrentRound = ownReviewsSnap.docs.some((reviewDoc) => {
+          const reviewRound = toRound(reviewDoc.data()?.round);
+          return reviewRound === currentRound;
+        });
+
+        serialized.myReviewRound = currentRound;
+        serialized.myReviewStatus = invitedOnly
+          ? 'Invited'
+          : submittedForCurrentRound
+          ? 'Review Submitted'
+          : 'Pending';
+
+        return serialized;
+      })
+    );
+
+    assignments.sort((a, b) => {
       const aTime = Date.parse(a?.submittedAt || '');
       const bTime = Date.parse(b?.submittedAt || '');
       const aMs = Number.isNaN(aTime) ? 0 : aTime;

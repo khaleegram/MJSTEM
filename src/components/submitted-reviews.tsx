@@ -17,6 +17,7 @@ interface Review {
     reviewerId: string;
     reviewerName: string;
     recommendation: 'Accept' | 'Minor Revision' | 'Major Revision' | 'Reject';
+    round?: number;
     commentsForEditor: string;
     commentsForAuthor: string;
     submittedAt: Date;
@@ -37,6 +38,11 @@ const getRecommendationVariant = (recommendation: string) => {
 
 const getOnlineReaderUrl = (url: string) =>
     `https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`;
+
+const getRoundLabel = (round?: number) => {
+    const safeRound = typeof round === 'number' && round >= 0 ? round : 0;
+    return safeRound > 0 ? `R${safeRound}` : 'Initial';
+};
 
 export const SubmittedReviews = ({
     submissionId,
@@ -81,10 +87,17 @@ export const SubmittedReviews = ({
                 const fetchedReviews = (Array.isArray(payload?.reviews) ? payload.reviews : []).map((review: any) => {
                     const submittedAt = review?.submittedAt ? new Date(review.submittedAt) : new Date();
                     const safeSubmittedAt = Number.isNaN(submittedAt.getTime()) ? new Date() : submittedAt;
+                    const parsedRound = typeof review?.round === 'number' ? review.round : Number(review?.round);
+                    const safeRound = Number.isInteger(parsedRound) && parsedRound >= 0 ? parsedRound : 0;
                     return {
                         ...review,
+                        round: safeRound,
                         submittedAt: safeSubmittedAt,
                     } as Review;
+                }).sort((a, b) => {
+                    const roundDiff = (b.round ?? 0) - (a.round ?? 0);
+                    if (roundDiff !== 0) return roundDiff;
+                    return b.submittedAt.getTime() - a.submittedAt.getTime();
                 });
 
                 if (cancelled) return;
@@ -181,6 +194,7 @@ export const SubmittedReviews = ({
                             </AccordionTrigger>
                             <AccordionContent className="space-y-6 pt-4">
                                 <p className='text-xs text-muted-foreground'>Submitted on {format(review.submittedAt, 'PPP')}</p>
+                                <p className='text-xs text-muted-foreground'>Review Round: {getRoundLabel(review.round)}</p>
                                 {(isEditor || isMyReview) && review.commentsForEditor && (
                                      <div>
                                         <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">

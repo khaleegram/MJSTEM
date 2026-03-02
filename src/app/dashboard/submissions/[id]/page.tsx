@@ -103,6 +103,16 @@ function getOnlineReaderUrl(url: string): string {
     return `https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`;
 }
 
+function toRound(value: unknown): number {
+    const parsed = typeof value === 'number' ? value : Number(value);
+    if (!Number.isInteger(parsed) || parsed < 0) return 0;
+    return parsed;
+}
+
+function formatRoundLabel(round: number): string {
+    return round > 0 ? `R${round}` : 'Initial';
+}
+
 type RevisionDocumentCategory =
     | 'revised_manuscript_clean'
     | 'response_to_reviewers'
@@ -209,6 +219,7 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
     const myReviewAssignment = submission.reviewers?.find(r => 
         r.id === user?.uid || (userEmail && r.email?.toLowerCase().trim() === userEmail)
     );
+    const currentReviewRound = toRound(submission.revision);
 
     React.useEffect(() => {
         if (!user || !submission.id) return;
@@ -224,7 +235,7 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
         const loadExistingReview = async () => {
             try {
                 const token = await user.getIdToken(true);
-                const response = await fetch(`/api/submissions/${submission.id}/reviews?scope=mine`, {
+                const response = await fetch(`/api/submissions/${submission.id}/reviews?scope=mine&round=${currentReviewRound}`, {
                     method: 'GET',
                     headers: {
                         Authorization: `Bearer ${token}`,
@@ -256,20 +267,20 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
         return () => {
             cancelled = true;
         };
-    }, [user?.uid, submission.id]);
+    }, [user?.uid, submission.id, currentReviewRound]);
 
     if (!myReviewAssignment || myReviewAssignment.status === 'Invited') {
         return null;
     }
 
-    const isSubmitted = myReviewAssignment.status === 'Review Submitted';
+    const isSubmitted = !!reviewId;
 
     if (isSubmitted && !isEditing) {
         return (
             <Card>
                 <CardHeader>
-                    <CardTitle className="font-headline">Review Submitted</CardTitle>
-                    <CardDescription>You have successfully submitted your review for this manuscript. You can update your feedback if needed.</CardDescription>
+                    <CardTitle className="font-headline">Review Submitted - Round {formatRoundLabel(currentReviewRound)}</CardTitle>
+                    <CardDescription>You have already submitted feedback for this round. You can update it if needed.</CardDescription>
                 </CardHeader>
                 <CardFooter>
                     <Button variant="outline" onClick={() => setIsEditing(true)}>Edit Your Review</Button>
@@ -289,6 +300,7 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
         const reviewData = {
             reviewerId: user?.uid,
             reviewerName: userProfile?.displayName || 'Anonymous Reviewer',
+            round: currentReviewRound,
             recommendation,
             commentsForEditor,
             commentsForAuthor,
@@ -303,6 +315,21 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
             const reviewRef = doc(db, 'submissions', submission.id, 'reviews', reviewId);
             try {
                 await updateDoc(reviewRef, reviewData);
+                const updatedReviewers = submission.reviewers?.map(r => {
+                    const isMe = r.id === user?.uid || (userEmail && r.email?.toLowerCase().trim() === userEmail);
+                    return isMe
+                        ? {
+                            ...r,
+                            id: user?.uid,
+                            status: 'Review Submitted' as const,
+                            lastReviewedRound: currentReviewRound,
+                            lastReviewedAt: new Date(),
+                        }
+                        : r;
+                });
+                if (updatedReviewers) {
+                    await updateDoc(submissionRef, { reviewers: updatedReviewers });
+                }
             } catch (serverError) {
                 errorEmitter.emit('permission-error', new FirestorePermissionError({
                     path: reviewRef.path,
@@ -317,7 +344,7 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
                 await logSubmissionEvent({
                     submissionId: submission.id,
                     eventType: 'REVIEW_SUBMITTED',
-                    context: { reviewerName: userProfile?.displayName || 'A reviewer', action: 'updated' }
+                    context: { reviewerName: userProfile?.displayName || 'A reviewer', action: `updated (${formatRoundLabel(currentReviewRound)})` }
                 });
             } catch (error) {
                 console.error('[Review] Post-update side effects failed:', error);
@@ -334,10 +361,19 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
         } else {
             const reviewsCollectionRef = collection(db, 'submissions', submission.id, 'reviews');
             try {
-                await addDoc(reviewsCollectionRef, reviewData);
+                const createdReviewRef = await addDoc(reviewsCollectionRef, reviewData);
+                setReviewId(createdReviewRef.id);
                 const updatedReviewers = submission.reviewers?.map(r => {
                     const isMe = r.id === user?.uid || (userEmail && r.email?.toLowerCase().trim() === userEmail);
-                    return isMe ? { ...r, id: user?.uid, status: 'Review Submitted' as const } : r;
+                    return isMe
+                        ? {
+                            ...r,
+                            id: user?.uid,
+                            status: 'Review Submitted' as const,
+                            lastReviewedRound: currentReviewRound,
+                            lastReviewedAt: new Date(),
+                        }
+                        : r;
                 });
                 await updateDoc(submissionRef, { reviewers: updatedReviewers });
             } catch (serverError) {
@@ -354,7 +390,7 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
                 await logSubmissionEvent({
                     submissionId: submission.id,
                     eventType: 'REVIEW_SUBMITTED',
-                    context: { reviewerName: userProfile?.displayName || 'A reviewer' }
+                    context: { reviewerName: userProfile?.displayName || 'A reviewer', round: formatRoundLabel(currentReviewRound) }
                 });
                 
                 await generateNotification({
@@ -379,7 +415,7 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
             
             toast({ 
                 title: "Done! Review Submitted", 
-                description: "Your expert report has been received. Thank you for your contribution.",
+                description: `Your expert report for ${formatRoundLabel(currentReviewRound)} has been received. Thank you for your contribution.`,
                 className: "bg-green-600 text-white border-none"
             });
             onReviewSubmit();
@@ -390,8 +426,8 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
     return (
         <Card id="review-form">
             <CardHeader>
-                <CardTitle className="font-headline">{reviewId ? 'Update Your Review' : 'Submit Review Report'}</CardTitle>
-                <CardDescription>Provide your expert recommendation and feedback.</CardDescription>
+                <CardTitle className="font-headline">{reviewId ? `Update Your Review (${formatRoundLabel(currentReviewRound)})` : `Submit Review Report (${formatRoundLabel(currentReviewRound)})`}</CardTitle>
+                <CardDescription>Provide your expert recommendation and feedback for this review round.</CardDescription>
             </CardHeader>
             <form onSubmit={handleSubmit}>
                 <CardContent className="space-y-4">
@@ -1011,6 +1047,7 @@ export default function SubmissionDetailPage() {
   const [revisionReplacementUrl, setRevisionReplacementUrl] = React.useState('');
   const [revisionReplaceUploaderKey, setRevisionReplaceUploaderKey] = React.useState(0);
   const [isReplacingRevision, setIsReplacingRevision] = React.useState(false);
+  const [editorAttachmentVisibleToReviewers, setEditorAttachmentVisibleToReviewers] = React.useState(false);
   const router = useRouter();
 
   const inviteForm = useForm<z.infer<typeof inviteReviewerSchema>>({
@@ -1375,8 +1412,23 @@ export default function SubmissionDetailPage() {
 
   const handleEditorFileUpload = async (url: string, name?: string) => {
     if (!submission || !userProfile) return;
+    if (!url) {
+        toast({ title: "Upload Failed", description: "Attachment URL is missing.", variant: "destructive" });
+        return;
+    }
     setIsUpdating(true);
-    const newAttachment = { url, name: name || 'Uploaded File', uploadedAt: new Date() };
+    const newAttachment = {
+        url,
+        name: name || 'Uploaded File',
+        uploadedAt: new Date(),
+        round: toRound(submission.revision),
+        visibleToReviewers: editorAttachmentVisibleToReviewers,
+        uploadedBy: {
+            id: userProfile.uid,
+            name: userProfile.displayName,
+            email: userProfile.email,
+        },
+    };
     const submissionRef = doc(db, 'submissions', submission.id);
     const updateData = { editorAttachments: arrayUnion(newAttachment) };
     
@@ -1384,10 +1436,11 @@ export default function SubmissionDetailPage() {
         .then(async () => {
             toast({ 
                 title: "Done! File Shared", 
-                description: "Author has been notified.",
+                description: `Attachment shared for ${formatRoundLabel(toRound(submission.revision))}.`,
                 className: "bg-green-600 text-white border-none"
             });
             sendAttachmentNotificationEmail({ authorEmail: submission.author.email, authorName: submission.author.name, editorName: userProfile.displayName, submissionId: submission.id, manuscriptTitle: submission.title, fileName: newAttachment.name });
+            setEditorAttachmentVisibleToReviewers(false);
             setRefetchTrigger(p => p + 1);
         })
         .catch(async (serverError) => { 
@@ -1409,6 +1462,7 @@ export default function SubmissionDetailPage() {
   const needsRevision = ['Minor Revision', 'Major Revision', 'Awaiting Revision: Similarity Issues'].includes(submission.status);
   const canAuthorEdit = isAuthor && !isDecisionMade;
   const canAuthorDelete = isAuthor && submission.status === 'Submitted';
+  const currentSubmissionRound = toRound(submission.revision);
   const rawRevisionPackages = Array.isArray((submission as any).revisionPackages)
     ? ((submission as any).revisionPackages as any[])
     : [];
@@ -1510,6 +1564,51 @@ export default function SubmissionDetailPage() {
         },
       ],
     }));
+  })();
+
+  const editorAttachmentHistory = (() => {
+    const raw = Array.isArray((submission as any).editorAttachments)
+      ? ((submission as any).editorAttachments as any[])
+      : [];
+
+    return raw
+      .filter((attachment) => attachment && typeof attachment.url === 'string' && attachment.url.length > 0)
+      .map((attachment, index) => ({
+        id: typeof attachment.id === 'string' ? attachment.id : `editor-attachment-${index}`,
+        url: attachment.url as string,
+        name:
+          typeof attachment.name === 'string' && attachment.name.trim().length > 0
+            ? attachment.name.trim()
+            : `Attachment ${index + 1}`,
+        uploadedAt: normalizeFirestoreDate(attachment.uploadedAt),
+        round: toRound(attachment.round),
+        visibleToReviewers: attachment.visibleToReviewers === true,
+        uploadedBy: attachment.uploadedBy || null,
+      }))
+      .sort((a, b) => {
+        if (b.round !== a.round) return b.round - a.round;
+        const bTime = b.uploadedAt ? b.uploadedAt.getTime() : 0;
+        const aTime = a.uploadedAt ? a.uploadedAt.getTime() : 0;
+        return bTime - aTime;
+      });
+  })();
+
+  const visibleEditorAttachmentHistory = editorAttachmentHistory.filter((attachment) => {
+    if (isEditor || isAuthor) return true;
+    if (isReviewer) return attachment.visibleToReviewers;
+    return false;
+  });
+
+  const editorAttachmentRounds = (() => {
+    const grouped = new Map<number, typeof visibleEditorAttachmentHistory>();
+    for (const attachment of visibleEditorAttachmentHistory) {
+      const existing = grouped.get(attachment.round) ?? [];
+      existing.push(attachment);
+      grouped.set(attachment.round, existing);
+    }
+    return Array.from(grouped.entries())
+      .map(([round, attachments]) => ({ round, attachments }))
+      .sort((a, b) => b.round - a.round);
   })();
 
   return (
@@ -1727,7 +1826,7 @@ export default function SubmissionDetailPage() {
             <ReviewSubmissionForm submission={submission} onReviewSubmit={() => setRefetchTrigger(p => p + 1)} />
         )}
 
-        {(isEditor || (isAuthor && (needsRevision || submission.status.includes('Review'))) || (isReviewer && submission.reviewers?.some(r => r.id === user?.uid && r.status === 'Review Submitted'))) && <SubmittedReviews submissionId={submission.id} showForAuthor={isAuthor} refreshKey={refetchTrigger} />}
+        {(isEditor || (isAuthor && (needsRevision || submission.status.includes('Review'))) || isReviewer) && <SubmittedReviews submissionId={submission.id} showForAuthor={isAuthor} refreshKey={refetchTrigger} />}
         {isAuthor && needsRevision && <AuthorRevisionForm submission={submission} onRevisionSubmit={() => setRefetchTrigger(p => p + 1)} />}
       </div>
 
@@ -1754,11 +1853,64 @@ export default function SubmissionDetailPage() {
         </Card>
         )}
         
-        {isEditor && (
+        {(isEditor || isAuthor || (isReviewer && visibleEditorAttachmentHistory.length > 0)) && (
             <Card>
-                <CardHeader><CardTitle className="font-headline">Editor Attachments</CardTitle></CardHeader>
-                <CardContent>
-                    <FileUploader endpoint="generalDocumentUploader" onUploadComplete={handleEditorFileUpload} onUploadError={(err) => toast({ title: "Upload Failed", variant: "destructive"})} description="Share files with authors." />
+                <CardHeader>
+                    <CardTitle className="font-headline">Editor Attachments (By Round)</CardTitle>
+                    <CardDescription>Editorial files are tracked per review round for a complete record.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    {isEditor && (
+                        <div className="space-y-3 rounded-md border p-3">
+                            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <input
+                                    type="checkbox"
+                                    checked={editorAttachmentVisibleToReviewers}
+                                    onChange={(event) => setEditorAttachmentVisibleToReviewers(event.target.checked)}
+                                />
+                                Also visible to reviewers
+                            </label>
+                            <FileUploader endpoint="generalDocumentUploader" onUploadComplete={handleEditorFileUpload} onUploadError={(err) => toast({ title: "Upload Failed", description: err.message, variant: "destructive"})} description="Share files with authors (and optionally reviewers)." />
+                        </div>
+                    )}
+
+                    {editorAttachmentRounds.length > 0 ? (
+                        <div className="space-y-3">
+                            {editorAttachmentRounds.map((roundGroup) => (
+                                <div key={`editor-round-${roundGroup.round}`} className="rounded-md border p-3 space-y-2">
+                                    <p className="text-sm font-semibold">Round {formatRoundLabel(roundGroup.round)}</p>
+                                    <div className="space-y-2">
+                                        {roundGroup.attachments.map((attachment) => (
+                                            <div key={attachment.id} className="rounded border p-2 space-y-2">
+                                                <p className="text-xs font-medium break-words">{attachment.name}</p>
+                                                <p className="text-[11px] text-muted-foreground">
+                                                    {attachment.uploadedAt ? `Uploaded ${format(attachment.uploadedAt, 'PPP p')}` : 'Upload time not recorded'}
+                                                    {attachment.uploadedBy?.name ? ` by ${attachment.uploadedBy.name}` : ''}
+                                                    {isReviewer && !isAuthor && !isEditor ? '' : ` - ${attachment.visibleToReviewers ? 'Visible to reviewers' : 'Author/editor only'}`}
+                                                </p>
+                                                <div className="flex flex-wrap gap-2">
+                                                    <Button size="sm" asChild>
+                                                        <Link href={getOnlineReaderUrl(attachment.url)} target="_blank" rel="noopener noreferrer">
+                                                            <BookText className="mr-2 h-4 w-4" />
+                                                            Read Online
+                                                        </Link>
+                                                    </Button>
+                                                    <Button variant="outline" size="sm" asChild>
+                                                        <Link href={attachment.url} target="_blank" rel="noopener noreferrer">
+                                                            <Download className="mr-2 h-4 w-4" />
+                                                            Download
+                                                        </Link>
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-sm text-muted-foreground italic">No editor attachments shared yet.</p>
+                    )}
                 </CardContent>
             </Card>
         )}
@@ -1768,15 +1920,25 @@ export default function SubmissionDetailPage() {
           <CardContent>
              {submission.reviewers?.length ? (
                 <ul className="space-y-4">
-                    {submission.reviewers.map((r, i) => (
+                    {submission.reviewers.map((r, i) => {
+                         const reviewerLastRound = toRound((r as any).lastReviewedRound);
+                         const reviewerDisplayStatus = r.status === 'Invited'
+                            ? 'Invited'
+                            : reviewerLastRound >= currentSubmissionRound
+                              ? 'Review Submitted'
+                              : 'Pending';
+                         return (
                          <li key={r.id || r.email} className="flex items-center justify-between group">
                            <div className="flex items-center gap-4">
                                 <Avatar><AvatarFallback>{isEditor ? getInitials(r.name) : `Reviewer ${i+1}`}</AvatarFallback></Avatar>
                                 <div>
                                     <p className="font-medium text-sm">{isEditor ? r.name : `Reviewer ${i+1}`}</p>
                                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                      {r.status === 'Review Submitted' ? <CheckCircle2 className="w-3 h-3 text-green-600" /> : <Clock className="w-3 h-3" />}
-                                      <span>{r.status}</span>
+                                      {reviewerDisplayStatus === 'Review Submitted' ? <CheckCircle2 className="w-3 h-3 text-green-600" /> : <Clock className="w-3 h-3" />}
+                                      <span>
+                                        {reviewerDisplayStatus}
+                                        {reviewerDisplayStatus === 'Invited' ? '' : ` (${formatRoundLabel(currentSubmissionRound)})`}
+                                      </span>
                                     </div>
                                 </div>
                             </div>
@@ -1802,7 +1964,7 @@ export default function SubmissionDetailPage() {
                                 </AlertDialog>
                             )}
                          </li>
-                    ))}
+                    )})}
                 </ul>
             ) : <p className="text-sm text-muted-foreground text-center py-4">No assignments yet.</p>}
           </CardContent>
