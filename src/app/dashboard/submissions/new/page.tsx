@@ -34,6 +34,7 @@ import Link from 'next/link';
 import { generateNotification } from '@/ai/flows/generate-notification';
 import { sendConfirmationEmail } from '@/ai/flows/send-confirmation-email';
 import { sendWorkflowNotificationEmail } from '@/ai/flows/send-workflow-notification-email';
+import { extractDocxPageCount } from '@/ai/flows/extract-docx-page-count';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 const formSchema = NewSubmissionSchema;
@@ -179,6 +180,13 @@ export default function NewSubmissionPage() {
         return;
     }
 
+    let autoDetectedPageCount: number | null = null;
+    try {
+        autoDetectedPageCount = await extractDocxPageCount({ fileUrl: values.manuscriptUrl });
+    } catch (error) {
+        console.warn('[Submission] Could not auto-detect page count:', error);
+    }
+
     const submissionData = {
         author: { id: user.uid, name: primaryContact.name, email: primaryContact.email },
         status: 'Submitted' as const,
@@ -189,7 +197,7 @@ export default function NewSubmissionPage() {
         manuscriptUrl: values.manuscriptUrl,
         supplementaryFileUrl: values.supplementaryFileUrl || '',
         contributors: values.contributors,
-        pageCount: values.pageCount || null,
+        pageCount: values.pageCount || autoDetectedPageCount || null,
         reviewers: [],
         reviewerIds: [],
         invitedReviewerEmails: [],

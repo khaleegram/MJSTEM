@@ -6,6 +6,7 @@
     "dev": "next dev --turbopack -p 9002",
     "dev:stable": "next dev -p 9002",
     "dev:clean": "powershell -ExecutionPolicy Bypass -File scripts/dev-clean.ps1",
+    "backfill:page-count": "npx tsx scripts/backfill-page-counts.ts",
     "genkit:dev": "genkit start -- tsx src/ai/dev.ts",
     "genkit:watch": "genkit start -- tsx --watch src/ai/dev.ts",
     "build": "next build",

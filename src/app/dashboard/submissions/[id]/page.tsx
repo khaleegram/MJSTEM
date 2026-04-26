@@ -54,6 +54,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { sendReviewerInvitationEmail } from '@/ai/flows/send-reviewer-invitation-email';
 import { sendAttachmentNotificationEmail } from '@/ai/flows/send-attachment-notification-email';
 import { sendWorkflowNotificationEmail } from '@/ai/flows/send-workflow-notification-email';
+import { extractDocxPageCount } from '@/ai/flows/extract-docx-page-count';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
 const inviteReviewerSchema = z.object({
@@ -625,6 +626,12 @@ function AuthorRevisionForm({ submission, onRevisionSubmit }: { submission: Subm
         }
 
         setIsSubmitting(true);
+        let detectedPageCount: number | null = null;
+        try {
+            detectedPageCount = await extractDocxPageCount({ fileUrl: cleanManuscript.url });
+        } catch (error) {
+            console.warn('[Revision] Could not auto-detect page count:', error);
+        }
         
         const currentRevision = submission.revision || 0;
         const newRevision = currentRevision + 1;
@@ -694,6 +701,9 @@ function AuthorRevisionForm({ submission, onRevisionSubmit }: { submission: Subm
             }),
             revisionPackages: arrayUnion(revisionPackage),
         };
+        if (typeof detectedPageCount === 'number' && detectedPageCount > 0) {
+            updateData.pageCount = detectedPageCount;
+        }
 
         if (!submission.originalManuscriptUrl) {
             updateData.originalManuscriptUrl = submission.manuscriptUrl;
@@ -1200,6 +1210,13 @@ export default function SubmissionDetailPage() {
     if (!submission || !userProfile || !revisionReplacementUrl || (!isAuthor && !isEditor)) return;
     setIsReplacingRevision(true);
 
+    let detectedPageCount: number | null = null;
+    try {
+        detectedPageCount = await extractDocxPageCount({ fileUrl: revisionReplacementUrl });
+    } catch (error) {
+        console.warn('[Revision Replace] Could not auto-detect page count:', error);
+    }
+
     const submissionRef = doc(db, 'submissions', submission.id);
     const updateData: Record<string, unknown> = {
         manuscriptUrl: revisionReplacementUrl,
@@ -1210,6 +1227,9 @@ export default function SubmissionDetailPage() {
             replaced: true,
         }),
     };
+    if (typeof detectedPageCount === 'number' && detectedPageCount > 0) {
+        updateData.pageCount = detectedPageCount;
+    }
 
     if (!submission.originalManuscriptUrl) {
         updateData.originalManuscriptUrl = submission.manuscriptUrl;

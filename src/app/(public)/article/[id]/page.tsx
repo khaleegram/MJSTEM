@@ -1,8 +1,4 @@
-'use client';
-
-import { doc, getDoc, collection, query, where, limit, getDocs } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { notFound, useParams } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import { Submission, Article } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { format } from 'date-fns';
@@ -12,111 +8,92 @@ import { Download, Calendar, Users, Info, BookText } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { CitationExporter } from '@/components/citation-exporter';
-import { useEffect, useState } from 'react';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
-import { Skeleton } from '@/components/ui/skeleton';
+import { adminDb } from '@/lib/firebase-admin';
+import { Timestamp } from 'firebase-admin/firestore';
 
-export default function ArticlePage() {
-  const params = useParams();
-  const id = params.id as string;
-  const [submission, setSubmission] = useState<Submission | null>(null);
-  const [relatedArticles, setRelatedArticles] = useState<Article[]>([]);
-  const [loading, setLoading] = useState(true);
+type ArticlePageProps = {
+  params: Promise<{ id: string }>;
+};
 
-  useEffect(() => {
-    if (!id) return;
-
-    const fetchArticle = async () => {
-        setLoading(true);
-        const docRef = doc(db, 'submissions', id);
-        getDoc(docRef)
-            .then((docSnap) => {
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    if (data.status === 'Accepted') {
-                        const sub = {
-                            id: docSnap.id,
-                            ...data,
-                            submittedAt: data.submittedAt.toDate(),
-                        } as Submission;
-                        setSubmission(sub);
-                        fetchRelated(sub.keywords, sub.id);
-                    } else {
-                        setSubmission(null);
-                    }
-                } else {
-                    setSubmission(null);
-                }
-            })
-            .catch(async (serverError) => {
-                const permissionError = new FirestorePermissionError({
-                    path: docRef.path,
-                    operation: 'get',
-                });
-                errorEmitter.emit('permission-error', permissionError);
-            })
-            .finally(() => {
-                setLoading(false);
-            });
-    };
-
-    const fetchRelated = async (keywords: string, currentId: string) => {
-        if (!keywords) return;
-        const keywordList = keywords.split(',').map(k => k.trim()).filter(Boolean);
-        if (keywordList.length === 0) return;
-
-        const subsRef = collection(db, 'submissions');
-        const q = query(
-            subsRef,
-            where('status', '==', 'Accepted'),
-            where('keywords', 'array-contains-any', keywordList.slice(0, 10)),
-            limit(4)
-        );
-
-        getDocs(q)
-            .then((querySnapshot) => {
-                const articles: Article[] = [];
-                querySnapshot.forEach(doc => {
-                    if (doc.id !== currentId) {
-                        const data = doc.data();
-                        articles.push({
-                            id: doc.id,
-                            title: data.title,
-                            contributors: data.contributors,
-                            manuscriptUrl: data.manuscriptUrl,
-                            authorName: data.author.name,
-                        } as Article);
-                    }
-                });
-                setRelatedArticles(articles.slice(0, 3));
-            })
-            .catch(async (serverError) => {
-                const permissionError = new FirestorePermissionError({
-                    path: subsRef.path,
-                    operation: 'list',
-                });
-                errorEmitter.emit('permission-error', permissionError);
-            });
-    };
-
-    fetchArticle();
-  }, [id]);
-
-  if (loading) {
-      return (
-          <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
-              <div className="grid lg:grid-cols-4 gap-12">
-                  <div className="lg:col-span-3"><Skeleton className="h-[600px] w-full" /></div>
-                  <div className="lg:col-span-1"><Skeleton className="h-[400px] w-full" /></div>
-              </div>
-          </main>
-      );
+function toDate(value: unknown): Date {
+  if (value instanceof Date) return value;
+  if (value instanceof Timestamp) return value.toDate();
+  if (typeof value === 'string' || typeof value === 'number') {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
   }
+  return new Date();
+}
 
+async function getAcceptedSubmission(id: string): Promise<Submission | null> {
+  if (!adminDb) return null;
+  const docSnap = await adminDb.collection('submissions').doc(id).get();
+  if (!docSnap.exists) return null;
+
+  const data = docSnap.data();
+  if (!data || data.status !== 'Accepted') return null;
+
+  return {
+    id: docSnap.id,
+    ...data,
+    submittedAt: toDate(data.submittedAt),
+  } as Submission;
+}
+
+async function getRelatedArticles(currentId: string, keywords: string): Promise<Article[]> {
+  if (!adminDb) return [];
+  const trimmedKeywords = (keywords || '')
+    .split(',')
+    .map((k) => k.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (trimmedKeywords.length === 0) return [];
+
+  const querySnap = await adminDb
+    .collection('submissions')
+    .where('status', '==', 'Accepted')
+    .limit(15)
+    .get();
+
+  const related: Article[] = [];
+  querySnap.forEach((docSnap) => {
+    if (docSnap.id === currentId || related.length >= 3) return;
+    const data = docSnap.data();
+    const articleKeywords = String(data.keywords || '')
+      .split(',')
+      .map((k) => k.trim().toLowerCase())
+      .filter(Boolean);
+    const overlap = articleKeywords.some((k) => trimmedKeywords.includes(k));
+    if (!overlap) return;
+
+    related.push({
+      id: docSnap.id,
+      title: data.title,
+      contributors: data.contributors,
+      manuscriptUrl: data.manuscriptUrl,
+      authorName: data.author?.name || '',
+    } as Article);
+  });
+
+  return related;
+}
+
+function resolveReaderUrl(manuscriptUrl: string): string {
+  return manuscriptUrl;
+}
+
+function resolveDownloadLabel(manuscriptUrl: string): string {
+  return manuscriptUrl.toLowerCase().endsWith('.pdf') ? 'Download PDF' : 'Download Manuscript';
+}
+
+export default async function ArticlePage({ params }: ArticlePageProps) {
+  const { id } = await params;
+  const submission = await getAcceptedSubmission(id);
   if (!submission) {
     notFound();
   }
+
+  const relatedArticles = await getRelatedArticles(submission.id, submission.keywords);
 
   const serializableSubmission = JSON.parse(JSON.stringify(submission));
 
@@ -143,7 +120,7 @@ export default function ArticlePage() {
                   <CardContent>
                       <div className="my-6 flex flex-wrap items-center gap-2">
                           <Button asChild>
-                              <Link href={`https://docs.google.com/gview?url=${submission.manuscriptUrl}&embedded=true`} target="_blank" rel="noopener noreferrer">
+                              <Link href={resolveReaderUrl(submission.manuscriptUrl)} target="_blank" rel="noopener noreferrer">
                                   <BookText className="mr-2 h-4 w-4" />
                                   Read Online
                               </Link>
@@ -151,7 +128,7 @@ export default function ArticlePage() {
                            <Button asChild variant="outline">
                               <Link href={submission.manuscriptUrl} target="_blank" rel="noopener noreferrer">
                                   <Download className="mr-2 h-4 w-4" />
-                                  Download DOCX
+                                  {resolveDownloadLabel(submission.manuscriptUrl)}
                               </Link>
                           </Button>
                           <CitationExporter submission={serializableSubmission} />
