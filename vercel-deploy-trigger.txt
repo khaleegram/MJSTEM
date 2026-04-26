@@ -1,0 +1,3 @@
+Vercel redeploy trigger.
+
+Reason: force a new production build when auto-redeploy is not firing.
