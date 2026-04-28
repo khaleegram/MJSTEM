@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import type { Metadata } from 'next';
 import { Submission, Article } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { format } from 'date-fns';
@@ -15,6 +16,9 @@ type ArticlePageProps = {
   params: Promise<{ id: string }>;
 };
 
+const BASE_URL = 'https://mjstem.org';
+const JOURNAL_TITLE = 'Maiduguri Journal of STEM (MJSTEM)';
+
 function toDate(value: unknown): Date {
   if (value instanceof Date) return value;
   if (value instanceof Timestamp) return value.toDate();
@@ -23,6 +27,58 @@ function toDate(value: unknown): Date {
     if (!Number.isNaN(parsed.getTime())) return parsed;
   }
   return new Date();
+}
+
+function toCitationDate(value: unknown): string {
+  return toDate(value).toISOString().slice(0, 10).replace(/-/g, '/');
+}
+
+export async function generateMetadata({ params }: ArticlePageProps): Promise<Metadata> {
+  const { id } = await params;
+  const articleUrl = `${BASE_URL}/article/${id}`;
+  const fallback: Metadata = {
+    title: 'Article | MJSTEM',
+    alternates: { canonical: articleUrl },
+    robots: { index: true, follow: true },
+  };
+
+  if (!adminDb) return fallback;
+
+  const docSnap = await adminDb.collection('submissions').doc(id).get();
+  if (!docSnap.exists) return fallback;
+
+  const data = docSnap.data();
+  if (!data || data.status !== 'Accepted') {
+    return {
+      ...fallback,
+      robots: { index: false, follow: false },
+    };
+  }
+
+  const title = String(data.title || 'Article');
+  const publicationDate = toCitationDate(data.submittedAt);
+  const pdfUrl = String(data.manuscriptUrl || '');
+  const authorNames =
+    Array.isArray(data.contributors) && data.contributors.length > 0
+      ? data.contributors
+          .map((contributor: { name?: string }) => contributor?.name?.trim())
+          .filter(Boolean)
+      : data.author?.name
+        ? [String(data.author.name).trim()]
+        : [];
+
+  return {
+    title: `${title} | MJSTEM`,
+    alternates: { canonical: articleUrl },
+    robots: { index: true, follow: true },
+    other: {
+      citation_title: title,
+      citation_author: authorNames,
+      citation_publication_date: publicationDate,
+      citation_pdf_url: pdfUrl,
+      citation_journal_title: JOURNAL_TITLE,
+    },
+  };
 }
 
 async function getAcceptedSubmission(id: string): Promise<Submission | null> {
