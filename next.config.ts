@@ -11,6 +11,8 @@ const withPWA = require('next-pwa')({
 
 const nextConfig: NextConfig = {
   /* config options here */
+  // Ensure crawlers get fully rendered metadata in <head>.
+  htmlLimitedBots: /.*/,
   async redirects() {
     return [
       {
