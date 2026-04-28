@@ -7,8 +7,6 @@ import { Inter as FontSans } from 'next/font/google';
 import { AuthProvider } from '@/contexts/auth-context';
 import { ThemeProvider } from '@/components/theme-provider';
 import { FirebaseErrorListener } from '@/components/firebase-error-listener';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 
 
 export const metadata: Metadata = {
@@ -22,6 +20,7 @@ export const metadata: Metadata = {
     statusBarStyle: 'default',
     title: 'MJSTEM',
   },
+  themeColor: '#111827',
   openGraph: {
     type: 'website',
     title: 'MJSTEM - Multidisciplinary Journal',
@@ -51,12 +50,6 @@ export default async function RootLayout({
 
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        <meta name="theme-color" content="#111827" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,700;1,7..72,400&family=PT+Sans:wght@400;700&display=swap" rel="stylesheet" />
-      </head>
       <body className={cn("font-body antialiased", fontSans.variable)}>
         <ThemeProvider
           attribute="class"
