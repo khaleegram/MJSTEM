@@ -2,7 +2,7 @@
 'use client';
 
 import { notFound, useParams, useRouter } from 'next/navigation';
-import { doc, getDoc, updateDoc, arrayUnion, collection, addDoc, serverTimestamp, runTransaction, getDocs, query, where, writeBatch } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, arrayUnion, collection, addDoc, serverTimestamp, runTransaction, getDocs, query, where, writeBatch, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import {
   Card,
@@ -15,7 +15,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { User, Calendar, PlusCircle, Download, BookOpen, BookText, Edit, MessageSquare, Shield, Clock, CheckCircle2, Info, Paperclip, Trash2 } from 'lucide-react';
+import { User, Calendar, PlusCircle, Download, BookOpen, BookText, Edit, MessageSquare, Send, Paperclip, Shield, Clock, CheckCircle2, Info, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { SubmissionStatus, Submission, UserProfile } from '@/types';
 import React from 'react';
@@ -33,6 +33,7 @@ import { logSubmissionEvent } from '@/ai/flows/log-submission-event';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { FileUploader } from '@/components/file-uploader';
 import { generateNotification } from '@/ai/flows/generate-notification';
+import { sendThreadOpenedEmail } from '@/ai/flows/send-thread-opened-email';
 import { Input } from '@/components/ui/input';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -1095,6 +1096,12 @@ export default function SubmissionDetailPage() {
   const { user, userProfile } = useAuth();
   const [refetchTrigger, setRefetchTrigger] = React.useState(0);
   const [isAuthorEditing, setIsAuthorEditing] = React.useState(false);
+  const [messages, setMessages] = React.useState<SubmissionMessage[]>([]);
+  const [messageText, setMessageText] = React.useState('');
+  const [messageAttachment, setMessageAttachment] = React.useState<{url: string, name: string} | null>(null);
+  const [isSendingMessage, setIsSendingMessage] = React.useState(false);
+  const [isOpeningThread, setIsOpeningThread] = React.useState(false);
+  const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const [showRevisionReplaceUploader, setShowRevisionReplaceUploader] = React.useState(false);
   const [revisionReplacementUrl, setRevisionReplacementUrl] = React.useState('');
   const [revisionReplaceUploaderKey, setRevisionReplaceUploaderKey] = React.useState(0);
@@ -1311,6 +1318,65 @@ export default function SubmissionDetailPage() {
         errorEmitter.emit('permission-error', new FirestorePermissionError({ path: submissionRef.path, operation: 'delete' }));
     });
   };
+
+  
+  const handleOpenThread = async () => {
+    if (!submission) return;
+    setIsOpeningThread(true);
+    try {
+      await updateDoc(doc(db, 'submissions', submission.id), { messageThreadOpen: true });
+      await sendThreadOpenedEmail({
+        authorEmail: submission.author.email,
+        authorName: submission.author.name,
+        manuscriptTitle: submission.title,
+        submissionId: submission.id
+      });
+      toast({ title: 'Thread Opened', description: 'The author has been notified via email.' });
+      setRefetchTrigger(p => p+1);
+    } catch(e) {
+      toast({ title: 'Error', description: 'Failed to open thread', variant: 'destructive' });
+    }
+    setIsOpeningThread(false);
+  }
+
+  const handleSendMessage = async () => {
+    if (!submission || (!messageText.trim() && !messageAttachment)) return;
+    setIsSendingMessage(true);
+    try {
+      const messagesRef = collection(db, `submissions/${submission.id}/messages`);
+      await addDoc(messagesRef, {
+        senderId: userProfile?.uid,
+        senderName: userProfile?.displayName,
+        senderRole: userProfile?.role,
+        text: messageText.trim(),
+        attachmentUrl: messageAttachment?.url || null,
+        attachmentName: messageAttachment?.name || null,
+        createdAt: serverTimestamp(),
+        round: currentSubmissionRound
+      });
+      setMessageText('');
+      setMessageAttachment(null);
+      
+      if (isEditor) {
+        generateNotification({
+          userId: submission.author.id,
+          submissionId: submission.id,
+          eventType: 'STATUS_CHANGED',
+          context: { status: 'New Message from Editor', submissionTitle: submission.title }
+        });
+      } else if (isAuthor) {
+        generateNotification({
+          userId: 'Admins',
+          submissionId: submission.id,
+          eventType: 'STATUS_CHANGED',
+          context: { status: 'New Message from Author', submissionTitle: submission.title }
+        });
+      }
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to send message', variant: 'destructive' });
+    }
+    setIsSendingMessage(false);
+  }
 
   const handleAssignSectionEditor = async (editorId: string | null, editorName: string | null) => {
       if (!submission || !isEIC) return;
@@ -2028,6 +2094,104 @@ export default function SubmissionDetailPage() {
         </Card>
         )}
         
+        
+        {(isEditor || (isAuthor && (submission as any).messageThreadOpen)) && (
+            <Card className="flex flex-col h-[500px]">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <div>
+                        <CardTitle className="font-headline">Direct Communication</CardTitle>
+                        <CardDescription>Private thread between Editors and the Author.</CardDescription>
+                    </div>
+                    {isEIC && !(submission as any).messageThreadOpen && (
+                        <Button onClick={handleOpenThread} disabled={isOpeningThread} size="sm">
+                            {isOpeningThread ? 'Opening...' : 'Open Thread'}
+                        </Button>
+                    )}
+                </CardHeader>
+                <CardContent className="flex-1 overflow-y-auto space-y-4 p-4 bg-muted/30">
+                    {messages.length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center text-center space-y-2 text-muted-foreground">
+                            <MessageSquare className="h-8 w-8 opacity-20" />
+                            <p className="text-sm">No messages yet.</p>
+                            {isEIC && !(submission as any).messageThreadOpen && (
+                                <p className="text-xs">Click "Open Thread" above to notify the author that you want to communicate.</p>
+                            )}
+                        </div>
+                    ) : (
+                        messages.map((msg) => {
+                            const isMe = msg.senderId === userProfile?.uid;
+                            return (
+                                <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                                    <div className="flex items-baseline gap-2 mb-1">
+                                        <span className="text-xs font-semibold">{msg.senderName}</span>
+                                        <Badge variant="outline" className="text-[9px] px-1 py-0">{msg.senderRole}</Badge>
+                                        {msg.createdAt && <span className="text-[10px] text-muted-foreground">{format(msg.createdAt.toDate(), 'p')}</span>}
+                                    </div>
+                                    <div className={`max-w-[85%] rounded-lg p-3 text-sm ${isMe ? 'bg-primary text-primary-foreground rounded-tr-none' : 'bg-background border shadow-sm rounded-tl-none'}`}>
+                                        {msg.text && <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>}
+                                        {msg.attachmentUrl && (
+                                            <div className={`mt-2 p-2 rounded border flex items-center gap-2 ${isMe ? 'bg-primary-foreground/10 border-primary-foreground/20' : 'bg-muted/50'}`}>
+                                                <div className="flex-1 truncate text-xs font-medium">{msg.attachmentName}</div>
+                                                <Button size="icon" variant="ghost" className={`h-6 w-6 ${isMe ? 'hover:bg-primary-foreground/20 text-primary-foreground' : ''}`} asChild>
+                                                    <Link href={msg.attachmentUrl} target="_blank"><Download className="h-3 w-3" /></Link>
+                                                </Button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )
+                        })
+                    )}
+                    <div ref={messagesEndRef} />
+                </CardContent>
+                {((submission as any).messageThreadOpen || isEditor) ? (
+                    <CardFooter className="pt-4 border-t flex flex-col gap-2">
+                        {messageAttachment && (
+                            <div className="flex items-center justify-between w-full p-2 text-xs border rounded bg-muted/50">
+                                <span className="truncate mr-2 font-medium">{messageAttachment.name}</span>
+                                <Button size="icon" variant="ghost" className="h-5 w-5 text-destructive" onClick={() => setMessageAttachment(null)}><Trash2 className="h-3 w-3" /></Button>
+                            </div>
+                        )}
+                        <div className="flex items-end gap-2 w-full">
+                            <div className="relative flex-1">
+                                <Textarea 
+                                    placeholder="Type your message..." 
+                                    className="min-h-[40px] h-[40px] resize-none py-2.5 pr-10"
+                                    value={messageText}
+                                    onChange={(e) => setMessageText(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && !e.shiftKey) {
+                                            e.preventDefault();
+                                            handleSendMessage();
+                                        }
+                                    }}
+                                />
+                                <div className="absolute right-2 top-1.5">
+                                    <Dialog>
+                                        <DialogTrigger asChild>
+                                            <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-foreground"><Paperclip className="h-4 w-4" /></Button>
+                                        </DialogTrigger>
+                                        <DialogContent>
+                                            <DialogHeader><DialogTitle>Attach File to Message</DialogTitle></DialogHeader>
+                                            <FileUploader endpoint="generalDocumentUploader" onUploadComplete={(url, fileInfo) => setMessageAttachment({url, name: fileInfo.name})} onUploadError={(err) => toast({ title: "Upload Failed", description: err.message, variant: "destructive"})} description="This file will be attached to your message." />
+                                        </DialogContent>
+                                    </Dialog>
+                                </div>
+                            </div>
+                            <Button onClick={handleSendMessage} disabled={isSendingMessage || (!messageText.trim() && !messageAttachment)}>
+                                <Send className="h-4 w-4" />
+                            </Button>
+                        </div>
+                    </CardFooter>
+                ) : (
+                    <CardFooter className="pt-4 border-t">
+                        <p className="text-xs text-muted-foreground italic w-full text-center">Thread is currently closed. Only the Editor-in-Chief can open it.</p>
+                    </CardFooter>
+                )}
+            </Card>
+        )}
+
+
         {(isEditor || isAuthor || (isReviewer && visibleEditorAttachmentHistory.length > 0)) && (
             <Card>
                 <CardHeader>

@@ -240,6 +240,31 @@ service cloud.firestore {
         allow create: if false;
         allow update, delete: if false;
       }
+
+      // ---------------------------
+      // Submission messages (Editor <-> Author thread)
+      // ---------------------------
+      match /messages/{messageId} {
+        function parentSubmission() {
+          return get(/databases/$(database)/documents/submissions/$(submissionId)).data;
+        }
+
+        // Only editors and the author can read messages (reviewers excluded)
+        allow get, list: if isSignedIn() && (
+          isEditorialMember() ||
+          isSubmissionAuthor(parentSubmission())
+        );
+
+        // Only editors and the author can create messages, must be their own senderId
+        allow create: if isSignedIn() &&
+          request.resource.data.senderId == authUid() && (
+            isEditorialMember() ||
+            isSubmissionAuthor(parentSubmission())
+          );
+
+        // Messages cannot be edited or deleted
+        allow update, delete: if false;
+      }
     }
 
     // ---------------------------
