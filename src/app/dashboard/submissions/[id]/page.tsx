@@ -1191,6 +1191,21 @@ export default function SubmissionDetailPage() {
     fetchSubmission();
   }, [fetchSubmission, refetchTrigger]);
 
+  React.useEffect(() => {
+    if (submission?.id && (isEditor || isAuthor)) {
+        const messagesRef = collection(db, `submissions/${submission.id}/messages`);
+        const q = query(messagesRef, orderBy('createdAt', 'asc'));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as SubmissionMessage);
+            setMessages(msgs);
+            setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+        }, (err) => {
+            console.error('Messages Listener Error:', err);
+        });
+        return () => unsubscribe();
+    }
+  }, [submission?.id, isEditor, isAuthor]);
+
   const handleDecision = async (status: SubmissionStatus) => {
     if(!submission || !userProfile) return;
     setIsUpdating(true);
