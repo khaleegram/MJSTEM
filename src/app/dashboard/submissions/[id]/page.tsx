@@ -332,8 +332,14 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
                 if (updatedReviewers) {
                     await updateDoc(submissionRef, { reviewers: updatedReviewers });
                 }
-            } catch (serverError) {
-                errorEmitter.emit('permission-error', new FirestorePermissionError({
+            } catch (serverError: any) {
+            console.error('[Revision] Error submitting revision:', serverError);
+            toast({
+                title: 'Error submitting revision',
+                description: serverError?.message || 'An unknown error occurred while submitting.',
+                variant: 'destructive'
+            });
+            errorEmitter.emit('permission-error', new FirestorePermissionError({
                     path: reviewRef.path,
                     operation: 'update',
                     requestResourceData: reviewData
@@ -1096,6 +1102,7 @@ export default function SubmissionDetailPage() {
   });
 
   const isEditor = userProfile?.role === 'Editor' || userProfile?.role === 'Admin' || userProfile?.role === 'Managing Editor';
+  const isEIC = userProfile?.role === 'Admin' || userProfile?.role === 'Managing Editor';
   const userEmail = user?.email?.toLowerCase().trim();
   const reviewerEntries = Array.isArray(submission?.reviewers) ? submission.reviewers : [];
   
@@ -1299,6 +1306,27 @@ export default function SubmissionDetailPage() {
     });
   };
 
+  const handleAssignSectionEditor = async (editorId: string | null, editorName: string | null) => {
+      if (!submission || !isEIC) return;
+      setIsUpdating(true);
+      const submissionRef = doc(db, 'submissions', submission.id);
+      try {
+          await updateDoc(submissionRef, { 
+              assignedEditorId: editorId,
+              assignedEditorName: editorName
+          });
+          toast({ 
+              title: "Editor Assignment Updated", 
+              className: "bg-green-600 text-white border-none"
+          });
+          setRefetchTrigger(prev => prev + 1);
+      } catch (error: any) {
+          toast({ title: "Error", description: error.message, variant: "destructive" });
+      } finally {
+          setIsUpdating(false);
+      }
+  };
+
   const handleAssignReviewer = async (reviewer: UserProfile) => {
       if(!submission || !userProfile) return;
       if (submission.reviewers?.some(r => r.id === reviewer.uid)) {
@@ -1454,6 +1482,24 @@ export default function SubmissionDetailPage() {
         setIsUpdating(false);
     }
   }
+
+  const handleToggleInPress = async (hidden: boolean) => {
+    if (!submission || !isEIC) return;
+    setIsUpdating(true);
+    const submissionRef = doc(db, 'submissions', submission.id);
+    try {
+        await updateDoc(submissionRef, { hiddenFromInPress: hidden });
+        toast({ 
+            title: hidden ? "Article Hidden" : "Article Visible", 
+            description: hidden ? "It is removed from Articles in Press." : "It will now appear in Articles in Press.",
+            className: "bg-green-600 text-white border-none"
+        });
+        setRefetchTrigger(prev => prev + 1);
+    } catch (error: any) { 
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+    finally { setIsUpdating(false); }
+  };
 
   const handleAssignId = async () => {
     if (!submission) return;
@@ -1882,12 +1928,46 @@ export default function SubmissionDetailPage() {
                                 endpoint="documentUploader"
                                 onUploadComplete={(url) => setRevisionReplacementUrl(url || '')}
                                 onUploadError={(err) => toast({ title: "Upload Error", description: err.message, variant: "destructive" })}
-                                description="Upload new revised manuscript (.doc, .docx)."
+                                description="Upload new revised or final manuscript (.pdf, .doc, .docx)."
                             />
                             {revisionReplacementUrl && (
                                 <div className="flex flex-wrap gap-2">
                                     <Button asChild size="sm">
                                         <Link href={getOnlineReaderUrl(revisionReplacementUrl)} target="_blank">
+                                            <BookText className="mr-2 h-4 w-4" />
+                                            Read Replacement
+                                        </Link>
+                                    </Button>
+                                    <Button variant="outline" size="sm" asChild>
+                                        <Link href={revisionReplacementUrl} target="_blank">
+                                            <Download className="mr-2 h-4 w-4" />
+                                            Download Replacement
+                                        </Link>
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        onClick={handleReplaceRevisedManuscript}
+                                        disabled={isReplacingRevision}
+                                    >
+                                        {isReplacingRevision ? 'Saving...' : 'Save Replacement'}
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+                    </CardContent>
+                )}
+            </Card>
+        )}
+
+        {needsToAcceptInvite && (
+            <AcceptInvitationCard submission={submission} onAccept={() => setRefetchTrigger(p => p + 1)} />
+        )}
+
+        {isReviewer && !needsToAcceptInvite && (
+            <ReviewSubmissionForm submission={submission} onReviewSubmit={() => setRefetchTrigger(p => p + 1)} />
+        )}
+
                                             <BookText className="mr-2 h-4 w-4" />
                                             Read Replacement
                                         </Link>
@@ -1937,14 +2017,41 @@ export default function SubmissionDetailPage() {
             </Card>
         )}
 
+        {isEIC && submission.status === 'Accepted' && (
+            <Card className={(submission as any).hiddenFromInPress ? "border-muted" : "border-primary"}>
+                <CardHeader><CardTitle className="font-headline text-lg flex items-center gap-2"><BookText className="w-5 h-5"/> In-Press Visibility</CardTitle></CardHeader>
+                <CardContent>
+                    <p className="text-sm text-muted-foreground mb-4">
+                        {(submission as any).hiddenFromInPress 
+                            ? "This article is currently hidden from the public 'Articles in Press' list." 
+                            : "This article is currently visible to the public in the 'Articles in Press' list."}
+                    </p>
+                    <Button 
+                        variant={(submission as any).hiddenFromInPress ? "default" : "secondary"} 
+                        onClick={() => handleToggleInPress(!(submission as any).hiddenFromInPress)} 
+                        disabled={isUpdating} 
+                        className="w-full"
+                    >
+                        {(submission as any).hiddenFromInPress ? "Show in Articles in Press" : "Hide from Articles in Press"}
+                    </Button>
+                </CardContent>
+            </Card>
+        )}
+
         {isEditor && !isDecisionMade && (
         <Card>
           <CardHeader><CardTitle className="font-headline">Editorial Decision</CardTitle></CardHeader>
           <CardContent className="grid gap-2">
-            <Button className="bg-green-600 hover:bg-green-700" onClick={() => handleDecision('Accepted')} disabled={isUpdating}>Accept</Button>
-            <Button variant="secondary" onClick={() => handleDecision('Minor Revision')} disabled={isUpdating}>Minor Revision</Button>
-            <Button variant="secondary" onClick={() => handleDecision('Major Revision')} disabled={isUpdating}>Major Revision</Button>
-            <Button variant="destructive" onClick={() => handleDecision('Rejected')} disabled={isUpdating}>Reject</Button>
+            {isEIC ? (
+               <>
+                 <Button className="bg-green-600 hover:bg-green-700" onClick={() => handleDecision('Accepted')} disabled={isUpdating}>Accept</Button>
+                 <Button variant="secondary" onClick={() => handleDecision('Minor Revision')} disabled={isUpdating}>Minor Revision</Button>
+                 <Button variant="secondary" onClick={() => handleDecision('Major Revision')} disabled={isUpdating}>Major Revision</Button>
+                 <Button variant="destructive" onClick={() => handleDecision('Rejected')} disabled={isUpdating}>Reject</Button>
+               </>
+            ) : (
+                <p className="text-sm text-muted-foreground text-center py-2">Only the Editor-in-Chief can make the final decision.</p>
+            )}
           </CardContent>
         </Card>
         )}
@@ -2009,6 +2116,49 @@ export default function SubmissionDetailPage() {
                     )}
                 </CardContent>
             </Card>
+        )}
+        
+        {isEIC && (
+        <Card>
+          <CardHeader><CardTitle className="font-headline">Assigned Editor</CardTitle></CardHeader>
+          <CardContent>
+            {(submission as any).assignedEditorName ? (
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <Avatar><AvatarFallback>{getInitials((submission as any).assignedEditorName)}</AvatarFallback></Avatar>
+                        <div>
+                            <p className="font-medium text-sm">{(submission as any).assignedEditorName}</p>
+                            <p className="text-xs text-muted-foreground">Managing this submission</p>
+                        </div>
+                    </div>
+                    <Button variant="ghost" size="icon" onClick={() => handleAssignSectionEditor(null, null)}><Trash2 className="h-4 w-4" /></Button>
+                </div>
+            ) : (
+                <p className="text-sm text-muted-foreground text-center py-2">No specific editor assigned.</p>
+            )}
+          </CardContent>
+          <CardFooter>
+             <Dialog>
+              <DialogTrigger asChild><Button variant="outline" className="w-full"><PlusCircle className="mr-2 h-4 w-4" /> Assign Editor</Button></DialogTrigger>
+              <DialogContent className="sm:max-w-sm">
+                <DialogHeader><DialogTitle>Assign an Editor</DialogTitle></DialogHeader>
+                <div className="pt-4 max-h-60 overflow-y-auto">
+                    {availableReviewers.filter(r => r.role === 'Editor').length > 0 ? availableReviewers.filter(r => r.role === 'Editor').map(r => (
+                        <div key={r.uid} className='flex justify-between items-center p-2 border-b last:border-0'>
+                            <div className="flex items-center gap-3">
+                                <Avatar className="h-8 w-8"><AvatarFallback>{getInitials(r.displayName)}</AvatarFallback></Avatar>
+                                <div className="text-xs">
+                                    <p className="font-bold">{r.displayName}</p>
+                                </div>
+                            </div>
+                            <Button variant="ghost" size="icon" onClick={() => handleAssignSectionEditor(r.uid, r.displayName)}><PlusCircle className='h-4 w-4' /></Button>
+                        </div>
+                    )) : <p className="text-sm text-muted-foreground text-center py-4">No users found with Editor role.</p>}
+                </div>
+              </DialogContent>
+             </Dialog>
+          </CardFooter>
+        </Card>
         )}
         
         <Card>

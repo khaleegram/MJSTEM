@@ -100,7 +100,7 @@ service cloud.firestore {
     }
 
     function authorStatusAndRevisionValid() {
-      let oldRevision = resource.data.revision is int ? resource.data.revision : 0;
+      let oldRevision = resource.data.revision is number ? resource.data.revision : 0;
       let statusChanged = request.resource.data.status != resource.data.status;
       let revisionChanged = request.resource.data.revision != resource.data.revision;
 
@@ -111,7 +111,7 @@ service cloud.firestore {
           'Awaiting Revision: Similarity Issues'
         ] &&
         request.resource.data.status in ['Under Review-R1', 'Under Review-R2'] &&
-        request.resource.data.revision is int &&
+        request.resource.data.revision is number &&
         request.resource.data.revision == oldRevision + 1
       );
     }

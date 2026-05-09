@@ -56,7 +56,7 @@ export default function ArchivePage() {
             id: doc.id,
             ...doc.data(),
             submittedAt: doc.data().submittedAt?.toDate() || new Date(),
-        } as Submission));
+        } as Submission)).filter((sub) => !(sub as any).hiddenFromInPress);
         
         // Filter out articles that are already assigned to a volume/issue
         // This is done client-side for reactive updates
@@ -162,7 +162,7 @@ export default function ArchivePage() {
                                                         </div>
                                                         <div className='text-right'>
                                                                 <Link href={article.manuscriptUrl || '#'} target='_blank' rel='noopener noreferrer' className='text-sm text-primary hover:underline'>
-                                                                DOCX
+                                                                PDF
                                                             </Link>
                                                             {article.pageCount && <p className="text-sm text-muted-foreground">{article.pageCount} Pages</p>}
                                                         </div>

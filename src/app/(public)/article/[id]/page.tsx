@@ -139,7 +139,7 @@ function resolveReaderUrl(manuscriptUrl: string): string {
 }
 
 function resolveDownloadLabel(manuscriptUrl: string): string {
-  return manuscriptUrl.toLowerCase().endsWith('.pdf') ? 'Download PDF' : 'Download Manuscript';
+  return 'Download PDF';
 }
 
 export default async function ArticlePage({ params }: ArticlePageProps) {
