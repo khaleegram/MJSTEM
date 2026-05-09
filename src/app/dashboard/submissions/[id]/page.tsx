@@ -2095,7 +2095,7 @@ export default function SubmissionDetailPage() {
           <CardHeader><CardTitle className="font-headline">Assigned Editor</CardTitle></CardHeader>
           <CardContent>
             {(submission as any).assignedEditorName ? (
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between group">
                     <div className="flex items-center gap-3">
                         <Avatar><AvatarFallback>{getInitials((submission as any).assignedEditorName)}</AvatarFallback></Avatar>
                         <div>
@@ -2103,7 +2103,7 @@ export default function SubmissionDetailPage() {
                             <p className="text-xs text-muted-foreground">Managing this submission</p>
                         </div>
                     </div>
-                    <Button variant="ghost" size="icon" onClick={() => handleAssignSectionEditor(null, null)}><Trash2 className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => handleAssignSectionEditor(null, null)}><Trash2 className="h-4 w-4" /></Button>
                 </div>
             ) : (
                 <p className="text-sm text-muted-foreground text-center py-2">No specific editor assigned.</p>
@@ -2112,58 +2112,19 @@ export default function SubmissionDetailPage() {
           <CardFooter>
              <Dialog>
               <DialogTrigger asChild><Button variant="outline" className="w-full"><PlusCircle className="mr-2 h-4 w-4" /> Assign Editor</Button></DialogTrigger>
-              <DialogContent className="sm:max-w-sm">
+              <DialogContent className="sm:max-w-md">
                 <DialogHeader><DialogTitle>Assign an Editor</DialogTitle></DialogHeader>
-                <div className="pt-4 max-h-60 overflow-y-auto">
-                    {availableReviewers.filter(r => r.role === 'Editor').length > 0 ? availableReviewers.filter(r => r.role === 'Editor').map(r => (
+                <div className="pt-4 max-h-80 overflow-y-auto">
+                    {availableReviewers.filter(r => ['Editor', 'Managing Editor', 'Admin'].includes(r.role)).length > 0 ? availableReviewers.filter(r => ['Editor', 'Managing Editor', 'Admin'].includes(r.role)).map(r => (
                         <div key={r.uid} className='flex justify-between items-center p-2 border-b last:border-0'>
                             <div className="flex items-center gap-3">
                                 <Avatar className="h-8 w-8"><AvatarFallback>{getInitials(r.displayName)}</AvatarFallback></Avatar>
                                 <div className="text-xs">
                                     <p className="font-bold">{r.displayName}</p>
-                                </div>
-                            </div>
-                            <Button variant="ghost" size="icon" onClick={() => handleAssignSectionEditor(r.uid, r.displayName)}><PlusCircle className='h-4 w-4' /></Button>
-                        </div>
-                    )) : <p className="text-sm text-muted-foreground text-center py-4">No users found with Editor role.</p>}
-                </div>
-              </DialogContent>
-             </Dialog>
-          </CardFooter>
-        </Card>
-        )}
-        
-        {isEIC && (
-        <Card>
-          <CardHeader><CardTitle className="font-headline">Assigned Editor</CardTitle></CardHeader>
-          <CardContent>
-            {(submission as any).assignedEditorName ? (
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <Avatar><AvatarFallback>{getInitials((submission as any).assignedEditorName)}</AvatarFallback></Avatar>
-                        <div>
-                            <p className="font-medium text-sm">{(submission as any).assignedEditorName}</p>
-                            <p className="text-xs text-muted-foreground">Managing this submission</p>
-                        </div>
-                    </div>
-                    <Button variant="ghost" size="icon" onClick={() => handleAssignSectionEditor(null, null)}><Trash2 className="h-4 w-4" /></Button>
-                </div>
-            ) : (
-                <p className="text-sm text-muted-foreground text-center py-2">No specific editor assigned.</p>
-            )}
-          </CardContent>
-          <CardFooter>
-             <Dialog>
-              <DialogTrigger asChild><Button variant="outline" className="w-full"><PlusCircle className="mr-2 h-4 w-4" /> Assign Editor</Button></DialogTrigger>
-              <DialogContent className="sm:max-w-sm">
-                <DialogHeader><DialogTitle>Assign an Editor</DialogTitle></DialogHeader>
-                <div className="pt-4 max-h-60 overflow-y-auto">
-                    {availableReviewers.filter(r => r.role === 'Editor').length > 0 ? availableReviewers.filter(r => r.role === 'Editor').map(r => (
-                        <div key={r.uid} className='flex justify-between items-center p-2 border-b last:border-0'>
-                            <div className="flex items-center gap-3">
-                                <Avatar className="h-8 w-8"><AvatarFallback>{getInitials(r.displayName)}</AvatarFallback></Avatar>
-                                <div className="text-xs">
-                                    <p className="font-bold">{r.displayName}</p>
+                                    <div className="flex items-center gap-1.5">
+                                        <Badge variant="outline" className="text-[10px] px-1 py-0">{r.role}</Badge>
+                                        {r.specialization && <span className="text-muted-foreground line-clamp-1">{r.specialization}</span>}
+                                    </div>
                                 </div>
                             </div>
                             <Button variant="ghost" size="icon" onClick={() => handleAssignSectionEditor(r.uid, r.displayName)}><PlusCircle className='h-4 w-4' /></Button>
