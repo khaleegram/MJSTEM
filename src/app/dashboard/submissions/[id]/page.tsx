@@ -392,8 +392,14 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
                         : r;
                 });
                 await updateDoc(submissionRef, { reviewers: updatedReviewers });
-            } catch (serverError) {
-                errorEmitter.emit('permission-error', new FirestorePermissionError({
+            } catch (serverError: any) {
+            console.error('[Revision] Error submitting revision:', serverError);
+            toast({
+                title: 'Error submitting revision',
+                description: serverError?.message || 'An unknown error occurred while submitting.',
+                variant: 'destructive'
+            });
+            errorEmitter.emit('permission-error', new FirestorePermissionError({
                     path: reviewsCollectionRef.path,
                     operation: 'create',
                     requestResourceData: reviewData
@@ -1968,40 +1974,6 @@ export default function SubmissionDetailPage() {
             <ReviewSubmissionForm submission={submission} onReviewSubmit={() => setRefetchTrigger(p => p + 1)} />
         )}
 
-                                            <BookText className="mr-2 h-4 w-4" />
-                                            Read Replacement
-                                        </Link>
-                                    </Button>
-                                    <Button variant="outline" size="sm" asChild>
-                                        <Link href={revisionReplacementUrl} target="_blank">
-                                            <Download className="mr-2 h-4 w-4" />
-                                            Download Replacement
-                                        </Link>
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        size="sm"
-                                        onClick={handleReplaceRevisedManuscript}
-                                        disabled={isReplacingRevision}
-                                    >
-                                        {isReplacingRevision ? 'Saving...' : 'Save Replacement'}
-                                    </Button>
-                                </div>
-                            )}
-                        </div>
-                    </CardContent>
-                )}
-            </Card>
-        )}
-
-        {needsToAcceptInvite && (
-            <AcceptInvitationCard submission={submission} onAccept={() => setRefetchTrigger(p => p + 1)} />
-        )}
-
-        {isReviewer && !needsToAcceptInvite && (
-            <ReviewSubmissionForm submission={submission} onReviewSubmit={() => setRefetchTrigger(p => p + 1)} />
-        )}
-
         {(isEditor || (isAuthor && (needsRevision || submission.status.includes('Review'))) || isReviewer) && <SubmittedReviews submissionId={submission.id} showForAuthor={isAuthor} refreshKey={refetchTrigger} />}
         {isAuthor && needsRevision && <AuthorRevisionForm submission={submission} onRevisionSubmit={() => setRefetchTrigger(p => p + 1)} />}
       </div>
@@ -2116,6 +2088,49 @@ export default function SubmissionDetailPage() {
                     )}
                 </CardContent>
             </Card>
+        )}
+        
+        {isEIC && (
+        <Card>
+          <CardHeader><CardTitle className="font-headline">Assigned Editor</CardTitle></CardHeader>
+          <CardContent>
+            {(submission as any).assignedEditorName ? (
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <Avatar><AvatarFallback>{getInitials((submission as any).assignedEditorName)}</AvatarFallback></Avatar>
+                        <div>
+                            <p className="font-medium text-sm">{(submission as any).assignedEditorName}</p>
+                            <p className="text-xs text-muted-foreground">Managing this submission</p>
+                        </div>
+                    </div>
+                    <Button variant="ghost" size="icon" onClick={() => handleAssignSectionEditor(null, null)}><Trash2 className="h-4 w-4" /></Button>
+                </div>
+            ) : (
+                <p className="text-sm text-muted-foreground text-center py-2">No specific editor assigned.</p>
+            )}
+          </CardContent>
+          <CardFooter>
+             <Dialog>
+              <DialogTrigger asChild><Button variant="outline" className="w-full"><PlusCircle className="mr-2 h-4 w-4" /> Assign Editor</Button></DialogTrigger>
+              <DialogContent className="sm:max-w-sm">
+                <DialogHeader><DialogTitle>Assign an Editor</DialogTitle></DialogHeader>
+                <div className="pt-4 max-h-60 overflow-y-auto">
+                    {availableReviewers.filter(r => r.role === 'Editor').length > 0 ? availableReviewers.filter(r => r.role === 'Editor').map(r => (
+                        <div key={r.uid} className='flex justify-between items-center p-2 border-b last:border-0'>
+                            <div className="flex items-center gap-3">
+                                <Avatar className="h-8 w-8"><AvatarFallback>{getInitials(r.displayName)}</AvatarFallback></Avatar>
+                                <div className="text-xs">
+                                    <p className="font-bold">{r.displayName}</p>
+                                </div>
+                            </div>
+                            <Button variant="ghost" size="icon" onClick={() => handleAssignSectionEditor(r.uid, r.displayName)}><PlusCircle className='h-4 w-4' /></Button>
+                        </div>
+                    )) : <p className="text-sm text-muted-foreground text-center py-4">No users found with Editor role.</p>}
+                </div>
+              </DialogContent>
+             </Dialog>
+          </CardFooter>
+        </Card>
         )}
         
         {isEIC && (
