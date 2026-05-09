@@ -1345,14 +1345,14 @@ export default function SubmissionDetailPage() {
     try {
       const messagesRef = collection(db, `submissions/${submission.id}/messages`);
       await addDoc(messagesRef, {
-        senderId: userProfile?.uid,
-        senderName: userProfile?.displayName,
-        senderRole: userProfile?.role,
-        text: messageText.trim(),
+        senderId: userProfile?.uid || 'unknown',
+        senderName: userProfile?.displayName || 'Unknown',
+        senderRole: userProfile?.role || 'Author',
+        text: messageText.trim() || '',
         attachmentUrl: messageAttachment?.url || null,
         attachmentName: messageAttachment?.name || null,
         createdAt: serverTimestamp(),
-        round: currentSubmissionRound
+        round: currentSubmissionRound || 1
       });
       setMessageText('');
       setMessageAttachment(null);
@@ -1363,17 +1363,18 @@ export default function SubmissionDetailPage() {
           submissionId: submission.id,
           eventType: 'STATUS_CHANGED',
           context: { status: 'New Message from Editor', submissionTitle: submission.title }
-        });
+        }).catch(console.error);
       } else if (isAuthor) {
         generateNotification({
           userId: 'Admins',
           submissionId: submission.id,
           eventType: 'STATUS_CHANGED',
           context: { status: 'New Message from Author', submissionTitle: submission.title }
-        });
+        }).catch(console.error);
       }
-    } catch (e) {
-      toast({ title: 'Error', description: 'Failed to send message', variant: 'destructive' });
+    } catch (e: any) {
+      console.error("SendMessage Error: ", e);
+      toast({ title: 'Error', description: e.message || 'Failed to send message', variant: 'destructive' });
     }
     setIsSendingMessage(false);
   }
@@ -2108,7 +2109,7 @@ export default function SubmissionDetailPage() {
                         </Button>
                     )}
                 </CardHeader>
-                <CardContent className="flex-1 overflow-y-auto space-y-4 p-4 bg-muted/30">
+                <CardContent className="flex-1 overflow-y-auto space-y-4 p-4 bg-muted/30 scrollbar-hide [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                     {messages.length === 0 ? (
                         <div className="h-full flex flex-col items-center justify-center text-center space-y-2 text-muted-foreground">
                             <MessageSquare className="h-8 w-8 opacity-20" />
