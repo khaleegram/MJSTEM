@@ -504,13 +504,13 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
                             Upload Annotated Manuscript (Optional)
                         </label>
                         <FileUploader 
-                            endpoint="documentUploader"
+                            endpoint="generalDocumentUploader"
                             onUploadComplete={(url, name) => {
                                 setAttachmentUrl(url || '');
                                 setAttachmentName(name || 'attachment');
                             }}
                             onUploadError={(err) => toast({ title: "Upload Error", description: err.message, variant: "destructive"})}
-                            description="Upload annotated files (.doc, .docx)."
+                            description="Upload annotated files (.pdf, .doc, .docx)."
                         />
                     </div>
                 </CardContent>
@@ -824,12 +824,12 @@ function AuthorRevisionForm({ submission, onRevisionSubmit }: { submission: Subm
                         </div>
                         <FileUploader
                             key={`tracked-${formResetSeed}`}
-                            endpoint="documentUploader"
+                            endpoint="generalDocumentUploader"
                             onUploadComplete={(url, name) =>
                                 setTrackedChanges(url ? { url, fileName: name || getRevisionDocumentLabel('tracked_changes') } : null)
                             }
                             onUploadError={(err) => toast({ title: "Upload Error", description: err.message, variant: "destructive" })}
-                            description="Upload tracked changes manuscript (.doc, .docx)."
+                            description="Upload tracked changes manuscript (.pdf, .doc, .docx)."
                         />
                     </div>
 
@@ -1954,7 +1954,7 @@ export default function SubmissionDetailPage() {
                                     setShowRevisionReplaceUploader(true);
                                 }}
                             >
-                                {showRevisionReplaceUploader ? 'Cancel Replace' : 'Replace Revised File'}
+                                {showRevisionReplaceUploader ? 'Cancel' : (isEditor ? 'Upload Final PDF' : 'Replace Revised File')}
                             </Button>
                         )}
                     </div>
@@ -2013,10 +2013,10 @@ export default function SubmissionDetailPage() {
                         <div className="rounded-md border p-3 space-y-3">
                             <FileUploader
                                 key={revisionReplaceUploaderKey}
-                                endpoint="documentUploader"
+                                endpoint={isEditor ? "finalManuscriptUploader" : "documentUploader"}
                                 onUploadComplete={(url) => setRevisionReplacementUrl(url || '')}
                                 onUploadError={(err) => toast({ title: "Upload Error", description: err.message, variant: "destructive" })}
-                                description="Upload new revised or final manuscript (.pdf, .doc, .docx)."
+                                description={isEditor ? "Upload the final published manuscript (PDF only). This is the file readers will download." : "Upload replacement revised manuscript (.doc, .docx)."}
                             />
                             {revisionReplacementUrl && (
                                 <div className="flex flex-wrap gap-2">

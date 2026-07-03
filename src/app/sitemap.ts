@@ -1,14 +1,24 @@
-
 import { MetadataRoute } from 'next';
-import { collection, getDocs, query, where } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { Submission } from '@/types';
+import { adminDb } from '@/lib/firebase-admin';
+import { Timestamp } from 'firebase-admin/firestore';
+
+export const dynamic = 'force-dynamic';
+
+const baseUrl = 'https://mjstem.org';
+
+function toDate(value: unknown): Date {
+  if (value instanceof Timestamp) return value.toDate();
+  if (value instanceof Date) return value;
+  if (typeof value === 'string' || typeof value === 'number') {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  return new Date();
+}
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = 'https://mjstem.org'; // IMPORTANT: Replace with your actual domain
-
   // Static pages
-  const staticRoutes = [
+  const staticRoutes: MetadataRoute.Sitemap = [
     '/',
     '/about-journal',
     '/author-guidelines',
@@ -25,25 +35,28 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     lastModified: new Date(),
   }));
 
-  // Dynamic pages for published articles
+  // Dynamic pages for published (Accepted) articles
   const articleRoutes: MetadataRoute.Sitemap = [];
-  try {
-    const articlesQuery = query(collection(db, 'submissions'), where('status', '==', 'Accepted'));
-    const articlesSnapshot = await getDocs(articlesQuery);
-    articlesSnapshot.forEach((doc) => {
-        const submission = { id: doc.id, ...doc.data() } as Submission;
+  if (adminDb) {
+    try {
+      const snapshot = await adminDb
+        .collection('submissions')
+        .where('status', '==', 'Accepted')
+        .get();
+
+      snapshot.forEach((doc) => {
+        const data = doc.data();
         articleRoutes.push({
-            url: `${baseUrl}/article/${submission.id}`, 
-            // Use submission date as lastModified, or add a publishedDate field later
-            lastModified: submission.submittedAt,
-            changeFrequency: 'yearly',
-            priority: 0.8
-        })
-    });
-  } catch (e) {
-    console.error("Could not fetch dynamic article routes for sitemap", e);
+          url: `${baseUrl}/article/${doc.id}`,
+          lastModified: toDate(data.submittedAt),
+          changeFrequency: 'yearly',
+          priority: 0.8,
+        });
+      });
+    } catch (e) {
+      console.error('Could not fetch dynamic article routes for sitemap', e);
+    }
   }
-  
 
   return [...staticRoutes, ...articleRoutes];
 }

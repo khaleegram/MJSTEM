@@ -60,6 +60,19 @@ const nextConfig: NextConfig = {
         hostname: 'utfs.io',
         port: '',
         pathname: '/**',
+      },
+      {
+        // UploadThing v7 serves files from the app's ufs.sh subdomain.
+        protocol: 'https',
+        hostname: '**.ufs.sh',
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'ufs.sh',
+        port: '',
+        pathname: '/**',
       }
     ],
   },

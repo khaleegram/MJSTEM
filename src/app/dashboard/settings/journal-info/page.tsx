@@ -165,7 +165,7 @@ export default function JournalInfoSettingsPage() {
                       <FormLabel>Template File</FormLabel>
                       <FormControl>
                         <FileUploader
-                          endpoint="documentUploader"
+                          endpoint="generalDocumentUploader"
                           value={field.value}
                           onUploadComplete={(url) => field.onChange(url)}
                           onUploadError={(error) => toast({ title: 'Upload Failed', description: error.message, variant: 'destructive' })}

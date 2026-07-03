@@ -1,82 +1,82 @@
-'use client';
-
-import { useEffect, useState } from 'react';
-import { getLatestIssue, getFeaturedArticles, IssueWithVolume } from '@/services/publication-service';
-import { doc, getDoc, collection, getDocs, orderBy, query } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { IndexingService, Article } from '@/types';
+import { adminDb } from '@/lib/firebase-admin';
 import { HomePageClient } from '@/components/home-page-client';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
+import type { Article, IndexingService } from '@/types';
 
-export default function HomePage() {
-  const [latestIssue, setLatestIssue] = useState<IssueWithVolume | null>(null);
-  const [featuredArticles, setFeaturedArticles] = useState<Article[]>([]);
-  const [journalInfo, setJournalInfo] = useState<{ coverLetterUrl?: string, submissionTemplateUrl?: string }>({});
-  const [indexingServices, setIndexingServices] = useState<IndexingService[]>([]);
-  const [loading, setLoading] = useState(true);
+// Server-render the homepage so its content is present in the initial HTML
+// for search engine crawlers (previously this was fully client-rendered).
+export const dynamic = 'force-dynamic';
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      
-      // These functions now have internal error handling/emitting using FirestorePermissionError
-      getLatestIssue().then(setLatestIssue);
-      getFeaturedArticles().then(setFeaturedArticles);
+async function getFeaturedArticles(): Promise<Article[]> {
+  if (!adminDb) return [];
+  try {
+    const snap = await adminDb
+      .collection('submissions')
+      .where('status', '==', 'Accepted')
+      .orderBy('submittedAt', 'desc')
+      .limit(3)
+      .get();
 
-      // Fetch branding and settings
-      const journalInfoRef = doc(db, 'settings', 'journalInfo');
-      getDoc(journalInfoRef)
-        .then((docSnap) => {
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                setJournalInfo({
-                    coverLetterUrl: data.coverLetterUrl,
-                    submissionTemplateUrl: data.submissionTemplateUrl,
-                });
-            }
-        })
-        .catch(async (serverError) => {
-            const permissionError = new FirestorePermissionError({
-                path: journalInfoRef.path,
-                operation: 'get',
-            });
-            errorEmitter.emit('permission-error', permissionError);
-        });
-      
-      const indexingCollectionRef = collection(db, 'indexingServices');
-      const indexingQuery = query(indexingCollectionRef, orderBy('order'));
-      getDocs(indexingQuery)
-        .then((indexingSnapshot) => {
-            const services = indexingSnapshot.docs.map(doc => {
-                const data = doc.data();
-                return { 
-                    id: doc.id, 
-                    name: data.name,
-                    logoUrl: data.logoUrl,
-                    order: data.order 
-                } as IndexingService;
-            });
-            setIndexingServices(services);
-        })
-        .catch(async (serverError) => {
-            const permissionError = new FirestorePermissionError({
-                path: indexingCollectionRef.path,
-                operation: 'list',
-            });
-            errorEmitter.emit('permission-error', permissionError);
-        })
-        .finally(() => {
-            setLoading(false);
-        });
+    return snap.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        title: data.title,
+        contributors: data.contributors,
+        manuscriptUrl: data.manuscriptUrl,
+        authorName: data.author?.name || '',
+      } as Article;
+    });
+  } catch (error) {
+    console.error('HomePage: failed to load featured articles', error);
+    return [];
+  }
+}
+
+async function getJournalInfo(): Promise<{ coverLetterUrl?: string; submissionTemplateUrl?: string }> {
+  if (!adminDb) return {};
+  try {
+    const snap = await adminDb.collection('settings').doc('journalInfo').get();
+    if (!snap.exists) return {};
+    const data = snap.data() || {};
+    return {
+      coverLetterUrl: data.coverLetterUrl,
+      submissionTemplateUrl: data.submissionTemplateUrl,
     };
+  } catch (error) {
+    console.error('HomePage: failed to load journal info', error);
+    return {};
+  }
+}
 
-    fetchData();
-  }, []);
+async function getIndexingServices(): Promise<IndexingService[]> {
+  if (!adminDb) return [];
+  try {
+    const snap = await adminDb.collection('indexingServices').orderBy('order').get();
+    return snap.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        name: data.name,
+        logoUrl: data.logoUrl,
+        order: data.order,
+      } as IndexingService;
+    });
+  } catch (error) {
+    console.error('HomePage: failed to load indexing services', error);
+    return [];
+  }
+}
+
+export default async function HomePage() {
+  const [featuredArticles, journalInfo, indexingServices] = await Promise.all([
+    getFeaturedArticles(),
+    getJournalInfo(),
+    getIndexingServices(),
+  ]);
 
   return (
     <HomePageClient
-      latestIssue={latestIssue}
+      latestIssue={null}
       featuredArticles={featuredArticles}
       journalInfo={journalInfo}
       indexingServices={indexingServices}

@@ -139,6 +139,12 @@ function resolveReaderUrl(manuscriptUrl: string): string {
 }
 
 function resolveDownloadLabel(manuscriptUrl: string): string {
+  // New manuscripts are PDF-only, but older accepted articles may still be
+  // Word files. Label the button accurately so legacy files aren't mislabeled.
+  const url = (manuscriptUrl || '').toLowerCase().split('?')[0];
+  if (url.endsWith('.doc') || url.endsWith('.docx')) {
+    return 'Download Manuscript';
+  }
   return 'Download PDF';
 }
 

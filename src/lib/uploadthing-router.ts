@@ -38,6 +38,8 @@ const handleAuth = async ({ req }: { req: Request }) => {
 
 // Define the file router
 export const ourFileRouter = {
+  // Author submission manuscripts are Word (.doc/.docx) only. Editors need the
+  // editable Word file (e.g. for DOI insertion) during the editorial workflow.
   documentUploader: f({
     "application/msword": { maxFileSize: "16MB", maxFileCount: 1 },
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": { maxFileSize: "16MB", maxFileCount: 1 },
@@ -45,6 +47,19 @@ export const ourFileRouter = {
     .middleware(handleAuth)
     .onUploadComplete(async ({ metadata, file }) => {
       console.log("Upload complete for userId:", metadata.userId);
+      const fileWithMaybeUfs = file as typeof file & { ufsUrl?: string; ufssUrl?: string };
+      const fileUrl = fileWithMaybeUfs.ufsUrl ?? fileWithMaybeUfs.ufssUrl ?? file.url;
+      return { uploadedBy: metadata.userId, url: fileUrl };
+    }),
+
+  // Final published manuscript is PDF only. This is the non-editable file that
+  // editors/admins drop in and that readers download from the public site.
+  finalManuscriptUploader: f({
+    "application/pdf": { maxFileSize: "16MB", maxFileCount: 1 },
+  })
+    .middleware(handleAuth)
+    .onUploadComplete(async ({ metadata, file }) => {
+      console.log("Final PDF upload complete for userId:", metadata.userId);
       const fileWithMaybeUfs = file as typeof file & { ufsUrl?: string; ufssUrl?: string };
       const fileUrl = fileWithMaybeUfs.ufsUrl ?? fileWithMaybeUfs.ufssUrl ?? file.url;
       return { uploadedBy: metadata.userId, url: fileUrl };

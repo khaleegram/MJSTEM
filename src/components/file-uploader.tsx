@@ -65,11 +65,34 @@ export function FileUploader({ endpoint, onUploadComplete, onUploadError, value,
     [startUpload, user, onUploadError]
   );
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, multiple: false });
+  const acceptByEndpoint: Record<string, Record<string, string[]>> = {
+    imageUploader: { 'image/*': [] },
+    // Author submission manuscripts are Word only (for DOI insertion).
+    documentUploader: {
+      'application/msword': ['.doc'],
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+    },
+    // Final published manuscript is PDF only.
+    finalManuscriptUploader: { 'application/pdf': ['.pdf'] },
+    generalDocumentUploader: {
+      'application/pdf': ['.pdf'],
+      'application/msword': ['.doc'],
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+      'text/plain': ['.txt'],
+      'application/rtf': ['.rtf'],
+      'application/vnd.ms-powerpoint': ['.ppt'],
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'],
+    },
+  };
+  const accept = acceptByEndpoint[endpoint as string];
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, multiple: false, accept });
 
   const isImageUploader = endpoint === 'imageUploader';
+  const isPdfOnly = endpoint === 'finalManuscriptUploader';
+  const isDocxOnly = endpoint === 'documentUploader';
   const Icon = isImageUploader ? ImageIcon : FileIcon;
-  const finalDescription = description || (isImageUploader ? 'PNG, JPG, GIF up to 4MB' : 'Allowed file types and sizes.');
+  const finalDescription = description || (isImageUploader ? 'PNG, JPG, GIF up to 4MB' : isPdfOnly ? 'PDF only, up to 16MB' : isDocxOnly ? 'Word (.doc, .docx), up to 16MB' : 'Allowed file types and sizes.');
 
 
   if (isUploading) {
