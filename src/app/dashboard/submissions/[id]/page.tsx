@@ -15,7 +15,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { User, Calendar, PlusCircle, Download, BookOpen, BookText, Edit, MessageSquare, Send, Paperclip, Shield, Clock, CheckCircle2, Info, Trash2, Upload } from 'lucide-react';
+import { User, Calendar, PlusCircle, Download, BookOpen, BookText, Edit, MessageSquare, Send, Paperclip, Shield, Clock, CheckCircle2, Info, Trash2, Upload, Search, Filter, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { SubmissionStatus, Submission, UserProfile } from '@/types';
 import React from 'react';
@@ -57,6 +57,9 @@ import { sendAttachmentNotificationEmail } from '@/ai/flows/send-attachment-noti
 import { sendWorkflowNotificationEmail } from '@/ai/flows/send-workflow-notification-email';
 import { extractDocxPageCount } from '@/ai/flows/extract-docx-page-count';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Checkbox } from '@/components/ui/checkbox';
+import { REVIEWER_SUBJECT_AREAS, reviewerMatchesAreaFilter } from '@/lib/reviewer-areas';
 
 const inviteReviewerSchema = z.object({
     name: z.string().min(2, 'Reviewer name is required.'),
@@ -1110,6 +1113,8 @@ export default function SubmissionDetailPage() {
   const [finalPdfUploaderKey, setFinalPdfUploaderKey] = React.useState(0);
   const [isSavingFinalPdf, setIsSavingFinalPdf] = React.useState(false);
   const [editorAttachmentVisibleToReviewers, setEditorAttachmentVisibleToReviewers] = React.useState(false);
+  const [reviewerSearch, setReviewerSearch] = React.useState('');
+  const [areaFilter, setAreaFilter] = React.useState<string[]>([]);
   const router = useRouter();
 
   const inviteForm = useForm<z.infer<typeof inviteReviewerSchema>>({
@@ -1161,6 +1166,22 @@ export default function SubmissionDetailPage() {
     }
     fetchReviewers();
   }, [isEditor]);
+
+  const filteredAvailableReviewers = React.useMemo(() => {
+    const q = reviewerSearch.trim().toLowerCase();
+    return availableReviewers.filter((reviewer) => {
+      const matchesSearch =
+        !q ||
+        reviewer.displayName.toLowerCase().includes(q) ||
+        (reviewer.specialization || '').toLowerCase().includes(q) ||
+        (reviewer.reviewerSubjectAreas || []).some((area) => area.toLowerCase().includes(q)) ||
+        reviewer.email.toLowerCase().includes(q);
+
+      const matchesArea = reviewerMatchesAreaFilter(reviewer, areaFilter);
+
+      return matchesSearch && matchesArea;
+    });
+  }, [availableReviewers, reviewerSearch, areaFilter]);
 
   const fetchSubmission = React.useCallback(async () => {
     if (!id) return;
@@ -2485,19 +2506,125 @@ export default function SubmissionDetailPage() {
                 <DialogHeader><DialogTitle>Assign or Invite</DialogTitle></DialogHeader>
                  <Tabs defaultValue="existing" className="w-full">
                     <TabsList className="grid w-full grid-cols-2"><TabsTrigger value="existing">Search Users</TabsTrigger><TabsTrigger value="invite">By Email</TabsTrigger></TabsList>
-                    <TabsContent value="existing" className="pt-4 max-h-80 overflow-y-auto">
-                        {availableReviewers.map(r => (
-                            <div key={r.uid} className='flex justify-between items-center p-2 border-b last:border-0'>
-                                <div className="flex items-center gap-3">
-                                    <Avatar className="h-8 w-8"><AvatarFallback>{getInitials(r.displayName)}</AvatarFallback></Avatar>
-                                    <div className="text-xs">
+                    <TabsContent value="existing" className="pt-4 space-y-3">
+                        <div className="flex gap-2">
+                            <div className="relative flex-1">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                    placeholder="Search by name, email, or area..."
+                                    value={reviewerSearch}
+                                    onChange={(e) => setReviewerSearch(e.target.value)}
+                                    className="pl-9"
+                                />
+                            </div>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button variant="outline" size="icon" className="shrink-0 relative">
+                                        <Filter className="h-4 w-4" />
+                                        {areaFilter.length > 0 && (
+                                            <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-[10px] text-primary-foreground flex items-center justify-center">
+                                                {areaFilter.length}
+                                            </span>
+                                        )}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-80 p-3" align="end">
+                                    <p className="text-sm font-medium mb-2">Filter by subject area</p>
+                                    <div className="max-h-56 overflow-y-auto space-y-2">
+                                        {REVIEWER_SUBJECT_AREAS.map((area) => {
+                                            const checked = areaFilter.includes(area);
+                                            return (
+                                                <label key={area} className="flex items-start gap-2 text-xs cursor-pointer">
+                                                    <Checkbox
+                                                        checked={checked}
+                                                        onCheckedChange={(next) => {
+                                                            setAreaFilter((prev) =>
+                                                                next === true
+                                                                    ? [...prev, area]
+                                                                    : prev.filter((a) => a !== area)
+                                                            );
+                                                        }}
+                                                    />
+                                                    <span className="leading-snug">{area}</span>
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
+                                    {areaFilter.length > 0 && (
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            className="w-full mt-2"
+                                            onClick={() => setAreaFilter([])}
+                                        >
+                                            Clear filters
+                                        </Button>
+                                    )}
+                                </PopoverContent>
+                            </Popover>
+                        </div>
+
+                        {areaFilter.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                                {areaFilter.map((area) => (
+                                    <Badge key={area} variant="secondary" className="text-[10px] gap-1 pr-1">
+                                        {area}
+                                        <button
+                                            type="button"
+                                            onClick={() => setAreaFilter((prev) => prev.filter((a) => a !== area))}
+                                            className="rounded-full hover:bg-muted p-0.5"
+                                            aria-label={`Remove filter ${area}`}
+                                        >
+                                            <X className="h-3 w-3" />
+                                        </button>
+                                    </Badge>
+                                ))}
+                            </div>
+                        )}
+
+                        <div className="max-h-80 overflow-y-auto">
+                        {filteredAvailableReviewers.length > 0 ? filteredAvailableReviewers.map(r => {
+                            const displayAreas = r.reviewerSubjectAreas?.length
+                                ? r.reviewerSubjectAreas
+                                : r.specialization
+                                  ? [r.specialization]
+                                  : [];
+                            return (
+                            <div key={r.uid} className='flex justify-between items-start p-2 border-b last:border-0 gap-2'>
+                                <div className="flex items-start gap-3 min-w-0">
+                                    <Avatar className="h-8 w-8 shrink-0"><AvatarFallback>{getInitials(r.displayName)}</AvatarFallback></Avatar>
+                                    <div className="text-xs min-w-0">
                                         <p className="font-bold">{r.displayName}</p>
-                                        <p className="text-muted-foreground line-clamp-1">{r.specialization || 'General'}</p>
+                                        <p className="text-muted-foreground">{r.role}</p>
+                                        {displayAreas.length > 0 ? (
+                                            <div className="flex flex-wrap gap-1 mt-1">
+                                                {displayAreas.slice(0, 3).map((area) => (
+                                                    <Badge key={area} variant="outline" className="text-[10px] font-normal">
+                                                        {area}
+                                                    </Badge>
+                                                ))}
+                                                {displayAreas.length > 3 && (
+                                                    <Badge variant="outline" className="text-[10px] font-normal">
+                                                        +{displayAreas.length - 3}
+                                                    </Badge>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <p className="text-muted-foreground line-clamp-1 mt-1">General</p>
+                                        )}
                                     </div>
                                 </div>
-                                <Button variant="ghost" size="icon" onClick={() => handleAssignReviewer(r)}><PlusCircle className='h-4 w-4' /></Button>
+                                <Button variant="ghost" size="icon" className="shrink-0" onClick={() => handleAssignReviewer(r)}><PlusCircle className='h-4 w-4' /></Button>
                             </div>
-                        ))}
+                        )}) : (
+                            <p className="text-sm text-muted-foreground text-center py-4">
+                                {availableReviewers.length === 0
+                                    ? 'No reviewers available.'
+                                    : 'No reviewers match your search or filters.'}
+                            </p>
+                        )}
+                        </div>
                     </TabsContent>
                     <TabsContent value="invite" className="pt-4">
                         <Form {...inviteForm}>

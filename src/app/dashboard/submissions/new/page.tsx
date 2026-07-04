@@ -22,7 +22,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Trash2, PlusCircle, Download, Paperclip } from 'lucide-react';
+import { Trash2, PlusCircle, Download, Paperclip, Search, X } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/auth-context';
 import { ContributorSchema, NewSubmissionSchema } from '@/lib/data-schemas';
@@ -36,6 +36,9 @@ import { sendConfirmationEmail } from '@/ai/flows/send-confirmation-email';
 import { sendWorkflowNotificationEmail } from '@/ai/flows/send-workflow-notification-email';
 import { extractDocxPageCount } from '@/ai/flows/extract-docx-page-count';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
+import { filterReviewerAreas, MAX_CUSTOM_AREA_LENGTH, MAX_REVIEWER_SUBJECT_AREAS } from '@/lib/reviewer-areas';
 
 const formSchema = NewSubmissionSchema;
 
@@ -79,9 +82,14 @@ const getNextSubmissionId = async (): Promise<string> => {
 export default function NewSubmissionPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const { user, userProfile } = useAuth();
+  const { user, userProfile, refetchUserProfile } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [templateUrl, setTemplateUrl] = useState('');
+  const [wantsToReview, setWantsToReview] = useState(false);
+  const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
+  const [areaSearch, setAreaSearch] = useState('');
+  const [customArea, setCustomArea] = useState('');
+  const [showOtherInput, setShowOtherInput] = useState(false);
   
   useEffect(() => {
     const getTemplateUrl = async () => {
@@ -139,6 +147,56 @@ export default function NewSubmissionPage() {
     });
   }
 
+  const filteredAreas = filterReviewerAreas(areaSearch);
+
+  const toggleArea = (area: string) => {
+    setSelectedAreas((prev) => {
+      if (prev.some((a) => a.toLowerCase() === area.toLowerCase())) {
+        return prev.filter((a) => a.toLowerCase() !== area.toLowerCase());
+      }
+      if (prev.length >= MAX_REVIEWER_SUBJECT_AREAS) {
+        toast({
+          title: 'Maximum areas reached',
+          description: `You can select up to ${MAX_REVIEWER_SUBJECT_AREAS} subject areas.`,
+          variant: 'destructive',
+        });
+        return prev;
+      }
+      return [...prev, area];
+    });
+  };
+
+  const removeArea = (area: string) => {
+    setSelectedAreas((prev) => prev.filter((a) => a !== area));
+  };
+
+  const addCustomArea = () => {
+    const trimmed = customArea.trim();
+    if (!trimmed) return;
+    if (trimmed.length > MAX_CUSTOM_AREA_LENGTH) {
+      toast({
+        title: 'Area too long',
+        description: `Custom areas must be ${MAX_CUSTOM_AREA_LENGTH} characters or fewer.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (selectedAreas.some((a) => a.toLowerCase() === trimmed.toLowerCase())) {
+      setCustomArea('');
+      return;
+    }
+    if (selectedAreas.length >= MAX_REVIEWER_SUBJECT_AREAS) {
+      toast({
+        title: 'Maximum areas reached',
+        description: `You can select up to ${MAX_REVIEWER_SUBJECT_AREAS} subject areas.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+    setSelectedAreas((prev) => [...prev, trimmed]);
+    setCustomArea('');
+  };
+
   async function onSubmit(values: z.infer<typeof formSchema>) {
     if (!user || !user.displayName || !user.email) {
         toast({
@@ -162,6 +220,15 @@ export default function NewSubmissionPage() {
     if (!primaryContact || !primaryContact.name || !primaryContact.email) {
         toast({ title: "Primary contact missing", description: "One author must be designated as the primary contact with a valid name and email.", variant: 'destructive'});
         return;
+    }
+
+    if (wantsToReview && selectedAreas.length === 0) {
+      toast({
+        title: 'Subject areas required',
+        description: 'Please select at least one subject area if you wish to join our reviewer community.',
+        variant: 'destructive',
+      });
+      return;
     }
 
     setIsSubmitting(true);
@@ -245,6 +312,28 @@ export default function NewSubmissionPage() {
                 manuscriptTitle: values.title,
                 actorName: primaryContact.name,
             });
+
+            if (wantsToReview && selectedAreas.length > 0 && user) {
+              try {
+                const token = await user.getIdToken(true);
+                const optInRes = await fetch('/api/reviewer/opt-in', {
+                  method: 'POST',
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({ subjectAreas: selectedAreas }),
+                });
+                if (optInRes.ok) {
+                  await refetchUserProfile();
+                } else {
+                  const errBody = await optInRes.json().catch(() => ({}));
+                  console.error('[Reviewer Opt-In] Failed:', errBody);
+                }
+              } catch (optInError) {
+                console.error('[Reviewer Opt-In] Request failed:', optInError);
+              }
+            }
         } catch (backgroundError) {
             console.error("Failed to send post-submission notifications/emails:", backgroundError);
             // Don't bother the user with this, just log it. The main submission worked.
@@ -499,6 +588,149 @@ export default function NewSubmissionPage() {
                         <PlusCircle className="mr-2 h-4 w-4" /> Add Contributor
                     </Button>
                      <FormMessage>{form.formState.errors.contributors?.message}</FormMessage>
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle className="font-headline text-xl">3. Join Our Reviewer Community</CardTitle>
+                    <CardDescription>
+                        Would you like to review other manuscripts for MJSTEM? This is optional and does not affect your submission.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="flex items-start gap-3">
+                        <Checkbox
+                            id="wantsToReview"
+                            checked={wantsToReview}
+                            onCheckedChange={(checked) => {
+                                const next = checked === true;
+                                setWantsToReview(next);
+                                if (!next) {
+                                    setSelectedAreas([]);
+                                    setAreaSearch('');
+                                    setCustomArea('');
+                                    setShowOtherInput(false);
+                                }
+                            }}
+                            disabled={isSubmitting}
+                        />
+                        <label htmlFor="wantsToReview" className="text-sm leading-relaxed cursor-pointer">
+                            Yes, I am interested in serving as a peer reviewer for MJSTEM on other articles.
+                        </label>
+                    </div>
+
+                    <div
+                        className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                            wantsToReview ? 'max-h-[900px] opacity-100' : 'max-h-0 opacity-0'
+                        }`}
+                    >
+                        <div className="space-y-4 pt-2 border-t">
+                            <div>
+                                <p className="text-sm font-medium mb-2">Choose your subject areas</p>
+                                <p className="text-xs text-muted-foreground mb-3">
+                                    Select all areas where you have expertise. You may choose more than one.
+                                </p>
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                    <Input
+                                        placeholder="Search subject areas..."
+                                        value={areaSearch}
+                                        onChange={(e) => setAreaSearch(e.target.value)}
+                                        className="pl-9"
+                                        disabled={isSubmitting}
+                                    />
+                                </div>
+                            </div>
+
+                            {selectedAreas.length > 0 && (
+                                <div className="flex flex-wrap gap-2">
+                                    {selectedAreas.map((area) => (
+                                        <Badge key={area} variant="secondary" className="gap-1 pr-1">
+                                            {area}
+                                            <button
+                                                type="button"
+                                                onClick={() => removeArea(area)}
+                                                className="ml-1 rounded-full hover:bg-muted p-0.5"
+                                                disabled={isSubmitting}
+                                                aria-label={`Remove ${area}`}
+                                            >
+                                                <X className="h-3 w-3" />
+                                            </button>
+                                        </Badge>
+                                    ))}
+                                </div>
+                            )}
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto rounded-md border p-3">
+                                {filteredAreas.length > 0 ? (
+                                    filteredAreas.map((area) => {
+                                        const isSelected = selectedAreas.some(
+                                            (a) => a.toLowerCase() === area.toLowerCase()
+                                        );
+                                        return (
+                                            <label
+                                                key={area}
+                                                className={`flex items-start gap-2 rounded-md border p-2 cursor-pointer text-sm transition-colors ${
+                                                    isSelected ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'
+                                                }`}
+                                            >
+                                                <Checkbox
+                                                    checked={isSelected}
+                                                    onCheckedChange={() => toggleArea(area)}
+                                                    disabled={isSubmitting}
+                                                />
+                                                <span className="leading-snug">{area}</span>
+                                            </label>
+                                        );
+                                    })
+                                ) : (
+                                    <p className="text-sm text-muted-foreground col-span-full py-2 text-center">
+                                        No areas match your search.
+                                    </p>
+                                )}
+                            </div>
+
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-2">
+                                    <Checkbox
+                                        id="showOtherArea"
+                                        checked={showOtherInput}
+                                        onCheckedChange={(checked) => setShowOtherInput(checked === true)}
+                                        disabled={isSubmitting}
+                                    />
+                                    <label htmlFor="showOtherArea" className="text-sm cursor-pointer">
+                                        Other (specify a subject area not listed above)
+                                    </label>
+                                </div>
+                                {showOtherInput && (
+                                    <div className="flex gap-2">
+                                        <Input
+                                            placeholder="Type your subject area"
+                                            value={customArea}
+                                            onChange={(e) => setCustomArea(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    addCustomArea();
+                                                }
+                                            }}
+                                            disabled={isSubmitting}
+                                            maxLength={MAX_CUSTOM_AREA_LENGTH}
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            onClick={addCustomArea}
+                                            disabled={isSubmitting || !customArea.trim()}
+                                        >
+                                            Add
+                                        </Button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
                 </CardContent>
             </Card>
 

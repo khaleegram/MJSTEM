@@ -84,6 +84,8 @@ export const UserProfileSchema = z.object({
   photoURL: z.string().url().optional(),
   role: z.enum(['Editor', 'Author', 'Reviewer', 'Admin', 'Managing Editor']),
   specialization: z.string().optional(),
+  reviewerSubjectAreas: z.array(z.string()).optional(),
+  isReviewerVolunteer: z.boolean().optional(),
   fcmTokens: z.array(z.string()).optional(), // For Push Notifications
 });
 
