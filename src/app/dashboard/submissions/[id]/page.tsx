@@ -15,7 +15,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { User, Calendar, PlusCircle, Download, BookOpen, BookText, Edit, MessageSquare, Send, Paperclip, Shield, Clock, CheckCircle2, Info, Trash2 } from 'lucide-react';
+import { User, Calendar, PlusCircle, Download, BookOpen, BookText, Edit, MessageSquare, Send, Paperclip, Shield, Clock, CheckCircle2, Info, Trash2, Upload } from 'lucide-react';
 import { format } from 'date-fns';
 import { SubmissionStatus, Submission, UserProfile } from '@/types';
 import React from 'react';
@@ -1106,6 +1106,9 @@ export default function SubmissionDetailPage() {
   const [revisionReplacementUrl, setRevisionReplacementUrl] = React.useState('');
   const [revisionReplaceUploaderKey, setRevisionReplaceUploaderKey] = React.useState(0);
   const [isReplacingRevision, setIsReplacingRevision] = React.useState(false);
+  const [finalPdfUrl, setFinalPdfUrl] = React.useState('');
+  const [finalPdfUploaderKey, setFinalPdfUploaderKey] = React.useState(0);
+  const [isSavingFinalPdf, setIsSavingFinalPdf] = React.useState(false);
   const [editorAttachmentVisibleToReviewers, setEditorAttachmentVisibleToReviewers] = React.useState(false);
   const router = useRouter();
 
@@ -1314,7 +1317,70 @@ export default function SubmissionDetailPage() {
     setRefetchTrigger(prev => prev + 1);
     setIsReplacingRevision(false);
   }
-  
+
+  // Editor/admin uploads the final published PDF. This becomes the latest
+  // manuscript everywhere (public download, dashboard, publications) by
+  // overwriting manuscriptUrl. Available on any status so an accepted paper
+  // is "good to go" the moment it's accepted.
+  const handleUploadFinalPdf = async () => {
+    if (!submission || !userProfile || !finalPdfUrl || !isEditor) return;
+    setIsSavingFinalPdf(true);
+
+    const submissionRef = doc(db, 'submissions', submission.id);
+    const updateData: Record<string, unknown> = {
+        manuscriptUrl: finalPdfUrl,
+        finalPdfUrl: finalPdfUrl,
+        revisionManuscripts: arrayUnion({
+            revision: Math.max(submission.revision ?? 1, 1),
+            url: finalPdfUrl,
+            uploadedAt: new Date(),
+            replaced: true,
+            isFinalPdf: true,
+        }),
+    };
+
+    // Preserve the author's original file the first time we replace it.
+    if (!submission.originalManuscriptUrl) {
+        updateData.originalManuscriptUrl = submission.manuscriptUrl;
+    }
+
+    try {
+        await updateDoc(submissionRef, updateData);
+    } catch (serverError) {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+            path: submissionRef.path,
+            operation: 'update',
+            requestResourceData: updateData
+        }));
+        setIsSavingFinalPdf(false);
+        return;
+    }
+
+    try {
+        await logSubmissionEvent({
+            submissionId: submission.id,
+            eventType: 'STATUS_CHANGED',
+            context: {
+                actorName: userProfile.displayName,
+                status: 'Final PDF Uploaded'
+            }
+        });
+    } catch (error) {
+        console.error('[Final PDF] Post-update side effects failed:', error);
+    }
+
+    toast({
+        title: "Final PDF Published",
+        description: "The final PDF is now the manuscript readers download.",
+        className: "bg-green-600 text-white border-none"
+    });
+
+    setFinalPdfUrl('');
+    setFinalPdfUploaderKey(v => v + 1);
+    setRefetchTrigger(prev => prev + 1);
+    setIsSavingFinalPdf(false);
+  }
+
   const handleDeleteSubmission = async () => {
     if (!submission) return;
     const submissionRef = doc(db, 'submissions', submission.id);
@@ -1939,7 +2005,7 @@ export default function SubmissionDetailPage() {
                                 </Button>
                             </>
                         )}
-                        {(isAuthor || isEditor) && (
+                        {isAuthor && (
                             <Button
                                 type="button"
                                 variant={showRevisionReplaceUploader ? "ghost" : "secondary"}
@@ -1954,7 +2020,7 @@ export default function SubmissionDetailPage() {
                                     setShowRevisionReplaceUploader(true);
                                 }}
                             >
-                                {showRevisionReplaceUploader ? 'Cancel' : (isEditor ? 'Upload Final PDF' : 'Replace Revised File')}
+                                {showRevisionReplaceUploader ? 'Cancel' : 'Replace Revised File'}
                             </Button>
                         )}
                     </div>
@@ -2013,10 +2079,10 @@ export default function SubmissionDetailPage() {
                         <div className="rounded-md border p-3 space-y-3">
                             <FileUploader
                                 key={revisionReplaceUploaderKey}
-                                endpoint={isEditor ? "finalManuscriptUploader" : "documentUploader"}
+                                endpoint="documentUploader"
                                 onUploadComplete={(url) => setRevisionReplacementUrl(url || '')}
                                 onUploadError={(err) => toast({ title: "Upload Error", description: err.message, variant: "destructive" })}
-                                description={isEditor ? "Upload the final published manuscript (PDF only). This is the file readers will download." : "Upload replacement revised manuscript (.doc, .docx)."}
+                                description="Upload replacement revised manuscript (.doc, .docx)."
                             />
                             {revisionReplacementUrl && (
                                 <div className="flex flex-wrap gap-2">
@@ -2061,6 +2127,47 @@ export default function SubmissionDetailPage() {
       </div>
 
       <div className="space-y-8 lg:col-span-1">
+        {isEditor && (
+            <Card className="border-primary/40">
+                <CardHeader>
+                    <CardTitle className="font-headline text-lg flex items-center gap-2">
+                        <Upload className="w-5 h-5" /> Final Published PDF
+                    </CardTitle>
+                    <CardDescription>
+                        Upload the typeset PDF (with DOI/headers). It becomes the manuscript readers download everywhere. You can do this once the paper is good to go.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                    {submission.manuscriptUrl && (
+                        <div className="flex flex-wrap gap-2">
+                            <Button variant="outline" size="sm" asChild>
+                                <Link href={submission.manuscriptUrl} target="_blank" rel="noopener noreferrer">
+                                    <Download className="mr-2 h-4 w-4" /> Current File
+                                </Link>
+                            </Button>
+                        </div>
+                    )}
+                    <FileUploader
+                        key={finalPdfUploaderKey}
+                        endpoint="finalManuscriptUploader"
+                        onUploadComplete={(url) => setFinalPdfUrl(url || '')}
+                        onUploadError={(err) => toast({ title: "Upload Error", description: err.message, variant: "destructive" })}
+                        description="Upload the final published manuscript (PDF only)."
+                    />
+                    {finalPdfUrl && (
+                        <Button
+                            type="button"
+                            size="sm"
+                            className="w-full"
+                            onClick={handleUploadFinalPdf}
+                            disabled={isSavingFinalPdf}
+                        >
+                            {isSavingFinalPdf ? 'Publishing...' : 'Set as Final PDF'}
+                        </Button>
+                    )}
+                </CardContent>
+            </Card>
+        )}
         {isEditor && !submission.uniqueId && submission.status === 'Accepted' && (
             <Card className="bg-yellow-50 dark:bg-yellow-950 border-yellow-200">
                 <CardHeader><CardTitle className="font-headline text-lg flex items-center gap-2"><Info /> Assignment Needed</CardTitle></CardHeader>
