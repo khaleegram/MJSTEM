@@ -12,13 +12,17 @@ import { CitationExporter } from '@/components/citation-exporter';
 import { DoiLink } from '@/components/doi-link';
 import { adminDb } from '@/lib/firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
+import {
+  BASE_URL,
+  buildArticleJsonLd,
+  buildScholarMetaTags,
+} from '@/lib/seo';
+
+export const dynamic = 'force-dynamic';
 
 type ArticlePageProps = {
   params: Promise<{ id: string }>;
 };
-
-const BASE_URL = 'https://mjstem.org';
-const JOURNAL_TITLE = 'Maiduguri Journal of STEM (MJSTEM)';
 
 function toDate(value: unknown): Date {
   if (value instanceof Date) return value;
@@ -58,7 +62,6 @@ export async function generateMetadata({ params }: ArticlePageProps): Promise<Me
 
   const title = String(data.title || 'Article');
   const publicationDate = toCitationDate(data.submittedAt);
-  const pdfUrl = String(data.manuscriptUrl || '');
   const authorNames =
     Array.isArray(data.contributors) && data.contributors.length > 0
       ? data.contributors
@@ -70,18 +73,17 @@ export async function generateMetadata({ params }: ArticlePageProps): Promise<Me
 
   return {
     title: `${title} | MJSTEM`,
+    description: String(data.abstract || '').slice(0, 160),
     alternates: { canonical: articleUrl },
     robots: { index: true, follow: true },
-    other: {
-      citation_title: title,
-      citation_author: authorNames,
-      citation_publication_date: publicationDate,
-      citation_pdf_url: pdfUrl,
-      citation_journal_title: JOURNAL_TITLE,
-      ...(data.doi || data.uniqueId
-        ? { citation_doi: String(data.doi || data.uniqueId) }
-        : {}),
-    },
+    other: buildScholarMetaTags({
+      title,
+      authorNames,
+      publicationDate,
+      manuscriptUrl: data.manuscriptUrl,
+      doi: data.doi,
+      uniqueId: data.uniqueId,
+    }),
   };
 }
 
@@ -164,9 +166,27 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
   const relatedArticles = await getRelatedArticles(submission.id, submission.keywords);
 
   const serializableSubmission = JSON.parse(JSON.stringify(submission));
+  const authorNames =
+    submission.contributors?.map((c) => c.name).filter(Boolean) ||
+    [submission.author.name];
+  const jsonLd = buildArticleJsonLd({
+    id: submission.id,
+    title: submission.title,
+    abstract: submission.abstract,
+    authorNames,
+    publicationDate: toCitationDate(submission.submittedAt),
+    manuscriptUrl: submission.manuscriptUrl,
+    doi: submission.doi,
+    uniqueId: submission.uniqueId,
+    keywords: submission.keywords,
+  });
 
   return (
     <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <div className="grid lg:grid-cols-4 gap-12">
           <article className="lg:col-span-3 min-w-0">
               <Card>

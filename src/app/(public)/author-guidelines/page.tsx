@@ -1,14 +1,20 @@
-'use client';
-
+import type { Metadata } from 'next';
 import { Check, Download } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { getDoc, doc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { useEffect, useState } from 'react';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
+import { getSubmissionTemplateUrl } from '@/lib/public-data';
+import { BASE_URL } from '@/lib/seo';
+
+export const dynamic = 'force-dynamic';
+
+export const metadata: Metadata = {
+  title: 'Author Guidelines | MJSTEM',
+  description:
+    'Submission requirements, formatting rules, and journal policies for authors publishing in MJSTEM.',
+  alternates: { canonical: `${BASE_URL}/author-guidelines` },
+  robots: { index: true, follow: true },
+};
 
 const ChecklistItem = ({ children }: { children: React.ReactNode }) => (
   <li className="flex items-start gap-3">
@@ -24,28 +30,8 @@ const StructuredAbstractItem = ({ title, description }: { title: string, descrip
     </div>
 )
 
-export default function AuthorGuidelinesPage() {
-  const [submissionTemplateUrl, setSubmissionTemplateUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchJournalInfo = async () => {
-        const docRef = doc(db, 'settings', 'journalInfo');
-        getDoc(docRef)
-            .then((docSnap) => {
-                if (docSnap.exists()) {
-                    setSubmissionTemplateUrl(docSnap.data().submissionTemplateUrl || null);
-                }
-            })
-            .catch(async (serverError) => {
-                const permissionError = new FirestorePermissionError({
-                    path: docRef.path,
-                    operation: 'get',
-                });
-                errorEmitter.emit('permission-error', permissionError);
-            });
-    };
-    fetchJournalInfo();
-  }, []);
+export default async function AuthorGuidelinesPage() {
+  const submissionTemplateUrl = await getSubmissionTemplateUrl();
 
   return (
     <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">

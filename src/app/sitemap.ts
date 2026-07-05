@@ -4,7 +4,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 
 export const dynamic = 'force-dynamic';
 
-const baseUrl = 'https://mjstem.org';
+const baseUrl = 'https://www.mjstem.org';
 
 function toDate(value: unknown): Date {
   if (value instanceof Timestamp) return value.toDate();

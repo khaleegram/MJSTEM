@@ -7,14 +7,17 @@ import { Inter as FontSans } from 'next/font/google';
 import { AuthProvider } from '@/contexts/auth-context';
 import { ThemeProvider } from '@/components/theme-provider';
 import { FirebaseErrorListener } from '@/components/firebase-error-listener';
+import { buildGoogleSiteVerificationMetadata } from '@/lib/seo';
 
+const siteVerification = buildGoogleSiteVerificationMetadata();
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://mjstem.org'),
+  metadataBase: new URL('https://www.mjstem.org'),
   title: 'MJSTEM - Multidisciplinary Journal of Science, Technology, Education and Management',
   description: 'A premier, peer-reviewed, open-access journal dedicated to the rapid publication of high-quality research across science, technology, education, and management.',
   applicationName: 'MJSTEM',
   keywords: ['journal', 'academic', 'research', 'science', 'technology', 'education', 'management', 'peer-reviewed'],
+  ...(siteVerification ? { verification: siteVerification } : {}),
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',

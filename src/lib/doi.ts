@@ -1,4 +1,4 @@
-const BASE_URL = 'https://mjstem.org';
+const BASE_URL = 'https://www.mjstem.org';
 
 export function resolveDoiLabel(doi?: string | null, uniqueId?: string | null): string | null {
   const trimmedDoi = typeof doi === 'string' ? doi.trim() : '';

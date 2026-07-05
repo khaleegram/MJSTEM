@@ -1,10 +1,20 @@
 import { adminDb } from '@/lib/firebase-admin';
 import { HomePageClient } from '@/components/home-page-client';
 import type { Article, IndexingService } from '@/types';
+import type { Metadata } from 'next';
+import { BASE_URL } from '@/lib/seo';
 
 // Server-render the homepage so its content is present in the initial HTML
 // for search engine crawlers (previously this was fully client-rendered).
 export const dynamic = 'force-dynamic';
+
+export const metadata: Metadata = {
+  title: 'MJSTEM | Maiduguri Journal of STEM',
+  description:
+    'Open-access, peer-reviewed research in science, technology, education, and management. Browse latest articles and submit your manuscript.',
+  alternates: { canonical: BASE_URL },
+  robots: { index: true, follow: true },
+};
 
 async function getFeaturedArticles(): Promise<Article[]> {
   if (!adminDb) return [];

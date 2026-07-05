@@ -1,7 +1,15 @@
-
-import { PublicHeader } from '@/components/public-header';
+import type { Metadata } from 'next';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Check, Info } from 'lucide-react';
+import { BASE_URL } from '@/lib/seo';
+
+export const metadata: Metadata = {
+  title: 'About the Journal | MJSTEM',
+  description:
+    'Learn about the Maiduguri Journal of STEM (MJSTEM): scope, mission, and open-access publishing model.',
+  alternates: { canonical: `${BASE_URL}/about-journal` },
+  robots: { index: true, follow: true },
+};
 
 const ListItem = ({ children }: { children: React.ReactNode }) => (
   <li className="flex items-start gap-3">
