@@ -28,7 +28,7 @@ export function CitationExporter({ submission }: CitationExporterProps) {
   title     = {${submission.title}},
   journal   = {Multidisciplinary Journal of Science, Technology, Education and Management (MJSTEM)},
   year      = {${year}},
-  doi       = {${submission.uniqueId}},
+  doi       = {${submission.doi || submission.uniqueId}},
   url       = {${articleUrl}}
 }`;
     return bibtex;
@@ -43,7 +43,7 @@ ${authors}
 TI  - ${submission.title}
 T2  - Multidisciplinary Journal of Science, Technology, Education and Management (MJSTEM)
 PY  - ${year}
-DO  - ${submission.uniqueId}
+DO  - ${submission.doi || submission.uniqueId}
 UR  - ${articleUrl}
 ER  - 
 `;

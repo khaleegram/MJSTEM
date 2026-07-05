@@ -238,6 +238,7 @@ const AddToIssueDialog = ({ article, volumes, onActionComplete }: { article: Sub
             manuscriptUrl: article.manuscriptUrl,
             pageCount: article.pageCount || null,
             uniqueId: article.uniqueId,
+            doi: article.doi,
         };
 
         try {

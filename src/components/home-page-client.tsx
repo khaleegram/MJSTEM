@@ -12,6 +12,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import type { Article, IndexingService } from '@/types';
 import type { IssueWithVolume } from '@/services/publication-service';
 import { Input } from './ui/input';
+import { DoiLink } from '@/components/doi-link';
 
 interface HomePageClientProps {
     latestIssue: IssueWithVolume | null;
@@ -190,6 +191,12 @@ export function HomePageClient({ latestIssue, featuredArticles, journalInfo, ind
                             <p className="text-sm text-muted-foreground mt-1">
                               By {article.contributors?.map(c => c.name).join(', ') || article.authorName}
                           </p>
+                          <DoiLink
+                            articleId={article.id}
+                            doi={article.doi}
+                            uniqueId={article.uniqueId}
+                            className="mt-1"
+                          />
                       </div>
                       <div className="flex items-center gap-4 self-end sm:self-center">
                           <Button asChild variant="outline" size="sm" className="shrink-0">

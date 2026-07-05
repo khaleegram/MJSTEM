@@ -33,7 +33,12 @@ export const metadata: Metadata = {
     description: 'A premier, peer-reviewed, open-access journal.',
   },
   icons: {
-    icon: '/favicon.jpg',
+    icon: [
+      { url: '/favicon.png', type: 'image/png' },
+      { url: '/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/favicon-192x192.png', sizes: '192x192', type: 'image/png' },
+    ],
+    apple: '/apple-touch-icon.png',
   }
 };
 

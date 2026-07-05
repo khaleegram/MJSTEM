@@ -69,6 +69,8 @@ const inviteReviewerSchema = z.object({
 const editSubmissionSchema = z.object({
     title: z.string().min(10, 'Title must be at least 10 characters long.'),
     abstract: z.string().min(50, 'Abstract must be at least 50 characters long.'),
+    keywords: z.string().min(3, 'Please provide at least one keyword.'),
+    doi: z.string().optional().or(z.literal('')),
 });
 
 function getStatusVariant(status: SubmissionStatus) {
@@ -965,7 +967,17 @@ function AuthorRevisionForm({ submission, onRevisionSubmit }: { submission: Subm
     );
 }
 
-function AuthorEditForm({ submission, onUpdate, onCancel }: { submission: Submission; onUpdate: () => void; onCancel: () => void }) {
+function SubmissionMetadataForm({
+    submission,
+    onUpdate,
+    onCancel,
+    allowDoiEdit = false,
+}: {
+    submission: Submission;
+    onUpdate: () => void;
+    onCancel: () => void;
+    allowDoiEdit?: boolean;
+}) {
     const { toast } = useToast();
     const [isSubmitting, setIsSubmitting] = React.useState(false);
 
@@ -974,36 +986,86 @@ function AuthorEditForm({ submission, onUpdate, onCancel }: { submission: Submis
         defaultValues: {
             title: submission.title,
             abstract: submission.abstract,
+            keywords: submission.keywords || '',
+            doi: submission.doi || '',
         },
     });
+
+    const syncPublishedArticleMetadata = async (updateData: Record<string, unknown>) => {
+        const volumesSnap = await getDocs(collection(db, 'volumes'));
+        const batch = writeBatch(db);
+        let changed = false;
+
+        volumesSnap.forEach((volumeDoc) => {
+            const volumeData = volumeDoc.data() as { issues?: Array<{ id: string; articles?: Array<{ id: string }> }> };
+            const issues = Array.isArray(volumeData.issues) ? volumeData.issues : [];
+            let volumeChanged = false;
+
+            const nextIssues = issues.map((issue) => {
+                const articles = Array.isArray(issue.articles) ? issue.articles : [];
+                const nextArticles = articles.map((article) => {
+                    if (article.id !== submission.id) return article;
+                    volumeChanged = true;
+                    return {
+                        ...article,
+                        title: updateData.title,
+                        doi: updateData.doi || undefined,
+                        uniqueId: submission.uniqueId,
+                    };
+                });
+                return volumeChanged ? { ...issue, articles: nextArticles } : issue;
+            });
+
+            if (volumeChanged) {
+                changed = true;
+                batch.update(doc(db, 'volumes', volumeDoc.id), { issues: nextIssues });
+            }
+        });
+
+        if (changed) {
+            await batch.commit();
+        }
+    };
 
     const onSubmit = async (values: z.infer<typeof editSubmissionSchema>) => {
         setIsSubmitting(true);
         const submissionRef = doc(db, 'submissions', submission.id);
-        const updateData = {
+        const updateData: Record<string, unknown> = {
             title: values.title,
             abstract: values.abstract,
+            keywords: values.keywords,
         };
 
-        updateDoc(submissionRef, updateData)
-            .then(() => {
-                toast({ 
-                    title: "Done! Changes Saved", 
-                    description: "Manuscript details have been updated successfully.",
-                    className: "bg-green-600 text-white border-none"
-                });
-                onUpdate();
-            })
-            .catch(async (serverError) => {
-                errorEmitter.emit('permission-error', new FirestorePermissionError({
-                    path: submissionRef.path,
-                    operation: 'update',
-                    requestResourceData: updateData,
-                }));
-            })
-            .finally(() => {
-                setIsSubmitting(false);
+        if (allowDoiEdit) {
+            updateData.doi = values.doi?.trim() || '';
+        }
+
+        try {
+            await updateDoc(submissionRef, updateData);
+
+            if (submission.status === 'Accepted') {
+                try {
+                    await syncPublishedArticleMetadata(updateData);
+                } catch (syncError) {
+                    console.error('[Metadata] Failed to sync published article metadata:', syncError);
+                }
+            }
+
+            toast({
+                title: 'Done! Changes Saved',
+                description: 'Manuscript metadata has been updated successfully.',
+                className: 'bg-green-600 text-white border-none',
             });
+            onUpdate();
+        } catch (serverError) {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({
+                path: submissionRef.path,
+                operation: 'update',
+                requestResourceData: updateData,
+            }));
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
@@ -1015,6 +1077,22 @@ function AuthorEditForm({ submission, onUpdate, onCancel }: { submission: Submis
                 <FormField control={form.control} name="abstract" render={({ field }) => (
                     <FormItem><FormLabel>Abstract</FormLabel><FormControl><Textarea {...field} className="min-h-[150px]" /></FormControl><FormMessage /></FormItem>
                 )}/>
+                <FormField control={form.control} name="keywords" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Keywords</FormLabel>
+                        <FormControl><Input placeholder="e.g., AI, Education, Climate" {...field} /></FormControl>
+                        <FormMessage />
+                    </FormItem>
+                )}/>
+                {allowDoiEdit && (
+                    <FormField control={form.control} name="doi" render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>DOI (optional)</FormLabel>
+                            <FormControl><Input placeholder="10.1234/example or leave blank" {...field} /></FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )}/>
+                )}
                 <div className="flex justify-end gap-2">
                     <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
                     <Button type="submit" disabled={isSubmitting}>Save Changes</Button>
@@ -1099,6 +1177,7 @@ export default function SubmissionDetailPage() {
   const { user, userProfile } = useAuth();
   const [refetchTrigger, setRefetchTrigger] = React.useState(0);
   const [isAuthorEditing, setIsAuthorEditing] = React.useState(false);
+  const [isEditorEditingMetadata, setIsEditorEditingMetadata] = React.useState(false);
   const [messages, setMessages] = React.useState<SubmissionMessage[]>([]);
   const [messageText, setMessageText] = React.useState('');
   const [messageAttachment, setMessageAttachment] = React.useState<{url: string, name: string} | null>(null);
@@ -1760,6 +1839,7 @@ export default function SubmissionDetailPage() {
   const isDecisionMade = ['Accepted', 'Rejected'].includes(submission.status);
   const needsRevision = ['Minor Revision', 'Major Revision', 'Awaiting Revision: Similarity Issues'].includes(submission.status);
   const canAuthorEdit = isAuthor && !isDecisionMade;
+  const canEditorEditMetadata = isEditor;
   const canAuthorDelete = isAuthor && submission.status === 'Submitted';
   const currentSubmissionRound = toRound(submission.revision);
   const rawRevisionPackages = Array.isArray((submission as any).revisionPackages)
@@ -1930,9 +2010,21 @@ export default function SubmissionDetailPage() {
     <div className="grid gap-8 lg:grid-cols-3">
       <div className="lg:col-span-2 space-y-8 min-w-0">
         <Card>
-            {isAuthorEditing ? (
+            {isAuthorEditing || isEditorEditingMetadata ? (
                  <CardContent className="p-6">
-                    <AuthorEditForm submission={submission} onUpdate={() => { setIsAuthorEditing(false); setRefetchTrigger(p => p+1); }} onCancel={() => setIsAuthorEditing(false)} />
+                    <SubmissionMetadataForm
+                        submission={submission}
+                        allowDoiEdit={isEditorEditingMetadata}
+                        onUpdate={() => {
+                            setIsAuthorEditing(false);
+                            setIsEditorEditingMetadata(false);
+                            setRefetchTrigger(p => p + 1);
+                        }}
+                        onCancel={() => {
+                            setIsAuthorEditing(false);
+                            setIsEditorEditingMetadata(false);
+                        }}
+                    />
                  </CardContent>
             ) : (
                 <>
@@ -1990,7 +2082,16 @@ export default function SubmissionDetailPage() {
                 <Button asChild><Link href={getOnlineReaderUrl(submission.manuscriptUrl)} target="_blank"><BookText className="mr-2 h-4 w-4" /> Read Latest Manuscript</Link></Button>
                 {submission.manuscriptUrl && <Button variant="outline" asChild><Link href={submission.manuscriptUrl} target="_blank"><Download className="mr-2 h-4 w-4" /> Download Latest Manuscript</Link></Button>}
             </div>
-            {canAuthorEdit && !isAuthorEditing && <Button variant="secondary" onClick={() => setIsAuthorEditing(true)}><Edit className="mr-2 h-4 w-4" /> Edit Details</Button>}
+            {canAuthorEdit && !isAuthorEditing && !isEditorEditingMetadata && (
+                <Button variant="secondary" onClick={() => setIsAuthorEditing(true)}>
+                    <Edit className="mr-2 h-4 w-4" /> Edit Details
+                </Button>
+            )}
+            {canEditorEditMetadata && !isAuthorEditing && !isEditorEditingMetadata && (
+                <Button variant="secondary" onClick={() => setIsEditorEditingMetadata(true)}>
+                    <Edit className="mr-2 h-4 w-4" /> Edit Metadata
+                </Button>
+            )}
           </CardFooter>
         </Card>
 

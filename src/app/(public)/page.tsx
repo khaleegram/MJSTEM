@@ -24,6 +24,8 @@ async function getFeaturedArticles(): Promise<Article[]> {
         contributors: data.contributors,
         manuscriptUrl: data.manuscriptUrl,
         authorName: data.author?.name || '',
+        uniqueId: data.uniqueId,
+        doi: data.doi,
       } as Article;
     });
   } catch (error) {

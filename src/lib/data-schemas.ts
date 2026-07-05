@@ -136,6 +136,7 @@ export const SubmissionSchema = z.object({
   revisionManuscripts: z.array(RevisionManuscriptSchema).optional(),
   revisionPackages: z.array(RevisionPackageSchema).optional(),
   editorAttachments: z.array(EditorAttachmentSchema).optional(),
+  doi: z.string().optional(),
 });
 
 export const ArticleSchema = z.object({
@@ -146,6 +147,7 @@ export const ArticleSchema = z.object({
   contributors: z.array(ContributorSchema).optional(),
   pageCount: z.number().optional(),
   uniqueId: z.string().optional(),
+  doi: z.string().optional(),
 });
 
 export const IssueSchema = z.object({

@@ -17,6 +17,7 @@ import Link from 'next/link';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { Badge } from '@/components/ui/badge';
+import { DoiLink } from '@/components/doi-link';
 
 export default function ArchivePage() {
   const [volumes, setVolumes] = useState<Volume[]>([]);
@@ -41,6 +42,7 @@ export default function ArchivePage() {
               manuscriptUrl: article.manuscriptUrl || '',
               pageCount: article.pageCount || null,
               uniqueId: article.uniqueId,
+              doi: article.doi,
             } as Article)) || [],
           })) || [],
         }));
@@ -101,9 +103,15 @@ export default function ArchivePage() {
                                     {article.title}
                                 </Link>
                             </h3>
-                            <p className="text-sm text-muted-foreground mb-4">
+                            <p className="text-sm text-muted-foreground mb-2">
                                 By {article.contributors?.map(c => c.name).join(', ') || article.author.name}
                             </p>
+                            <DoiLink
+                                articleId={article.id}
+                                doi={article.doi}
+                                uniqueId={article.uniqueId}
+                                className="mb-4"
+                            />
                             <div className="flex items-center justify-between">
                                 <span className="text-xs text-muted-foreground italic">Accepted for publication. Final formatting in progress.</span>
                                 <Link href={`/article/${article.id}`} className="text-sm font-semibold text-primary hover:underline">
@@ -158,6 +166,12 @@ export default function ArchivePage() {
                                                                 <p className="text-sm text-muted-foreground">
                                                                     By {article.contributors?.map(c => c.name).join(', ') || article.authorName}
                                                                 </p>
+                                                                <DoiLink
+                                                                    articleId={article.id}
+                                                                    doi={article.doi}
+                                                                    uniqueId={article.uniqueId}
+                                                                    className="mt-1"
+                                                                />
                                                             </div>
                                                         </div>
                                                         <div className='text-right'>

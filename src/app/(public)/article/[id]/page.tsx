@@ -9,6 +9,7 @@ import { Download, Calendar, Users, Info, BookText } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { CitationExporter } from '@/components/citation-exporter';
+import { DoiLink } from '@/components/doi-link';
 import { adminDb } from '@/lib/firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 
@@ -77,6 +78,9 @@ export async function generateMetadata({ params }: ArticlePageProps): Promise<Me
       citation_publication_date: publicationDate,
       citation_pdf_url: pdfUrl,
       citation_journal_title: JOURNAL_TITLE,
+      ...(data.doi || data.uniqueId
+        ? { citation_doi: String(data.doi || data.uniqueId) }
+        : {}),
     },
   };
 }
@@ -128,6 +132,8 @@ async function getRelatedArticles(currentId: string, keywords: string): Promise<
       contributors: data.contributors,
       manuscriptUrl: data.manuscriptUrl,
       authorName: data.author?.name || '',
+      uniqueId: data.uniqueId,
+      doi: data.doi,
     } as Article);
   });
 
@@ -177,6 +183,11 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
                               <Calendar className="w-4 h-4" />
                               <span>Published on {format(submission.submittedAt, 'PPP')}</span>
                           </div>
+                          <DoiLink
+                            articleId={submission.id}
+                            doi={submission.doi}
+                            uniqueId={submission.uniqueId}
+                          />
                       </div>
                   </CardHeader>
                   <CardContent>
