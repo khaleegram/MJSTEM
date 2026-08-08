@@ -60,6 +60,26 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
 import { REVIEWER_SUBJECT_AREAS, reviewerMatchesAreaFilter } from '@/lib/reviewer-areas';
+import {
+  EDITOR_DECISION_NON_DISCRIMINATION,
+  EDITOR_RESPONSIBILITIES,
+  REVIEWER_RESPONSIBILITIES,
+} from '@/content/ethics-policies';
+import { ResponsibilitiesAck, ResponsibilitiesList } from '@/components/ethics/responsibilities';
+
+function responsibilitiesAckKey(role: 'reviewer' | 'editor', userId: string, submissionId: string) {
+  return `mjstem:${role}-responsibilities:${userId}:${submissionId}`;
+}
+
+function hasResponsibilitiesAck(role: 'reviewer' | 'editor', userId: string, submissionId: string) {
+  if (typeof window === 'undefined') return false;
+  return localStorage.getItem(responsibilitiesAckKey(role, userId, submissionId)) === '1';
+}
+
+function setResponsibilitiesAck(role: 'reviewer' | 'editor', userId: string, submissionId: string) {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(responsibilitiesAckKey(role, userId, submissionId), '1');
+}
 
 const inviteReviewerSchema = z.object({
     name: z.string().min(2, 'Reviewer name is required.'),
@@ -218,6 +238,19 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
     const [reviewId, setReviewId] = React.useState<string | null>(null);
     const [recommendation, setRecommendation] = React.useState('');
     const [commentsForEditor, setCommentsForEditor] = React.useState('');
+    const [responsibilitiesAck, setAck] = React.useState(false);
+
+    React.useEffect(() => {
+        if (!user?.uid || !submission?.id) return;
+        setAck(hasResponsibilitiesAck('reviewer', user.uid, submission.id));
+    }, [user?.uid, submission?.id]);
+
+    const handleAckChange = (checked: boolean) => {
+        setAck(checked);
+        if (checked && user?.uid && submission?.id) {
+            setResponsibilitiesAck('reviewer', user.uid, submission.id);
+        }
+    };
     const [commentsForAuthor, setCommentsForAuthor] = React.useState('');
     const [attachmentUrl, setAttachmentUrl] = React.useState('');
     const [attachmentName, setAttachmentName] = React.useState('');
@@ -299,6 +332,14 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!responsibilitiesAck) {
+            toast({
+                title: 'Acknowledge Reviewer Responsibilities',
+                description: 'Please read and acknowledge the Responsibilities of Reviewers before submitting your report.',
+                variant: 'destructive',
+            });
+            return;
+        }
         if (!recommendation) {
             toast({ title: "Recommendation Required", description: "Please select a recommendation for the editor.", variant: "destructive" });
             return;
@@ -467,6 +508,22 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
             </CardHeader>
             <form onSubmit={handleSubmit}>
                 <CardContent className="space-y-4">
+                    <div className="rounded-md border bg-muted/30 p-4 space-y-3">
+                        <div>
+                            <p className="text-sm font-semibold">Responsibilities of Reviewers</p>
+                            <p className="text-xs text-muted-foreground mt-1">Peer reviewers are expected to:</p>
+                        </div>
+                        <ResponsibilitiesList items={REVIEWER_RESPONSIBILITIES} />
+                        <ResponsibilitiesAck
+                            id="reviewer-responsibilities-ack"
+                            checked={responsibilitiesAck}
+                            onCheckedChange={handleAckChange}
+                            disabled={isSubmitting}
+                            label="I have read and agree to the Responsibilities of Reviewers for this manuscript."
+                            policyHref="/ethics-policies#reviewer-responsibilities"
+                            policyLabel="Reviewer responsibilities"
+                        />
+                    </div>
                     <div className="space-y-2">
                         <label className="text-sm font-medium">Your Recommendation</label>
                         <Select onValueChange={setRecommendation} value={recommendation} required>
@@ -536,9 +593,18 @@ function AcceptInvitationCard({ submission, onAccept }: { submission: Submission
     const { user, userProfile } = useAuth();
     const { toast } = useToast();
     const [isAccepting, setIsAccepting] = React.useState(false);
+    const [responsibilitiesAck, setAck] = React.useState(false);
 
     const handleAccept = async () => {
         if (!user || !userProfile) return;
+        if (!responsibilitiesAck) {
+            toast({
+                title: 'Acknowledge Reviewer Responsibilities',
+                description: 'Please read and acknowledge the Responsibilities of Reviewers before accepting.',
+                variant: 'destructive',
+            });
+            return;
+        }
         setIsAccepting(true);
         const emailNorm = user.email?.toLowerCase().trim();
         const submissionRef = doc(db, 'submissions', submission.id);
@@ -562,6 +628,8 @@ function AcceptInvitationCard({ submission, onAccept }: { submission: Submission
                     invitedReviewerEmails: data.invitedReviewerEmails?.filter(e => e.toLowerCase().trim() !== emailNorm) || []
                 });
             });
+
+            setResponsibilitiesAck('reviewer', user.uid, submission.id);
 
             await logSubmissionEvent({
                 submissionId: submission.id,
@@ -596,10 +664,28 @@ function AcceptInvitationCard({ submission, onAccept }: { submission: Submission
         <Card className="border-primary bg-primary/5">
             <CardHeader>
                 <CardTitle className="font-headline">Review Invitation</CardTitle>
-                <CardDescription>You have been invited to review this manuscript. Please accept the invitation to proceed.</CardDescription>
+                <CardDescription>
+                    You have been invited to review this manuscript. Please read the Responsibilities of Reviewers and accept the invitation to proceed.
+                </CardDescription>
             </CardHeader>
+            <CardContent className="space-y-4">
+                <div>
+                    <p className="text-sm font-semibold mb-2">Responsibilities of Reviewers</p>
+                    <p className="text-xs text-muted-foreground mb-2">Peer reviewers are expected to:</p>
+                    <ResponsibilitiesList items={REVIEWER_RESPONSIBILITIES} />
+                </div>
+                <ResponsibilitiesAck
+                    id="accept-reviewer-responsibilities-ack"
+                    checked={responsibilitiesAck}
+                    onCheckedChange={setAck}
+                    disabled={isAccepting}
+                    label="I have read and agree to the Responsibilities of Reviewers."
+                    policyHref="/ethics-policies#reviewer-responsibilities"
+                    policyLabel="Reviewer responsibilities"
+                />
+            </CardContent>
             <CardFooter>
-                <Button onClick={handleAccept} disabled={isAccepting} className="w-full">
+                <Button onClick={handleAccept} disabled={isAccepting || !responsibilitiesAck} className="w-full">
                     {isAccepting ? 'Accepting...' : 'Accept Review Assignment'}
                 </Button>
             </CardFooter>
@@ -1194,6 +1280,8 @@ export default function SubmissionDetailPage() {
   const [editorAttachmentVisibleToReviewers, setEditorAttachmentVisibleToReviewers] = React.useState(false);
   const [reviewerSearch, setReviewerSearch] = React.useState('');
   const [areaFilter, setAreaFilter] = React.useState<string[]>([]);
+  const [showEditorResponsibilities, setShowEditorResponsibilities] = React.useState(false);
+  const [editorResponsibilitiesAck, setEditorResponsibilitiesAck] = React.useState(false);
   const router = useRouter();
 
   const inviteForm = useForm<z.infer<typeof inviteReviewerSchema>>({
@@ -1224,6 +1312,18 @@ export default function SubmissionDetailPage() {
   const needsToAcceptInvite = isReviewer &&
     !submission?.reviewerIds?.includes(user?.uid || '') &&
     myReviewerEntry?.status === 'Invited';
+
+  const isAssignedEditor = !!(user?.uid && (submission as any)?.assignedEditorId === user.uid);
+
+  React.useEffect(() => {
+    if (!isAssignedEditor || !user?.uid || !submission?.id) {
+      setShowEditorResponsibilities(false);
+      return;
+    }
+    const alreadyAcked = hasResponsibilitiesAck('editor', user.uid, submission.id);
+    setEditorResponsibilitiesAck(alreadyAcked);
+    setShowEditorResponsibilities(!alreadyAcked);
+  }, [isAssignedEditor, user?.uid, submission?.id]);
 
   React.useEffect(() => {
     const fetchReviewers = () => {
@@ -1569,6 +1669,14 @@ export default function SubmissionDetailPage() {
               assignedEditorId: editorId,
               assignedEditorName: editorName
           });
+          if (editorId) {
+              generateNotification({
+                  userId: editorId,
+                  submissionId: submission.id,
+                  eventType: 'STATUS_CHANGED',
+                  context: { status: 'Assigned as Editor', submissionTitle: submission.title }
+              }).catch(console.error);
+          }
           toast({ 
               title: "Editor Assignment Updated", 
               className: "bg-green-600 text-white border-none"
@@ -2008,6 +2116,48 @@ export default function SubmissionDetailPage() {
 
   return (
     <div className="grid gap-8 lg:grid-cols-3">
+      <Dialog
+        open={showEditorResponsibilities}
+        onOpenChange={(open) => {
+          if (!open && !editorResponsibilitiesAck) return;
+          setShowEditorResponsibilities(open);
+        }}
+      >
+        <DialogContent className="sm:max-w-lg" onPointerDownOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle>Responsibilities of Editors</DialogTitle>
+            <DialogDescription>
+              You have been assigned as editor for this manuscript. Please review these responsibilities before continuing.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-1">
+            <p className="text-sm text-muted-foreground">Editors shall:</p>
+            <ResponsibilitiesList items={EDITOR_RESPONSIBILITIES} />
+            <p className="text-sm text-muted-foreground">{EDITOR_DECISION_NON_DISCRIMINATION}</p>
+            <ResponsibilitiesAck
+              id="editor-responsibilities-ack"
+              checked={editorResponsibilitiesAck}
+              onCheckedChange={setEditorResponsibilitiesAck}
+              label="I have read and agree to the Responsibilities of Editors for this assignment."
+              policyHref="/ethics-policies#editor-responsibilities"
+              policyLabel="Editor responsibilities"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              disabled={!editorResponsibilitiesAck}
+              onClick={() => {
+                if (!user?.uid || !submission?.id || !editorResponsibilitiesAck) return;
+                setResponsibilitiesAck('editor', user.uid, submission.id);
+                setShowEditorResponsibilities(false);
+              }}
+            >
+              Continue to Submission
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="lg:col-span-2 space-y-8 min-w-0">
         <Card>
             {isAuthorEditing || isEditorEditingMetadata ? (

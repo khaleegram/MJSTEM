@@ -39,8 +39,16 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { filterReviewerAreas, MAX_CUSTOM_AREA_LENGTH, MAX_REVIEWER_SUBJECT_AREAS } from '@/lib/reviewer-areas';
+import { AUTHOR_RESPONSIBILITIES } from '@/content/ethics-policies';
+import { ResponsibilitiesAck, ResponsibilitiesList } from '@/components/ethics/responsibilities';
 
-const formSchema = NewSubmissionSchema;
+const formSchema = NewSubmissionSchema.extend({
+  authorResponsibilitiesAck: z
+    .boolean()
+    .refine((value) => value === true, {
+      message: 'You must acknowledge the author responsibilities before submitting.',
+    }),
+});
 
 
 const getNextSubmissionId = async (): Promise<string> => {
@@ -116,6 +124,7 @@ export default function NewSubmissionPage() {
       supplementaryFileUrl: '',
       contributors: [],
       pageCount: undefined,
+      authorResponsibilitiesAck: false,
     },
   });
 
@@ -371,6 +380,23 @@ export default function NewSubmissionPage() {
                 </ul>
             </AlertDescription>
         </Alert>
+
+        <Card className="border-primary/30">
+            <CardHeader>
+                <CardTitle className="font-headline text-xl">Responsibilities of Authors</CardTitle>
+                <CardDescription>
+                    Please read these responsibilities carefully before starting your submission. Full policies are available on the{' '}
+                    <Link href="/ethics-policies#author-responsibilities" target="_blank" className="text-primary hover:underline">
+                        Ethics &amp; Policies
+                    </Link>{' '}
+                    page.
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">Authors submitting manuscripts to MJSTEM must ensure that:</p>
+                <ResponsibilitiesList items={AUTHOR_RESPONSIBILITIES} />
+            </CardContent>
+        </Card>
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
@@ -734,6 +760,27 @@ export default function NewSubmissionPage() {
                 </CardContent>
             </Card>
 
+
+            <FormField
+                control={form.control}
+                name="authorResponsibilitiesAck"
+                render={({ field }) => (
+                    <FormItem>
+                        <FormControl>
+                            <ResponsibilitiesAck
+                                id="author-responsibilities-ack"
+                                checked={field.value === true}
+                                onCheckedChange={field.onChange}
+                                disabled={isSubmitting}
+                                label="I have read and agree to the Responsibilities of Authors and confirm that this submission complies with MJSTEM publication ethics."
+                                policyHref="/ethics-policies#author-responsibilities"
+                                policyLabel="Author responsibilities"
+                            />
+                        </FormControl>
+                        <FormMessage />
+                    </FormItem>
+                )}
+            />
 
             <div className="flex justify-end">
                 <Button type="submit" disabled={isSubmitting} size="lg">

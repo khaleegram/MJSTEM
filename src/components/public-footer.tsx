@@ -54,6 +54,10 @@ export function PublicFooter() {
                                 <li><Link href="/about-journal" className="hover:text-primary">About the Journal</Link></li>
                                 <li><Link href="/editorial-board" className="hover:text-primary">Editorial Board</Link></li>
                                 <li><Link href="/ethics-policies" className="hover:text-primary">Ethics & Policies</Link></li>
+                                <li><Link href="/ethics-policies#plagiarism-policy" className="hover:text-primary">Plagiarism Policy</Link></li>
+                                <li><Link href="/ethics-policies#retraction-policy" className="hover:text-primary">Corrections & Retractions</Link></li>
+                                <li><Link href="/ethics-policies#digital-preservation" className="hover:text-primary">Digital Preservation</Link></li>
+                                <li><Link href="/ethics-policies#publisher-information" className="hover:text-primary">Publisher Information</Link></li>
                                 <li><Link href="/privacy-policy" className="hover:text-primary">Privacy Policy</Link></li>
                                 <li><Link href="/terms-of-service" className="hover:text-primary">Terms of Service</Link></li>
                             </ul>
