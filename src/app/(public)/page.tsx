@@ -9,7 +9,7 @@ import { BASE_URL } from '@/lib/seo';
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'MJSTEM | Maiduguri Journal of STEM',
+  title: 'MJSTEM | Multidisciplinary Journal of Science, Technology, Education and Management',
   description:
     'Open-access, peer-reviewed research in science, technology, education, and management. Browse latest articles and submit your manuscript.',
   alternates: { canonical: BASE_URL },

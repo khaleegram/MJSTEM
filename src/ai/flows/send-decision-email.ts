@@ -15,7 +15,8 @@ const SendDecisionEmailSchema = z.object({
   submissionId: z.string(),
   uniqueId: z.string(),
   decision: z.enum([
-    'Accepted', 'Rejected', 'Minor Revision', 'Major Revision', 
+    'Accepted', 'Rejected', 'Minor Revision', 'Major Revision',
+    'Revise and Resubmit',
     'Awaiting Revision: Similarity Issues'
   ]),
 });
@@ -38,6 +39,10 @@ function getEmailContent(decision: SubmissionStatus, title: string, subId: strin
         case 'Minor Revision':
         case 'Major Revision':
             body = `Your manuscript, "${title}", requires **${decision}** before it can be further considered for publication.
+            <br><br>Please log in to your author dashboard to view the reviewer comments and submit your revised manuscript.`;
+            break;
+        case 'Revise and Resubmit':
+            body = `Your manuscript, "${title}", requires you to **revise and resubmit for further review** before it can be further considered for publication.
             <br><br>Please log in to your author dashboard to view the reviewer comments and submit your revised manuscript.`;
             break;
         case 'Awaiting Revision: Similarity Issues':

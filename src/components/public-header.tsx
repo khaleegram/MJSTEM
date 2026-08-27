@@ -34,6 +34,10 @@ const NavDropdown = () => (
             </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent>
+            <DropdownMenuItem asChild><Link href="/editorial-policies">Editorial Policies</Link></DropdownMenuItem>
+            <DropdownMenuItem asChild><Link href="/publication-ethics">Publication Ethics</Link></DropdownMenuItem>
+            <DropdownMenuItem asChild><Link href="/publishing-information">Publishing Information</Link></DropdownMenuItem>
+            <DropdownMenuItem asChild><Link href="/ethics-policies">Ethics Hub</Link></DropdownMenuItem>
             <DropdownMenuItem asChild><Link href="/for-readers">For Readers</Link></DropdownMenuItem>
             <DropdownMenuItem asChild><Link href="/for-authors">For Authors</Link></DropdownMenuItem>
             <DropdownMenuItem asChild><Link href="/for-librarians">For Librarians</Link></DropdownMenuItem>
@@ -87,6 +91,7 @@ export function PublicHeader() {
         {/* Centered Navigation for Desktop */}
         <nav className="hidden md:flex h-full items-center justify-center gap-1 rounded-full border border-border/40 bg-background/80 px-4 py-2 text-sm font-medium shadow-lg backdrop-blur-sm">
             <NavLink href="/about-journal">About the Journal</NavLink>
+            <NavLink href="/peer-review-policy">Peer Review Policy</NavLink>
             <NavLink href="/editorial-board">Editorial Board</NavLink>
             <NavLink href="/author-guidelines">Author Guidelines</NavLink>
             <NavLink href="/archive">Browse Archives</NavLink>
@@ -125,9 +130,16 @@ export function PublicHeader() {
                                     <span className="font-headline text-lg">MJSTEM</span>
                                 </Link>
                                 <Link href="/about-journal" className="hover:text-foreground" onClick={() => setIsOpen(false)}>About the Journal</Link>
+                                <Link href="/peer-review-policy" className="hover:text-foreground" onClick={() => setIsOpen(false)}>Peer Review Policy</Link>
                                 <Link href="/editorial-board" className="hover:text-foreground" onClick={() => setIsOpen(false)}>Editorial Board</Link>
                                 <Link href="/author-guidelines" className="hover:text-foreground" onClick={() => setIsOpen(false)}>Author Guidelines</Link>
                                 <Link href="/archive" className="hover:text-foreground" onClick={() => setIsOpen(false)}>Browse Archives</Link>
+                                <hr />
+                                <span className="text-muted-foreground text-base">Policies</span>
+                                <Link href="/editorial-policies" className="hover:text-foreground pl-4" onClick={() => setIsOpen(false)}>Editorial Policies</Link>
+                                <Link href="/publication-ethics" className="hover:text-foreground pl-4" onClick={() => setIsOpen(false)}>Publication Ethics</Link>
+                                <Link href="/publishing-information" className="hover:text-foreground pl-4" onClick={() => setIsOpen(false)}>Publishing Information</Link>
+                                <Link href="/ethics-policies" className="hover:text-foreground pl-4" onClick={() => setIsOpen(false)}>Ethics Hub</Link>
                                 <hr />
                                 <span className="text-muted-foreground text-base">Information</span>
                                 <Link href="/for-readers" className="hover:text-foreground pl-4" onClick={() => setIsOpen(false)}>For Readers</Link>

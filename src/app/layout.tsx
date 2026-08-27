@@ -26,13 +26,13 @@ export const metadata: Metadata = {
   themeColor: '#111827',
   openGraph: {
     type: 'website',
-    title: 'MJSTEM - Multidisciplinary Journal',
+    title: 'MJSTEM - Multidisciplinary Journal of Science, Technology, Education and Management',
     description: 'A premier, peer-reviewed, open-access journal.',
     siteName: 'MJSTEM',
   },
   twitter: {
     card: 'summary',
-    title: 'MJSTEM - Multidisciplinary Journal',
+    title: 'MJSTEM - Multidisciplinary Journal of Science, Technology, Education and Management',
     description: 'A premier, peer-reviewed, open-access journal.',
   },
   icons: {

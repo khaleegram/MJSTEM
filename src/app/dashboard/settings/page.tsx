@@ -80,12 +80,12 @@ export default function SettingsPage() {
                     <CardHeader>
                         <CardTitle className="font-headline flex items-center gap-3">
                             <Database className="h-6 w-6 text-primary" />
-                            Indexing Services
+                            Scholarly Discovery and Indexing
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
                         <CardDescription>
-                           Manage the list of indexing services displayed on the homepage.
+                           Manage discovery and indexing services displayed on the homepage.
                         </CardDescription>
                     </CardContent>
                 </Card>

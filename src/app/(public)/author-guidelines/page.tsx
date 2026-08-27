@@ -69,10 +69,13 @@ export default async function AuthorGuidelinesPage() {
                             The title of the manuscript appears <strong>Center-aligned</strong> on the first page.
                             </ChecklistItem>
                             <ChecklistItem>
-                            Author names and institutional affiliations are listed <strong>below the title on the title page only</strong>.
+                            Upload <strong>two manuscript files</strong> at submission: (1) a <strong>complete manuscript</strong> with author names and affiliations for the editorial office, and (2) a <strong>blinded (anonymous) manuscript</strong> with all identifying information removed for double-blind peer review.
                             </ChecklistItem>
                             <ChecklistItem>
-                            The main document is <strong>anonymised</strong>, with no identifying author information.
+                            Author names and institutional affiliations appear on the <strong>complete manuscript / title page only</strong>, never in the blinded file.
+                            </ChecklistItem>
+                            <ChecklistItem>
+                            The blinded manuscript is fully <strong>anonymised</strong>—remove author names, affiliations, acknowledgements, funding identifiers, and self-citations that reveal authorship.
                             </ChecklistItem>
                             <ChecklistItem>
                             A <strong>separate title page</strong> includes:

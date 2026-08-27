@@ -38,7 +38,7 @@ import { Calendar } from '@/components/ui/calendar';
 
 const statusOptions: SubmissionStatus[] = [
     'Submitted', 'Under Initial Review', 'Under Peer Review', 
-    'Minor Revision', 'Major Revision', 'Accepted', 'Rejected'
+    'Minor Revision', 'Major Revision', 'Revise and Resubmit', 'Accepted', 'Rejected'
 ];
 
 const importSchema = z.object({

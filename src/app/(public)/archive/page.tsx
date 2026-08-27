@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
   title: 'Journal Archives | MJSTEM',
   description:
-    'Browse published volumes, issues, and articles in press from the Maiduguri Journal of STEM (MJSTEM).',
+    'Browse published volumes, issues, and articles in press from the Multidisciplinary Journal of Science, Technology, Education and Management (MJSTEM).',
   alternates: { canonical: `${BASE_URL}/archive` },
   robots: { index: true, follow: true },
 };

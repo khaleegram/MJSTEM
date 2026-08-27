@@ -103,7 +103,7 @@ export function HomePageClient({ latestIssue, featuredArticles, journalInfo, ind
       {indexingServices.length > 0 && (
         <section className="py-12 bg-muted/50">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-            <h3 className="text-center text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-6">Indexed In</h3>
+            <h3 className="text-center text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-6">Scholarly Discovery and Indexing</h3>
             <div className="flex justify-center items-center flex-wrap gap-x-8 gap-y-4">
               {indexingServices.map((service) => (
                 <TooltipProvider key={service.id}>
@@ -158,12 +158,32 @@ export function HomePageClient({ latestIssue, featuredArticles, journalInfo, ind
                   Our clear guidelines and intuitive submission portal make sharing your manuscript straightforward. Focus on your research, not the paperwork.
               </HowItWorksCard>
                 <HowItWorksCard icon={<Microscope className="w-6 h-6"/>} title="3. Rigorous Peer Review">
-                  Benefit from constructive, double-blind peer review by experts in your field to ensure the quality and validity of your work.
+                  Double-blind external peer review by at least two independent experts. See our{' '}
+                  <Link href="/peer-review-policy" className="text-primary hover:underline">Peer Review Policy</Link>.
               </HowItWorksCard>
                 <HowItWorksCard icon={<BookOpen className="w-6 h-6"/>} title="4. Timely Publication">
                   Accepted articles are formatted, assigned a DOI, and published online swiftly, ensuring your research reaches the global community without delay.
               </HowItWorksCard>
           </div>
+
+          <div className="mt-16 max-w-4xl mx-auto rounded-lg border bg-card p-6 md:p-8">
+            <h3 className="text-2xl font-bold font-headline text-foreground mb-4">Rigorous Peer Review</h3>
+            <p className="text-muted-foreground leading-relaxed">
+              MJSTEM uses a double-blind external peer-review process. Each research article is evaluated by{' '}
+              <strong className="text-foreground font-semibold">at least two independent reviewers</strong> with
+              appropriate subject expertise. Reviewers are selected on the basis of their scholarly expertise and must
+              have no conflict of interest with the authors or the manuscript. The Editor-in-Chief or an appropriately
+              delegated editor makes the final publication decision after considering the reviewers&apos; assessments.
+            </p>
+            <div className="mt-4">
+              <Button asChild variant="outline" size="sm">
+                <Link href="/peer-review-policy">
+                  Read the Peer Review Policy <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+          </div>
+
           <div className="mt-12 text-center text-sm text-muted-foreground border-t pt-8 flex items-center justify-center gap-2">
                 <Info className="w-4 h-4"/>
               <p>This is an open access article distributed under the terms of the Creative Commons Attribution 4.0 International License (CC BY 4.0).</p>

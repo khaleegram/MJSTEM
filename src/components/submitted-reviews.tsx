@@ -16,7 +16,7 @@ interface Review {
     id: string;
     reviewerId: string;
     reviewerName: string;
-    recommendation: 'Accept' | 'Minor Revision' | 'Major Revision' | 'Reject';
+    recommendation: 'Accept' | 'Minor Revision' | 'Major Revision' | 'Revise and Resubmit' | 'Reject';
     round?: number;
     commentsForEditor: string;
     commentsForAuthor: string;
@@ -30,7 +30,8 @@ const getRecommendationVariant = (recommendation: string) => {
         case 'Accept': return 'success';
         case 'Reject': return 'destructive';
         case 'Minor Revision':
-        case 'Major Revision': 
+        case 'Major Revision':
+        case 'Revise and Resubmit':
             return 'secondary';
         default: return 'outline';
     }

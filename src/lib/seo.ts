@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 
 export const BASE_URL = 'https://www.mjstem.org';
-export const JOURNAL_TITLE = 'Maiduguri Journal of STEM (MJSTEM)';
+export const JOURNAL_TITLE = 'Multidisciplinary Journal of Science, Technology, Education and Management (MJSTEM)';
+export const JOURNAL_TITLE_SHORT = 'MJSTEM';
 export const JOURNAL_EISSN = '3121-9292';
 export const JOURNAL_PRINT_ISSN = '3121-6552';
 

@@ -54,6 +54,7 @@ const getStatusVariant = (status: SubmissionStatus) => {
     case 'Awaiting Revision: Similarity Issues':
     case 'Major Revision':
     case 'Minor Revision':
+    case 'Revise and Resubmit':
       return 'warning';
     case 'Under Peer Review':
     case 'Under Initial Review':

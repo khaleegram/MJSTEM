@@ -155,8 +155,8 @@ export default function IndexingSettingsPage() {
     <div className="space-y-8">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold font-headline">Manage Indexing Services</h1>
-          <p className="text-muted-foreground">Add, edit, or remove the indexing services displayed on the homepage.</p>
+          <h1 className="text-3xl font-bold font-headline">Scholarly Discovery and Indexing</h1>
+          <p className="text-muted-foreground">Add, edit, or remove the discovery and indexing services displayed on the homepage.</p>
         </div>
         <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
             <DialogTrigger asChild>

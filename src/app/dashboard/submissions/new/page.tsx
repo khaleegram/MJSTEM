@@ -121,6 +121,7 @@ export default function NewSubmissionPage() {
       abstract: '',
       keywords: '',
       manuscriptUrl: '',
+      blindedManuscriptUrl: '',
       supplementaryFileUrl: '',
       contributors: [],
       pageCount: undefined,
@@ -219,7 +220,16 @@ export default function NewSubmissionPage() {
     if (!values.manuscriptUrl) {
       toast({
         title: "Manuscript file is required",
-        description: "Please upload your manuscript file before submitting.",
+        description: "Please upload your complete manuscript file before submitting.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!values.blindedManuscriptUrl) {
+      toast({
+        title: "Blinded manuscript is required",
+        description: "Please upload an anonymized manuscript for double-blind peer review.",
         variant: "destructive",
       });
       return;
@@ -271,6 +281,7 @@ export default function NewSubmissionPage() {
         abstract: values.abstract,
         keywords: values.keywords,
         manuscriptUrl: values.manuscriptUrl,
+        blindedManuscriptUrl: values.blindedManuscriptUrl,
         supplementaryFileUrl: values.supplementaryFileUrl || '',
         contributors: values.contributors,
         pageCount: values.pageCount || autoDetectedPageCount || null,
@@ -375,6 +386,7 @@ export default function NewSubmissionPage() {
             <AlertDescription className="text-blue-800 dark:text-blue-300">
                 <ul className="list-disc pl-5 space-y-1 mt-2">
                     <li><strong className="font-semibold">Plagiarism:</strong> Submissions must have a similarity index of ≤15%.</li>
+                    <li><strong className="font-semibold">Double-blind review:</strong> Upload both a complete manuscript and a blinded (anonymous) manuscript with author names and affiliations removed.</li>
                     <li><strong className="font-semibold">AI Usage:</strong> AI tools may be used for language editing, but not for generating content.</li>
                     <li><strong className="font-semibold">APCs:</strong> This journal does not charge any Article Processing Charges.</li>
                 </ul>
@@ -472,11 +484,14 @@ export default function NewSubmissionPage() {
                         name="manuscriptUrl"
                         render={({ field }) => (
                             <FormItem>
-                                <FormLabel>Manuscript File</FormLabel>
+                                <FormLabel>Complete Manuscript (with author details)</FormLabel>
+                                <FormDescription>
+                                    For the editorial office only. Include author names, affiliations, and acknowledgements as normal.
+                                </FormDescription>
                                 <FormControl>
                                     <FileUploader
                                         endpoint="documentUploader"
-                                        onUploadComplete={(url) => form.setValue('manuscriptUrl', url || '')}
+                                        onUploadComplete={(url) => form.setValue('manuscriptUrl', url || '', { shouldValidate: true })}
                                         onUploadError={(error) => {
                                             toast({
                                                 title: 'Upload Failed',
@@ -484,7 +499,35 @@ export default function NewSubmissionPage() {
                                                 variant: 'destructive'
                                             })
                                         }}
-                                        description="Upload your manuscript in Word format (.doc, .docx)."
+                                        description="Upload your complete manuscript in Word format (.doc, .docx)."
+                                    />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+
+                    <FormField
+                        control={form.control}
+                        name="blindedManuscriptUrl"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Blinded Manuscript (anonymous)</FormLabel>
+                                <FormDescription>
+                                    Required for double-blind peer review. Remove author names, affiliations, acknowledgements, and any other identifying information.
+                                </FormDescription>
+                                <FormControl>
+                                    <FileUploader
+                                        endpoint="documentUploader"
+                                        onUploadComplete={(url) => form.setValue('blindedManuscriptUrl', url || '', { shouldValidate: true })}
+                                        onUploadError={(error) => {
+                                            toast({
+                                                title: 'Upload Failed',
+                                                description: error.message,
+                                                variant: 'destructive'
+                                            })
+                                        }}
+                                        description="Upload the anonymized manuscript reviewers will receive (.doc, .docx)."
                                     />
                                 </FormControl>
                                 <FormMessage />

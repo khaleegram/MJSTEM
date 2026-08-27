@@ -102,6 +102,7 @@ function getStatusVariant(status: SubmissionStatus) {
       case 'Awaiting Revision: Similarity Issues':
       case 'Major Revision':
       case 'Minor Revision':
+      case 'Revise and Resubmit':
         return 'warning';
       case 'Under Peer Review':
       case 'Under Initial Review':
@@ -143,6 +144,7 @@ function formatRoundLabel(round: number): string {
 
 type RevisionDocumentCategory =
     | 'revised_manuscript_clean'
+    | 'revised_manuscript_blinded'
     | 'response_to_reviewers'
     | 'tracked_changes'
     | 'supplementary'
@@ -167,7 +169,8 @@ type RevisionExtraDocDraft = {
 };
 
 const REVISION_DOC_CATEGORY_LABELS: Record<RevisionDocumentCategory, string> = {
-    revised_manuscript_clean: 'Revised Manuscript (Clean)',
+    revised_manuscript_clean: 'Revised Manuscript (Complete)',
+    revised_manuscript_blinded: 'Revised Manuscript (Blinded)',
     response_to_reviewers: 'Response to Reviewers',
     tracked_changes: 'Tracked Changes Manuscript',
     supplementary: 'Supplementary Material',
@@ -531,10 +534,11 @@ function ReviewSubmissionForm({ submission, onReviewSubmit }: { submission: Subm
                                 <SelectValue placeholder="Select a recommendation..." />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="Accept">Recommend Acceptance</SelectItem>
-                                <SelectItem value="Minor Revision">Recommend Minor Revision</SelectItem>
-                                <SelectItem value="Major Revision">Recommend Major Revision</SelectItem>
-                                <SelectItem value="Reject">Recommend Rejection</SelectItem>
+                                <SelectItem value="Accept">Accept</SelectItem>
+                                <SelectItem value="Minor Revision">Minor revision</SelectItem>
+                                <SelectItem value="Major Revision">Major revision</SelectItem>
+                                <SelectItem value="Revise and Resubmit">Revise and resubmit for further review</SelectItem>
+                                <SelectItem value="Reject">Reject</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
@@ -697,6 +701,7 @@ function AuthorRevisionForm({ submission, onRevisionSubmit }: { submission: Subm
     const { toast } = useToast();
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const [cleanManuscript, setCleanManuscript] = React.useState<UploadedRevisionFile | null>(null);
+    const [blindedManuscript, setBlindedManuscript] = React.useState<UploadedRevisionFile | null>(null);
     const [responseToReviewers, setResponseToReviewers] = React.useState<UploadedRevisionFile | null>(null);
     const [trackedChanges, setTrackedChanges] = React.useState<UploadedRevisionFile | null>(null);
     const [extraDocs, setExtraDocs] = React.useState<RevisionExtraDocDraft[]>([createExtraRevisionDocDraft()]);
@@ -709,10 +714,10 @@ function AuthorRevisionForm({ submission, onRevisionSubmit }: { submission: Subm
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!cleanManuscript || !responseToReviewers) {
+        if (!cleanManuscript || !blindedManuscript || !responseToReviewers) {
             toast({
                 title: "Required Files Missing",
-                description: "Upload both Revised Manuscript (Clean) and Response to Reviewers before submitting.",
+                description: "Upload the complete revised manuscript, blinded revised manuscript, and Response to Reviewers before submitting.",
                 variant: "destructive"
             });
             return;
@@ -750,6 +755,14 @@ function AuthorRevisionForm({ submission, onRevisionSubmit }: { submission: Subm
                 url: cleanManuscript.url,
                 fileName: cleanManuscript.fileName || getRevisionDocumentLabel('revised_manuscript_clean'),
                 required: true,
+                visibleToReviewers: false,
+            },
+            {
+                category: 'revised_manuscript_blinded' as const,
+                label: getRevisionDocumentLabel('revised_manuscript_blinded'),
+                url: blindedManuscript.url,
+                fileName: blindedManuscript.fileName || getRevisionDocumentLabel('revised_manuscript_blinded'),
+                required: true,
                 visibleToReviewers: true,
             },
             {
@@ -766,7 +779,7 @@ function AuthorRevisionForm({ submission, onRevisionSubmit }: { submission: Subm
                 url: trackedChanges.url,
                 fileName: trackedChanges.fileName || getRevisionDocumentLabel('tracked_changes'),
                 required: false,
-                visibleToReviewers: true,
+                visibleToReviewers: false,
             }] : []),
             ...populatedExtraDocs.map((doc) => ({
                 category: doc.category,
@@ -796,6 +809,7 @@ function AuthorRevisionForm({ submission, onRevisionSubmit }: { submission: Subm
         
         const updateData: any = {
             manuscriptUrl: cleanManuscript.url,
+            blindedManuscriptUrl: blindedManuscript.url,
             status: newStatus,
             revision: newRevision,
             revisionManuscripts: arrayUnion({
@@ -859,6 +873,7 @@ function AuthorRevisionForm({ submission, onRevisionSubmit }: { submission: Subm
             className: "bg-green-600 text-white border-none"
         });
         setCleanManuscript(null);
+        setBlindedManuscript(null);
         setResponseToReviewers(null);
         setTrackedChanges(null);
         setExtraDocs([createExtraRevisionDocDraft()]);
@@ -880,10 +895,12 @@ function AuthorRevisionForm({ submission, onRevisionSubmit }: { submission: Subm
                     <div className="rounded-md border bg-secondary/20 p-4 space-y-4">
                         <div>
                             <h4 className="font-semibold text-sm">Required Documents</h4>
-                            <p className="text-xs text-muted-foreground">Both files are mandatory to submit this revision round.</p>
+                            <p className="text-xs text-muted-foreground">
+                                Upload a complete revised manuscript for editors and a blinded version for double-blind review.
+                            </p>
                         </div>
                         <div className="space-y-2">
-                            <Label className="text-sm">Revised Manuscript (Clean) *</Label>
+                            <Label className="text-sm">Revised Manuscript (Complete) *</Label>
                             <FileUploader
                                 key={`clean-${formResetSeed}`}
                                 endpoint="documentUploader"
@@ -891,7 +908,19 @@ function AuthorRevisionForm({ submission, onRevisionSubmit }: { submission: Subm
                                     setCleanManuscript(url ? { url, fileName: name || getRevisionDocumentLabel('revised_manuscript_clean') } : null)
                                 }
                                 onUploadError={(err) => toast({ title: "Upload Error", description: err.message, variant: "destructive" })}
-                                description="Upload revised manuscript clean version (.doc, .docx)."
+                                description="Complete revised manuscript with author details (.doc, .docx). Editorial office only."
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label className="text-sm">Revised Manuscript (Blinded) *</Label>
+                            <FileUploader
+                                key={`blinded-${formResetSeed}`}
+                                endpoint="documentUploader"
+                                onUploadComplete={(url, name) =>
+                                    setBlindedManuscript(url ? { url, fileName: name || getRevisionDocumentLabel('revised_manuscript_blinded') } : null)
+                                }
+                                onUploadError={(err) => toast({ title: "Upload Error", description: err.message, variant: "destructive" })}
+                                description="Anonymized revised manuscript for reviewers (.doc, .docx)."
                             />
                         </div>
                         <div className="space-y-2">
@@ -910,8 +939,8 @@ function AuthorRevisionForm({ submission, onRevisionSubmit }: { submission: Subm
 
                     <div className="rounded-md border p-4 space-y-3">
                         <div>
-                            <h4 className="font-semibold text-sm">Optional Reviewer-Facing File</h4>
-                            <p className="text-xs text-muted-foreground">Add tracked changes manuscript if available.</p>
+                            <h4 className="font-semibold text-sm">Optional Editor-Only File</h4>
+                            <p className="text-xs text-muted-foreground">Tracked-changes manuscripts are kept from reviewers to protect anonymity.</p>
                         </div>
                         <FileUploader
                             key={`tracked-${formResetSeed}`}
@@ -1945,7 +1974,7 @@ export default function SubmissionDetailPage() {
   if (!submission) return notFound();
 
   const isDecisionMade = ['Accepted', 'Rejected'].includes(submission.status);
-  const needsRevision = ['Minor Revision', 'Major Revision', 'Awaiting Revision: Similarity Issues'].includes(submission.status);
+  const needsRevision = ['Minor Revision', 'Major Revision', 'Revise and Resubmit', 'Awaiting Revision: Similarity Issues'].includes(submission.status);
   const canAuthorEdit = isAuthor && !isDecisionMade;
   const canEditorEditMetadata = isEditor;
   const canAuthorDelete = isAuthor && submission.status === 'Submitted';
@@ -2015,7 +2044,10 @@ export default function SubmissionDetailPage() {
               url: doc.url as string,
               fileName: typeof doc.fileName === 'string' && doc.fileName.trim().length > 0 ? doc.fileName.trim() : defaultLabel,
               uploadedAt: normalizeFirestoreDate(doc.uploadedAt),
-              visibleToReviewers: doc.visibleToReviewers !== false,
+              visibleToReviewers:
+                typeof doc.visibleToReviewers === 'boolean'
+                  ? doc.visibleToReviewers
+                  : category === 'revised_manuscript_blinded' || category === 'response_to_reviewers',
               required: doc.required === true,
             };
           });
@@ -2050,7 +2082,7 @@ export default function SubmissionDetailPage() {
           url: entry.url,
           fileName: `Revision R${entry.revision} Manuscript`,
           uploadedAt: entry.uploadedAt,
-          visibleToReviewers: true,
+          visibleToReviewers: false,
           required: true,
         },
       ],
@@ -2185,7 +2217,12 @@ export default function SubmissionDetailPage() {
                     </div>
                     <CardTitle className="font-headline text-3xl break-words">{submission.title}</CardTitle>
                     <div className="text-sm text-muted-foreground flex items-center flex-wrap gap-x-4 gap-y-2 pt-2">
-                        <div className="flex items-center gap-2"><User className="h-4 w-4" /><span>{submission.author.name}</span></div>
+                        {(isAuthor || isEditor) && (
+                          <div className="flex items-center gap-2"><User className="h-4 w-4" /><span>{submission.author.name}</span></div>
+                        )}
+                        {isReviewer && !isAuthor && !isEditor && (
+                          <div className="flex items-center gap-2"><Shield className="h-4 w-4" /><span>Double-blind review — author identity concealed</span></div>
+                        )}
                         <div className="flex items-center gap-2"><Calendar className="h-4 w-4" /><span>Submitted on {format(submission.submittedAt, 'PPP')}</span></div>
                     </div>
                 </CardHeader>
@@ -2229,8 +2266,72 @@ export default function SubmissionDetailPage() {
             )}
           <CardFooter className="flex-wrap gap-2 justify-between">
              <div className="flex-wrap gap-2 flex">
-                <Button asChild><Link href={getOnlineReaderUrl(submission.manuscriptUrl)} target="_blank"><BookText className="mr-2 h-4 w-4" /> Read Latest Manuscript</Link></Button>
-                {submission.manuscriptUrl && <Button variant="outline" asChild><Link href={submission.manuscriptUrl} target="_blank"><Download className="mr-2 h-4 w-4" /> Download Latest Manuscript</Link></Button>}
+                {(() => {
+                  const reviewerOnly = isReviewer && !isAuthor && !isEditor;
+                  const blindedUrl = (submission as any).blindedManuscriptUrl as string | undefined;
+                  const reviewerUrl = blindedUrl || undefined;
+                  const editorialUrl = submission.manuscriptUrl;
+
+                  if (reviewerOnly) {
+                    if (!reviewerUrl) {
+                      return (
+                        <p className="text-sm text-muted-foreground">
+                          A blinded manuscript has not been provided for this submission. Please contact the editorial office.
+                        </p>
+                      );
+                    }
+                    return (
+                      <>
+                        <Button asChild>
+                          <Link href={getOnlineReaderUrl(reviewerUrl)} target="_blank">
+                            <BookText className="mr-2 h-4 w-4" /> Read Blinded Manuscript
+                          </Link>
+                        </Button>
+                        <Button variant="outline" asChild>
+                          <Link href={reviewerUrl} target="_blank">
+                            <Download className="mr-2 h-4 w-4" /> Download Blinded Manuscript
+                          </Link>
+                        </Button>
+                      </>
+                    );
+                  }
+
+                  return (
+                    <>
+                      <Button asChild>
+                        <Link href={getOnlineReaderUrl(editorialUrl)} target="_blank">
+                          <BookText className="mr-2 h-4 w-4" /> Read Complete Manuscript
+                        </Link>
+                      </Button>
+                      {editorialUrl && (
+                        <Button variant="outline" asChild>
+                          <Link href={editorialUrl} target="_blank">
+                            <Download className="mr-2 h-4 w-4" /> Download Complete Manuscript
+                          </Link>
+                        </Button>
+                      )}
+                      {blindedUrl && (
+                        <>
+                          <Button variant="secondary" asChild>
+                            <Link href={getOnlineReaderUrl(blindedUrl)} target="_blank">
+                              <BookText className="mr-2 h-4 w-4" /> Read Blinded Manuscript
+                            </Link>
+                          </Button>
+                          <Button variant="outline" asChild>
+                            <Link href={blindedUrl} target="_blank">
+                              <Download className="mr-2 h-4 w-4" /> Download Blinded Manuscript
+                            </Link>
+                          </Button>
+                        </>
+                      )}
+                      {!blindedUrl && isEditor && (
+                        <p className="text-sm text-amber-700 dark:text-amber-400 w-full mt-1">
+                          No blinded manuscript on file. Request an anonymized file before assigning reviewers.
+                        </p>
+                      )}
+                    </>
+                  );
+                })()}
             </div>
             {canAuthorEdit && !isAuthorEditing && !isEditorEditingMetadata && (
                 <Button variant="secondary" onClick={() => setIsAuthorEditing(true)}>
@@ -2480,6 +2581,7 @@ export default function SubmissionDetailPage() {
                  <Button className="bg-green-600 hover:bg-green-700" onClick={() => handleDecision('Accepted')} disabled={isUpdating}>Accept</Button>
                  <Button variant="secondary" onClick={() => handleDecision('Minor Revision')} disabled={isUpdating}>Minor Revision</Button>
                  <Button variant="secondary" onClick={() => handleDecision('Major Revision')} disabled={isUpdating}>Major Revision</Button>
+                 <Button variant="secondary" onClick={() => handleDecision('Revise and Resubmit')} disabled={isUpdating}>Revise and Resubmit</Button>
                  <Button variant="destructive" onClick={() => handleDecision('Rejected')} disabled={isUpdating}>Reject</Button>
                </>
             ) : (

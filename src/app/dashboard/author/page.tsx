@@ -35,6 +35,7 @@ const getStatusVariant = (status: SubmissionStatus) => {
       return 'destructive';
     case 'Minor Revision':
     case 'Major Revision':
+    case 'Revise and Resubmit':
       return 'secondary';
     case 'Under Peer Review':
     case 'Under Initial Review':

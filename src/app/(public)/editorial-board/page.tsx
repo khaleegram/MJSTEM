@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
   title: 'Editorial Board | MJSTEM',
   description:
-    'Meet the editorial board of the Maiduguri Journal of STEM (MJSTEM), guiding peer review and publication standards.',
+    'Meet the editorial board of the Multidisciplinary Journal of Science, Technology, Education and Management (MJSTEM), guiding peer review and publication standards.',
   alternates: { canonical: `${BASE_URL}/editorial-board` },
   robots: { index: true, follow: true },
 };

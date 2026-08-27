@@ -141,14 +141,16 @@ export const DIGITAL_PRESERVATION_POLICY = {
 export const PUBLISHER_INFO = {
   journalName:
     'Multidisciplinary Journal of Science, Technology, Education and Management (MJSTEM)',
-  publishedByPlaceholder: '[Full legal name of publisher — to be confirmed]',
-  postalAddressLines: ['Postal address — to be confirmed', 'Nigeria'] as const,
-  email: 'editor@mjstem.org',
+  publishedBy: 'Almustapha Technical Research Consultant',
+  postalAddressLines: [
+    'No. 11 Katsina Road, Old Airport Quarters Minna, Niger State, Nigeria.',
+    'P O Box 323, Minna Niger state Nigeria',
+  ] as const,
+  email: 'almustaphatrc@gmail.com',
+  editorialEmail: 'mjstem2025@gmail.com',
   website: 'https://www.mjstem.org',
   editorialOffice:
-    'Editorial correspondence should be directed to the Editor-in-Chief through the official journal email.',
-  pendingNote:
-    'Publisher legal name and postal address will be updated once provided by the editorial office.',
+    'Editorial correspondence should be directed to the Editor-in-Chief through the official journal email (mjstem2025@gmail.com).',
 };
 
 export const PLAGIARISM_POLICY = {
