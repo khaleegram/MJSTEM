@@ -12,12 +12,48 @@ function toDate(value: unknown): Date {
   return new Date();
 }
 
+/**
+ * Firestore documents can contain SDK class instances (Timestamp, GeoPoint, DocumentReference).
+ * React Server Components refuse to serialize class instances when passing props to a
+ * 'use client' component: in development it only warns, but in production it throws
+ * "Only plain objects, and a few built-ins, can be passed to Client Components" and the
+ * page fails with a 500. Normalise everything at the data boundary so any document shape
+ * is safe to hand to the client.
+ */
+function toPlainValue(value: unknown): unknown {
+  if (value === null || value === undefined) return value;
+  if (value instanceof Timestamp) return value.toDate();
+  if (value instanceof Date) return value;
+  if (Array.isArray(value)) return value.map(toPlainValue);
+  if (typeof value === 'object') {
+    const proto = Object.getPrototypeOf(value);
+    if (proto === Object.prototype || proto === null) {
+      const plain: Record<string, unknown> = {};
+      for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+        plain[key] = toPlainValue(entry);
+      }
+      return plain;
+    }
+    // Unknown class instance: degrade to its JSON form instead of crashing the render.
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      return undefined;
+    }
+  }
+  return value;
+}
+
+function toPlain<T>(value: T): T {
+  return toPlainValue(value) as T;
+}
+
 export async function getArchiveVolumes(): Promise<Volume[]> {
   if (!adminDb) return [];
 
   try {
     const snap = await adminDb.collection('volumes').orderBy('year', 'desc').get();
-    return snap.docs.map((doc) => {
+    const volumes = snap.docs.map((doc) => {
       const data = doc.data();
       return {
         id: doc.id,
@@ -39,6 +75,8 @@ export async function getArchiveVolumes(): Promise<Volume[]> {
           })) || [],
       } as Volume;
     });
+    // Volumes/issues may carry Firestore Timestamps; flatten them before they reach the client.
+    return toPlain(volumes);
   } catch (error) {
     console.error('getArchiveVolumes failed:', error);
     return [];
@@ -50,7 +88,7 @@ export async function getArticlesInPress(): Promise<Submission[]> {
 
   try {
     const snap = await adminDb.collection('submissions').where('status', '==', 'Accepted').get();
-    return snap.docs
+    const inPress = snap.docs
       .map((doc) => {
         const data = doc.data();
         return {
@@ -60,6 +98,9 @@ export async function getArticlesInPress(): Promise<Submission[]> {
         } as Submission;
       })
       .filter((sub) => !(sub as Submission & { hiddenFromInPress?: boolean }).hiddenFromInPress);
+    // Nested docs (reviewers[].lastReviewedAt, documents[].uploadedAt, revisionPackages[].submittedAt)
+    // are Firestore Timestamps too; convert them so the RSC payload stays serializable.
+    return toPlain(inPress);
   } catch (error) {
     console.error('getArticlesInPress failed:', error);
     return [];
@@ -71,7 +112,7 @@ export async function getEditorialBoardMembers(): Promise<EditorialBoardMember[]
 
   try {
     const snap = await adminDb.collection('editorialBoard').orderBy('order').get();
-    return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as EditorialBoardMember));
+    return toPlain(snap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as EditorialBoardMember)));
   } catch (error) {
     console.error('getEditorialBoardMembers failed:', error);
     return [];
