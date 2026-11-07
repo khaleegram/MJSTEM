@@ -12,10 +12,12 @@ import { CitationExporter } from '@/components/citation-exporter';
 import { DoiLink } from '@/components/doi-link';
 import { adminDb } from '@/lib/firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
+import { isManuscriptPdf } from '@/lib/manuscript-pdf';
 import {
   BASE_URL,
   buildArticleJsonLd,
   buildScholarMetaTags,
+  resolveCanonicalPdfUrl,
 } from '@/lib/seo';
 
 export const dynamic = 'force-dynamic';
@@ -60,7 +62,7 @@ export async function generateMetadata({ params }: ArticlePageProps): Promise<Me
     };
   }
 
-  const title = String(data.title || 'Article');
+  const title = String(data.title || 'Article').trim();
   const publicationDate = toCitationDate(data.submittedAt);
   const authorNames =
     Array.isArray(data.contributors) && data.contributors.length > 0
@@ -71,6 +73,12 @@ export async function generateMetadata({ params }: ArticlePageProps): Promise<Me
         ? [String(data.author.name).trim()]
         : [];
 
+  // Scholar can only ingest PDF full text, so only advertise the URL when the
+  // manuscript really is a PDF (storage URLs often carry no file extension).
+  const pdfUrl = (await isManuscriptPdf(data.manuscriptUrl))
+    ? resolveCanonicalPdfUrl(id)
+    : undefined;
+
   return {
     title: `${title} | MJSTEM`,
     description: String(data.abstract || '').slice(0, 160),
@@ -80,9 +88,8 @@ export async function generateMetadata({ params }: ArticlePageProps): Promise<Me
       title,
       authorNames,
       publicationDate,
-      manuscriptUrl: data.manuscriptUrl,
+      pdfUrl,
       doi: data.doi,
-      uniqueId: data.uniqueId,
     }),
   };
 }
@@ -175,9 +182,10 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
     abstract: submission.abstract,
     authorNames,
     publicationDate: toCitationDate(submission.submittedAt),
-    manuscriptUrl: submission.manuscriptUrl,
+    pdfUrl: (await isManuscriptPdf(submission.manuscriptUrl))
+      ? resolveCanonicalPdfUrl(submission.id)
+      : undefined,
     doi: submission.doi,
-    uniqueId: submission.uniqueId,
     keywords: submission.keywords,
   });
 

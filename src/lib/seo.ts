@@ -17,32 +17,51 @@ export function resolveCitationPdfUrl(manuscriptUrl: string | null | undefined):
   return manuscriptUrl;
 }
 
-export function resolveCitationDoi(doi?: string | null, uniqueId?: string | null): string | undefined {
-  const trimmedDoi = typeof doi === 'string' ? doi.trim() : '';
-  if (trimmedDoi) return trimmedDoi.replace(/^doi:\s*/i, '');
+/**
+ * First-party, stable full-text URL. Google Scholar should never be pointed at
+ * third-party storage (UploadThing, S3) whose keys or access rules can change.
+ */
+export function resolveCanonicalPdfUrl(articleId: string): string {
+  return `${BASE_URL}/article/${articleId}/pdf`;
+}
 
-  const trimmedUniqueId = typeof uniqueId === 'string' ? uniqueId.trim() : '';
-  return trimmedUniqueId || undefined;
+/** Strip common DOI wrappers and return a bare DOI, or undefined when it is not one. */
+export function normalizeDoi(doi?: string | null): string | undefined {
+  const trimmed = typeof doi === 'string' ? doi.trim() : '';
+  if (!trimmed) return undefined;
+
+  const bare = trimmed
+    .replace(/^doi:\s*/i, '')
+    .replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '')
+    .trim();
+
+  return /^10\.\d{4,9}\/\S+$/.test(bare) ? bare : undefined;
+}
+
+export function resolveCitationDoi(doi?: string | null): string | undefined {
+  // Scholar validates DOI shape. An internal manuscript ID is not a DOI, so
+  // omit the tag entirely rather than publishing invalid citation metadata.
+  return normalizeDoi(doi);
 }
 
 export function buildScholarMetaTags(data: {
   title: string;
   authorNames: string[];
   publicationDate: string;
-  manuscriptUrl?: string | null;
+  pdfUrl?: string | null;
   doi?: string | null;
-  uniqueId?: string | null;
 }) {
-  const citationPdfUrl = resolveCitationPdfUrl(data.manuscriptUrl);
-  const citationDoi = resolveCitationDoi(data.doi, data.uniqueId);
+  const citationDoi = resolveCitationDoi(data.doi);
+  const title = data.title.trim();
+  const authorNames = data.authorNames.map((name) => name.trim()).filter(Boolean);
 
   return {
-    citation_title: data.title,
-    citation_author: data.authorNames,
+    citation_title: title,
+    citation_author: authorNames,
     citation_publication_date: data.publicationDate,
     citation_journal_title: JOURNAL_TITLE,
     citation_issn: JOURNAL_EISSN,
-    ...(citationPdfUrl ? { citation_pdf_url: citationPdfUrl } : {}),
+    ...(data.pdfUrl ? { citation_pdf_url: data.pdfUrl } : {}),
     ...(citationDoi ? { citation_doi: citationDoi } : {}),
   };
 }
@@ -53,14 +72,13 @@ export function buildArticleJsonLd(input: {
   abstract: string;
   authorNames: string[];
   publicationDate: string;
-  manuscriptUrl?: string | null;
+  pdfUrl?: string | null;
   doi?: string | null;
-  uniqueId?: string | null;
   keywords?: string | null;
 }) {
   const articleUrl = `${BASE_URL}/article/${input.id}`;
-  const citationDoi = resolveCitationDoi(input.doi, input.uniqueId);
-  const pdfUrl = resolveCitationPdfUrl(input.manuscriptUrl);
+  const citationDoi = resolveCitationDoi(input.doi);
+  const pdfUrl = input.pdfUrl || undefined;
   const keywords = (input.keywords || '')
     .split(',')
     .map((k) => k.trim())
